@@ -310,22 +310,36 @@ Ranked uses:
 
 Tier direction:
 
-- Bronze: 0-999 LP
-- Silver: 1000-1999 LP
-- Gold: 2000-2999 LP
-- Platinum: 3000-3999 LP
-- Diamond: 4000-4999 LP
-- Mythic: 5000-5999 LP
-- Codex: 6000+ LP
+Each non-Codex tier has three divisions. Division 1 is the entry band and Division 3 is the promotion band.
+
+- Bronze 1: 0-333 LP
+- Bronze 2: 334-666 LP
+- Bronze 3: 667-999 LP
+- Silver 1: 1000-1333 LP
+- Silver 2: 1334-1666 LP
+- Silver 3: 1667-1999 LP
+- Gold 1: 2000-2333 LP
+- Gold 2: 2334-2666 LP
+- Gold 3: 2667-2999 LP
+- Platinum 1: 3000-3333 LP
+- Platinum 2: 3334-3666 LP
+- Platinum 3: 3667-3999 LP
+- Diamond 1: 4000-4333 LP
+- Diamond 2: 4334-4666 LP
+- Diamond 3: 4667-4999 LP
+- Mythic 1: 5000-5333 LP
+- Mythic 2: 5334-5666 LP
+- Mythic 3: 5667-5999 LP
+- Codex: 6000+ LP, leaderboard rank based
 
 Season entry uses 5 placement matches. New ranked pets start placements from a neutral 1500 hidden seed, then receive visible LP after placement completes.
 
 Base LP changes:
 
 - Win: +25 LP
-- Loss: -20 LP
+- Loss: -25 LP
 - Draw: +0 LP
-- AFK loss: -35 LP
+- AFK loss: -40 LP
 
 Opponent LP difference modifies the result:
 
@@ -336,7 +350,7 @@ Opponent LP difference modifies the result:
 - Lose to opponent 400+ LP above you: +5 LP loss reduction
 - Beat opponent 400+ LP below you: -5 LP win reduction
 
-LP changes are clamped between -40 and +40 per ranked battle. Placement matches use the same result logic but double the final LP movement before clamping to -80 and +80.
+LP changes are clamped between -45 and +45 per ranked battle. Placement matches use the same result logic but double the final LP movement before clamping to -90 and +90.
 
 Matchmaking should prioritize similar tier and LP. It may also consider recent performance, region/latency, and queue time. Search bands can widen if queue time grows, but the first-order goal is matching similar competitive standing.
 

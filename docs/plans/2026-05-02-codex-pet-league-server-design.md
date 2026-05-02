@@ -330,24 +330,38 @@ The basic rule is: beating a higher-LP opponent awards more LP, losing to a lowe
 
 Tier thresholds:
 
-| Tier | LP Range |
+Each non-Codex tier has three divisions. Division 1 is the entry band and Division 3 is the promotion band.
+
+| Tier Division | LP Range |
 | --- | ---: |
-| Bronze | 0-999 |
-| Silver | 1000-1999 |
-| Gold | 2000-2999 |
-| Platinum | 3000-3999 |
-| Diamond | 4000-4999 |
-| Mythic | 5000-5999 |
-| Codex | 6000+ |
+| Bronze 1 | 0-333 |
+| Bronze 2 | 334-666 |
+| Bronze 3 | 667-999 |
+| Silver 1 | 1000-1333 |
+| Silver 2 | 1334-1666 |
+| Silver 3 | 1667-1999 |
+| Gold 1 | 2000-2333 |
+| Gold 2 | 2334-2666 |
+| Gold 3 | 2667-2999 |
+| Platinum 1 | 3000-3333 |
+| Platinum 2 | 3334-3666 |
+| Platinum 3 | 3667-3999 |
+| Diamond 1 | 4000-4333 |
+| Diamond 2 | 4334-4666 |
+| Diamond 3 | 4667-4999 |
+| Mythic 1 | 5000-5333 |
+| Mythic 2 | 5334-5666 |
+| Mythic 3 | 5667-5999 |
+| Codex | 6000+, leaderboard rank based |
 
 Base LP changes:
 
 | Result | Base LP |
 | --- | ---: |
 | Win | +25 |
-| Loss | -20 |
+| Loss | -25 |
 | Draw | +0 |
-| AFK loss | -35 |
+| AFK loss | -40 |
 
 Opponent LP modifiers:
 
@@ -360,7 +374,7 @@ Opponent LP modifiers:
 | Loss against opponent 400+ LP above | +5 |
 | Win against opponent 400+ LP below | -5 |
 
-Normal ranked LP movement is clamped between -40 and +40. Placement matches double the calculated LP movement, then clamp between -80 and +80.
+Normal ranked LP movement is clamped between -45 and +45. Placement matches double the calculated LP movement, then clamp between -90 and +90.
 
 ### Matchmaking
 
@@ -726,7 +740,8 @@ Security tests:
 - Battle loadouts use exactly four active skill slots.
 - Every turn uses a fixed 30 second timer.
 - Ranked battles use normalized effective stats with +10% per-stat and +15% total ranked growth bonus caps.
-- Ranked uses seven LP tiers: Bronze, Silver, Gold, Platinum, Diamond, Mythic, and Codex.
+- Ranked uses seven top-level LP tiers: Bronze, Silver, Gold, Platinum, Diamond, Mythic, and Codex.
+- Bronze through Mythic each have three divisions. Codex is leaderboard rank based.
 - Ranked season entry uses five placement matches from a neutral 1500 hidden seed.
 - Ranked LP changes use fixed base results, opponent LP modifiers, and per-battle clamps.
 - Battle, XP, LP, and ranked outcomes are server-authoritative.
