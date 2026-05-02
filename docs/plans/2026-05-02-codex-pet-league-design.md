@@ -180,7 +180,21 @@ Battle growth rewards participation and good decisions, not only wins.
 - Good play: bonus XP for useful guards, good element choices, focus-skill combos, and comeback play.
 - AFK or suspicious behavior: reduced or zero XP.
 
-Ranked battle power should remain bounded through caps and normalization so older pets gain strategy depth and identity, not overwhelming raw stat advantage.
+Ranked battle power is bounded through caps and normalization so older pets gain strategy depth and identity, not overwhelming raw stat advantage.
+
+Ranked matchmaking and stat normalization solve different problems. Matchmaking decides who should fight, prioritizing similar tier and LP. Normalization decides how much raw growth can affect the fight once it starts.
+
+Ranked normalization:
+
+- Each season has a ranked effective level cap.
+- A pet's base ranked stats come from its primary template, secondary element, and legal loadout.
+- Growth can add bounded ranked bonuses.
+- Per-stat growth bonus cap: +10%.
+- Total ranked stat bonus cap: +15% over the normalized base budget.
+- Growth beyond the cap still matters for cosmetics, titles, unlocks, skill options, non-ranked progression, and future seasons.
+- Casual and Friend Duel may display broader growth, but official ranked results use normalized stats.
+
+This prevents a long-grown pet from crushing a newer pet through raw numbers while preserving the feeling that growth matters.
 
 ## Battle System
 
@@ -366,7 +380,6 @@ Until that exists, OpenAI identity must not be used as official League ownership
 ## Open Questions
 
 - Should Training Reports have daily or weekly caps?
-- Should ranked normalize all pets to a fixed level each season, or allow bounded stat progression?
 - How many official skills should each element have at launch?
 - Should users be able to trade or transfer pet assets, or are pets permanently account-bound?
 - Should skill nicknames be globally visible in leaderboards/replays, or only during battle?

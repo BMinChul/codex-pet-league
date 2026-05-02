@@ -186,6 +186,31 @@ Primary element is chosen from server-accepted activity summary inputs. It affec
 
 The server derives these values. The client never submits final stats.
 
+### Ranked Stat Normalization
+
+Ranked matchmaking prioritizes similar tier and LP, but matching alone is not enough to guarantee fair combat. A long-grown pet and a newer pet can still meet within the same competitive band, especially during placements, early season volatility, casual-to-ranked transitions, or after a strong player climbs quickly.
+
+Ranked battles use normalized effective stats.
+
+Inputs:
+
+- primary element starting template
+- secondary element modifier
+- legal four-skill loadout
+- server-derived growth bonuses
+- active season ruleset
+
+Rules:
+
+- Each season defines a ranked effective level cap.
+- Base ranked stats are computed from the pet template and legal build.
+- Growth bonuses are applied after base stats.
+- Per-stat ranked growth bonus is capped at +10%.
+- Total ranked stat bonus is capped at +15% over the normalized base budget.
+- Any growth beyond ranked caps remains useful for cosmetics, titles, unlocks, skill options, non-ranked progression, and future season rules.
+
+The battle engine reads only normalized effective stats for ranked battle resolution. Raw progression stats are never used directly in ranked damage, defense, speed, recovery, or status formulas.
+
 ### Training
 
 `training_reports`
@@ -623,6 +648,7 @@ Unit tests:
 - energy and cooldown validation
 - timeout defaults
 - stat template totals
+- ranked normalization caps
 - LP delta rules
 
 Property tests:
@@ -665,10 +691,10 @@ Security tests:
 - User skill nicknames are cosmetic only.
 - Battle loadouts use exactly four active skill slots.
 - Every turn uses a fixed 30 second timer.
+- Ranked battles use normalized effective stats with +10% per-stat and +15% total ranked growth bonus caps.
 - Battle, XP, LP, and ranked outcomes are server-authoritative.
 
 ## Open Questions
 
 - Should active pet assets be public by default or private until first battle?
-- What is the ranked stat normalization formula after pets level up?
 - What exact LP delta numbers and tier thresholds should each season use?
