@@ -328,6 +328,40 @@ LP delta inputs:
 
 The basic rule is: beating a higher-LP opponent awards more LP, losing to a lower-LP opponent costs more LP. AFK losses always receive the harshest allowed LP penalty for the context.
 
+Tier thresholds:
+
+| Tier | LP Range |
+| --- | ---: |
+| Bronze | 0-999 |
+| Silver | 1000-1999 |
+| Gold | 2000-2999 |
+| Platinum | 3000-3999 |
+| Diamond | 4000-4999 |
+| Mythic | 5000-5999 |
+| Codex | 6000+ |
+
+Base LP changes:
+
+| Result | Base LP |
+| --- | ---: |
+| Win | +25 |
+| Loss | -20 |
+| Draw | +0 |
+| AFK loss | -35 |
+
+Opponent LP modifiers:
+
+| Condition | Modifier |
+| --- | ---: |
+| Win against opponent 400+ LP above | +10 |
+| Win against opponent 200-399 LP above | +5 |
+| Loss against opponent 400+ LP below | -10 |
+| Loss against opponent 200-399 LP below | -5 |
+| Loss against opponent 400+ LP above | +5 |
+| Win against opponent 400+ LP below | -5 |
+
+Normal ranked LP movement is clamped between -40 and +40. Placement matches double the calculated LP movement, then clamp between -80 and +80.
+
 ### Matchmaking
 
 `matchmaking_tickets`
@@ -692,9 +726,11 @@ Security tests:
 - Battle loadouts use exactly four active skill slots.
 - Every turn uses a fixed 30 second timer.
 - Ranked battles use normalized effective stats with +10% per-stat and +15% total ranked growth bonus caps.
+- Ranked uses seven LP tiers: Bronze, Silver, Gold, Platinum, Diamond, Mythic, and Codex.
+- Ranked season entry uses five placement matches from a neutral 1500 hidden seed.
+- Ranked LP changes use fixed base results, opponent LP modifiers, and per-battle clamps.
 - Battle, XP, LP, and ranked outcomes are server-authoritative.
 
 ## Open Questions
 
 - Should active pet assets be public by default or private until first battle?
-- What exact LP delta numbers and tier thresholds should each season use?
