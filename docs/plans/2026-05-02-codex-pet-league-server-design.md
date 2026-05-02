@@ -17,9 +17,9 @@ Recommended initial architecture:
 - API service: HTTPS JSON API for accounts, pets, assets, skills, training, matchmaking, and profile data.
 - Realtime service: WebSocket gateway for battle rooms and matchmaking updates.
 - Battle engine: deterministic server module that validates actions and resolves turns.
-- Worker service: moderation, asset processing, leaderboard snapshots, season jobs, replay export.
+- Worker service: asset processing, async safety checks, leaderboard snapshots, season jobs, replay export.
 - Storage:
-  - Postgres for accounts, pets, ranked data, battle logs, skill config, moderation state.
+  - Postgres for accounts, pets, ranked data, battle logs, skill config, and asset safety state.
   - Object storage for pet atlas images and derived previews.
   - Redis or equivalent for matchmaking queues, active room state, connection presence, short TTL locks.
 
@@ -112,9 +112,10 @@ Device binding improves abuse detection and session continuity, but device ident
 - `cell_height`
 - `columns`
 - `rows`
-- `moderation_status`: `pending`, `approved`, `rejected`, `quarantined`
+- `asset_status`: `active`, `format_rejected`, `quarantined`, `removed`
+- `safety_status`: `unscanned`, `clear`, `flagged`
 - `created_at`
-- `approved_at`
+- `activated_at`
 
 `pet_asset_revisions`
 
@@ -124,10 +125,13 @@ Device binding improves abuse detection and session continuity, but device ident
 - `canonical_hash`
 - `atlas_object_key`
 - `manifest_json`
-- `moderation_status`
+- `asset_status`
+- `safety_status`
 - `created_at`
 
-Assets are immutable once approved. Revisions are new immutable records linked to the same visual lineage.
+Assets become active immediately after automatic format validation passes. Revisions are new immutable records linked to the same visual lineage.
+
+There is no manual pre-approval queue for normal pet usage. The user should be able to use the pet they made as soon as the atlas is structurally valid. Safety checks run automatically and asynchronously; clearly abusive or invalid assets can be quarantined or removed after the fact.
 
 ### Pet
 
@@ -137,7 +141,7 @@ Assets are immutable once approved. Revisions are new immutable records linked t
 - `owner_account_id`
 - `pet_asset_id`
 - `name`
-- `status`: `active`, `retired`, `moderation_hold`
+- `status`: `active`, `retired`, `asset_hold`
 - `primary_element`
 - `secondary_element`
 - `secondary_unlocked_at`
@@ -287,6 +291,18 @@ Official skill behavior is fixed by server config. Nicknames are cosmetic only.
 
 LP and tier are server-generated from ranked battle results only.
 
+Ranked season entry uses five placement matches. Placement results seed the starting LP band, then normal LP updates apply.
+
+LP delta inputs:
+
+- match result: win, loss, draw, AFK loss
+- player's current LP
+- opponent's current LP
+- placement status
+- streak or volatility guardrails if needed for early-season stability
+
+The basic rule is: beating a higher-LP opponent awards more LP, losing to a lower-LP opponent costs more LP. AFK losses always receive the harshest allowed LP penalty for the context.
+
 ### Matchmaking
 
 `matchmaking_tickets`
@@ -396,7 +412,9 @@ All endpoints require HTTPS. Official account endpoints require a League session
 - `GET /me/sessions`
 - `DELETE /me/sessions/{session_id}`
 
-Recommended first login methods: passkey and email magic link. OAuth providers can be added without changing the battle model.
+Launch login methods: passkey, email magic link, and OAuth.
+
+OAuth means League account OAuth, such as Google, Apple, or GitHub. It does not mean OpenAI account authority. OpenAI-attested identity remains future-only until OpenAI provides a signed claim that the League server can verify.
 
 ### Pet Assets
 
@@ -407,7 +425,9 @@ Recommended first login methods: passkey and email magic link. OAuth providers c
 - `GET /pet-assets/{asset_id}/manifest`
 - `GET /pet-assets/{asset_id}/atlas`
 
-Upload completion triggers validation and moderation. Ranked eligibility requires `moderation_status = approved`.
+Upload completion triggers automatic format validation. If validation passes, the asset becomes active immediately and can be used in ranked, casual, and friend battles.
+
+Async safety checks and user reports can later quarantine or remove abusive assets. Quarantine blocks future use but does not let the client rewrite past ranked results.
 
 ### Pets
 
@@ -419,7 +439,7 @@ Upload completion triggers validation and moderation. Ranked eligibility require
 - `GET /pets/{pet_id}/secondary-candidates`
 - `POST /pets/{pet_id}/secondary-element`
 
-`POST /pets` requires an approved `pet_asset_id`.
+`POST /pets` requires an active `pet_asset_id`.
 
 ### Training
 
@@ -440,6 +460,8 @@ The server may reject reports that exceed caps, look duplicated, contain disallo
 
 Nickname moderation can be synchronous for clear cases and pending for borderline cases.
 
+Each battle loadout has exactly four active skill slots. Skill mechanics are official server config; user nicknames are cosmetic.
+
 ### Matchmaking
 
 - `POST /matchmaking/queue`
@@ -449,7 +471,9 @@ Nickname moderation can be synchronous for clear cases and pending for borderlin
 - `POST /friend-rooms/join`
 - `DELETE /friend-rooms/{room_id}`
 
-Ranked queue validates account verification, pet ownership, asset approval, pet eligibility, and active season.
+Ranked queue validates account verification, pet ownership, active asset status, pet eligibility, legal four-skill loadout, and active season.
+
+Ranked matchmaking prioritizes similar tier and LP. The search band can widen gradually if queue time grows, but the first-order matching goal is always similar competitive standing.
 
 ### Battle Read APIs
 
@@ -509,7 +533,7 @@ The server ignores client-provided battle state. `turn_number` and `client_actio
 
 Per turn:
 
-1. Server emits `turn_started` with deadline.
+1. Server emits `turn_started` with a fixed 30 second deadline.
 2. Each client submits one action.
 3. Server validates session, participant, turn number, action type, skill ownership, energy, cooldown, and status restrictions.
 4. If both actions are accepted before deadline, resolve immediately.
@@ -529,15 +553,18 @@ Disconnect handling:
 - continue timer while disconnected
 - automatic timeout behavior if no action arrives
 
+The 30 second timer is fixed for Ranked, Casual, and Friend Duel. Friend rooms do not get custom timer settings in 1.0.
+
 ## Ranked Eligibility
 
 A pet can enter ranked only if:
 
 - owner has a League verified account
 - pet belongs to the account
-- pet asset is approved
-- pet is not under moderation hold
+- pet asset is active
+- pet is not under asset hold
 - pet has a legal loadout
+- pet has exactly four active skill slots
 - season is active
 - account is not rate-limited or suspended
 - no other active ranked room exists for the same account
@@ -554,7 +581,7 @@ Examples:
 - `ACCOUNT_NOT_VERIFIED`
 - `PET_NOT_FOUND`
 - `PET_NOT_OWNED`
-- `ASSET_NOT_APPROVED`
+- `ASSET_NOT_ACTIVE`
 - `LOADOUT_INVALID`
 - `QUEUE_ALREADY_ACTIVE`
 - `BATTLE_NOT_FOUND`
@@ -564,7 +591,7 @@ Examples:
 - `SKILL_ON_COOLDOWN`
 - `INSUFFICIENT_ENERGY`
 - `RATE_LIMITED`
-- `MODERATION_HOLD`
+- `ASSET_HOLD`
 
 Errors sent over WebSocket should include a user-safe message and a machine-readable code.
 
@@ -583,7 +610,7 @@ Record enough to investigate suspicious play:
 - repeated AFK
 - impossible action attempts
 - rejected action counts
-- asset hash and moderation state at battle start
+- asset hash and asset/safety state at battle start
 
 Do not store raw Codex project content in audit records.
 
@@ -609,7 +636,7 @@ Property tests:
 Integration tests:
 
 - account login to ranked queue
-- asset upload to approved pet
+- asset upload to active pet
 - friend room creation and join
 - random matchmaking to active battle
 - reconnect during battle
@@ -623,25 +650,25 @@ Security tests:
 - client uses skill not in loadout
 - client submits action after deadline
 - client replays old action
-- client tries ranked with unapproved asset
+- client tries ranked with inactive or quarantined asset
 - client changes local asset after registration
 
 ## Decisions Locked In
 
 - League verified account is the 1.0 official account authority.
+- League verified account supports passkey, email magic link, and League OAuth.
 - OpenAI-attested identity is future-only until OpenAI provides a signed claim that the League server can verify.
 - User hatch appearance is preserved.
 - Server asset registry makes the canonical official copy.
+- Structurally valid assets are active immediately; safety enforcement is automatic and post-hoc unless the file is invalid or clearly abusive.
 - Skill mechanics are official and server-defined.
 - User skill nicknames are cosmetic only.
+- Battle loadouts use exactly four active skill slots.
+- Every turn uses a fixed 30 second timer.
 - Battle, XP, LP, and ranked outcomes are server-authoritative.
 
 ## Open Questions
 
-- Which auth methods launch first: passkey, email magic link, Google, Apple, GitHub?
-- Should asset moderation block all battles or only ranked battles while pending?
-- Should approved pet assets be public by default or private until first battle?
+- Should active pet assets be public by default or private until first battle?
 - What is the ranked stat normalization formula after pets level up?
-- How many skill slots should be active in battle: 3 or 4?
-- What is the exact turn timer: 20, 30, or 45 seconds?
-- What are the LP delta formulas and placement match rules?
+- What exact LP delta numbers and tier thresholds should each season use?

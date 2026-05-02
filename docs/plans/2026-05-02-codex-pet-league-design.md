@@ -31,6 +31,8 @@ Account tiers:
 
 The League account owns pets, registered assets, ranked records, LP, season history, battle replays, and cosmetic skill nicknames.
 
+League verified accounts launch with passkey, email magic link, and League OAuth login options. OAuth here means providers such as Google, Apple, or GitHub. It does not mean OpenAI account authority.
+
 ## Anti-Cheat Principles
 
 The client is never authoritative.
@@ -84,13 +86,16 @@ Registration flow:
 1. User hatches or selects a Codex pet in the Codex App.
 2. User submits the pet atlas and manifest to the League server.
 3. Server validates dimensions, row layout, frame structure, image format, file size, and chroma key rules.
-4. Server performs safety checks for prohibited content, obvious text abuse, impersonation, and policy issues.
+4. If format validation passes, the asset becomes active immediately.
 5. Server normalizes the asset and computes a canonical hash.
 6. Server stores the canonical asset and issues a `pet_asset_id`.
-7. The asset is immutable after registration.
-8. Changes create a new asset revision instead of mutating the existing asset.
+7. Async safety checks and user reports can later quarantine or remove abusive assets.
+8. The asset is immutable after registration.
+9. Changes create a new asset revision instead of mutating the existing asset.
 
 Ranked battles use only server-registered assets. If a user modifies a local image, it has no ranked effect.
+
+There is no manual pre-approval queue for normal pet usage. Users should be able to use the pet they made right away once the atlas is structurally valid.
 
 ## Pet Data Model
 
@@ -181,7 +186,7 @@ Ranked battle power should remain bounded through caps and normalization so olde
 
 Battles are real-time turn-based.
 
-Each battle room contains two players and their registered pets. Each turn has a time limit. Both players choose actions simultaneously. Once both actions are submitted, or the timer expires, the server resolves the turn.
+Each battle room contains two players and their registered pets. Each turn uses a fixed 30 second timer in Ranked, Casual, and Friend Duel. Both players choose actions simultaneously. Once both actions are submitted, or the timer expires, the server resolves the turn.
 
 Core actions:
 
@@ -228,6 +233,8 @@ Each skill has:
 - allowed nickname
 
 Users may set pet-specific cosmetic nicknames for skills. Nicknames do not alter behavior.
+
+Each pet battle loadout has exactly four active skill slots.
 
 Example:
 
@@ -284,6 +291,8 @@ Ranked uses:
 - tiers
 - seasonal ladder
 - server-computed battle records
+- five placement matches at the start of a season
+- LP deltas based on result and opponent LP difference
 
 Tier direction:
 
@@ -295,7 +304,7 @@ Tier direction:
 - Mythic
 - Codex
 
-Matchmaking should consider LP, tier, recent performance, region/latency, and queue time.
+Matchmaking should prioritize similar tier and LP. It may also consider recent performance, region/latency, and queue time. Search bands can widen if queue time grows, but the first-order goal is matching similar competitive standing.
 
 Friend invite codes and random matchmaking share the same battle room infrastructure. Friend codes create or join a specific room. Random matchmaking places players from the queue into a room.
 
@@ -327,15 +336,15 @@ Both surfaces connect to the same server battle room. Action submission from eit
 
 Major services/modules:
 
-- Auth service: League verified accounts, sessions, passkeys/OAuth/email login.
-- Asset registry: pet atlas upload, validation, moderation, canonical storage, revisions.
+- Auth service: League verified accounts, sessions, passkeys, OAuth, and email magic link login.
+- Asset registry: pet atlas upload, automatic format validation, canonical storage, revisions, async safety state.
 - Pet service: ownership, identity, build, progression, loadouts.
 - Training service: approved Codex activity summaries and growth rules.
 - Matchmaking service: ranked/casual queues and friend code rooms.
 - Battle service: authoritative room state, turn handling, RNG, validation, resolution.
 - Replay/log service: immutable battle logs for audits, replays, and dispute checks.
 - Leaderboard service: LP, tiers, seasons, ranking snapshots.
-- Moderation service: pet assets, names, skill nicknames, profile names.
+- Safety service: post-hoc pet asset quarantine/removal, names, skill nicknames, profile names.
 
 The battle service must be isolated from client trust. It should accept only valid signed sessions and action intents.
 
@@ -356,8 +365,6 @@ Until that exists, OpenAI identity must not be used as official League ownership
 
 ## Open Questions
 
-- Which login methods should League verified accounts support first: passkey, email magic link, Google, Apple, or GitHub?
-- What moderation pipeline is acceptable for pet atlas approval: automatic only, human review for flagged assets, or delayed ranked eligibility?
 - Should Training Reports have daily or weekly caps?
 - Should ranked normalize all pets to a fixed level each season, or allow bounded stat progression?
 - How many official skills should each element have at launch?
