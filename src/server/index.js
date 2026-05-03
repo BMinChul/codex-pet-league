@@ -51,6 +51,7 @@ import {
   xpStatus,
 } from "../domain/state.js";
 import { IDEMPOTENCY_REQUIRED_ROUTES, enforceRequestGuardWithDistributed, hashRequestBody } from "../domain/antiCheat.js";
+import { createDistributedLockManager } from "../domain/distributedLock.js";
 import { createDistributedRequestGuard } from "../domain/distributedRequestGuard.js";
 import { deliverAuthChallenge, verifyExternalAuth } from "./authProviders.js";
 import { assetStorageStatus, readAssetObject, saveAtlasObject } from "../storage/assetStore.js";
@@ -71,6 +72,7 @@ const SESSION_COOKIE = "league_session";
 const liveClients = new Set();
 const realtimeBus = createRealtimeBus();
 const requestGuard = createDistributedRequestGuard();
+const lockManager = createDistributedLockManager();
 
 const server = createServer(async (req, res) => {
   try {
@@ -103,7 +105,10 @@ realtimeBus.start((event) => {
 
 setInterval(async () => {
   try {
-    const result = await updateState((state) => processMatchmakingQueues(state));
+    const result = await runWithLease("matchmaking.queue", { skipIfBusy: true, ttlMs: 10_000 }, () =>
+      updateState((state) => processMatchmakingQueues(state)),
+    );
+    if (!result) return;
     if (result.matches.length > 0) broadcast("matchmaking.background_matched", { matches: result.matches.length });
   } catch (error) {
     console.error(`background matcher failed: ${error.message}`);
@@ -116,7 +121,12 @@ setInterval(() => {
 
 setInterval(async () => {
   try {
-    const result = await updateState((state) => runServerAuthorityJob(state));
+    const result = await runWithLease("ops.authority", { skipIfBusy: true, ttlMs: Math.max(30_000, OPS_JOB_INTERVAL_MS) }, () =>
+      runWithLease("matchmaking.queue", { skipIfBusy: true, ttlMs: 10_000 }, () =>
+        updateState((state) => runServerAuthorityJob(state)),
+      ),
+    );
+    if (!result) return;
     if (result.abuse_alerts.length > 0 || result.job.high_findings > 0) {
       broadcast("ops.review_needed", { alerts: result.abuse_alerts.length, findings: result.job.high_findings });
     }
@@ -289,10 +299,12 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/matchmaking/cancel") {
-    const result = await mutate("matchmaking.cancelled", async (state) => {
-      await applyRequestGuard(state, req, "matchmaking.cancel", accountId, body);
-      return cancelMatchmakingTicket(state, accountId, body);
-    });
+    const result = await runWithLease("matchmaking.queue", { ttlMs: 10_000 }, () =>
+      mutate("matchmaking.cancelled", async (state) => {
+        await applyRequestGuard(state, req, "matchmaking.cancel", accountId, body);
+        return cancelMatchmakingTicket(state, accountId, body);
+      }),
+    );
     sendJson(res, 201, result);
     return;
   }
@@ -348,11 +360,15 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/admin/ops/run") {
-    const result = await mutate("ops.manual_run", async (state) => {
-      await applyRequestGuard(state, req, "admin.ops.run", accountId, body);
-      requireAdmin(state, accountId);
-      return runServerAuthorityJob(state, { adminAccountId: accountId });
-    });
+    const result = await runWithLease("ops.authority", { ttlMs: Math.max(30_000, OPS_JOB_INTERVAL_MS) }, () =>
+      runWithLease("matchmaking.queue", { ttlMs: 10_000 }, () =>
+        mutate("ops.manual_run", async (state) => {
+          await applyRequestGuard(state, req, "admin.ops.run", accountId, body);
+          requireAdmin(state, accountId);
+          return runServerAuthorityJob(state, { adminAccountId: accountId });
+        }),
+      ),
+    );
     sendJson(res, 201, result);
     return;
   }
@@ -480,21 +496,25 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "battles") {
-    const result = await mutate("battle.room.started", async (state) => {
-      await applyRequestGuard(state, req, "battle.start", accountId, body);
-      getAccount(state, accountId);
-      return startTurnBattle(state, accountId, petId, body);
-    });
+    const result = await runWithLease(`pet.${petId}.battle`, { ttlMs: 10_000 }, () =>
+      mutate("battle.room.started", async (state) => {
+        await applyRequestGuard(state, req, "battle.start", accountId, body);
+        getAccount(state, accountId);
+        return startTurnBattle(state, accountId, petId, body);
+      }),
+    );
     sendJson(res, 201, result);
     return;
   }
 
   if (req.method === "POST" && subpath === "matchmaking/queue") {
-    const result = await mutate("matchmaking.queue", async (state) => {
-      await applyRequestGuard(state, req, "matchmaking.queue", accountId, body);
-      getAccount(state, accountId);
-      return joinMatchmakingQueue(state, accountId, petId, body);
-    });
+    const result = await runWithLease("matchmaking.queue", { ttlMs: 10_000 }, () =>
+      mutate("matchmaking.queue", async (state) => {
+        await applyRequestGuard(state, req, "matchmaking.queue", accountId, body);
+        getAccount(state, accountId);
+        return joinMatchmakingQueue(state, accountId, petId, body);
+      }),
+    );
     sendJson(res, 201, result);
     return;
   }
@@ -510,11 +530,13 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "friend-invites/accept") {
-    const result = await mutate("friend_invite.accepted", async (state) => {
-      await applyRequestGuard(state, req, "friend_invite.accept", accountId, body);
-      getAccount(state, accountId);
-      return acceptFriendInvite(state, accountId, petId, body);
-    });
+    const result = await runWithLease("friend_invite.accept", { ttlMs: 10_000 }, () =>
+      mutate("friend_invite.accepted", async (state) => {
+        await applyRequestGuard(state, req, "friend_invite.accept", accountId, body);
+        getAccount(state, accountId);
+        return acceptFriendInvite(state, accountId, petId, body);
+      }),
+    );
     sendJson(res, 201, result);
     return;
   }
@@ -524,20 +546,24 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
 async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body) {
   if (req.method === "GET" && subpath === "") {
-    const result = await mutate("battle.room.viewed", async (state) => {
-      getAccount(state, accountId);
-      return getTurnBattle(state, accountId, battleRoomId);
-    });
+    const result = await runWithLease(`battle.${battleRoomId}`, { ttlMs: 10_000 }, () =>
+      mutate("battle.room.viewed", async (state) => {
+        getAccount(state, accountId);
+        return getTurnBattle(state, accountId, battleRoomId);
+      }),
+    );
     sendJson(res, 200, result);
     return;
   }
 
   if (req.method === "POST" && subpath === "actions") {
-    const result = await mutate("battle.action.submitted", async (state) => {
-      await applyRequestGuard(state, req, "battle.action", accountId, body);
-      getAccount(state, accountId);
-      return submitTurnBattleAction(state, accountId, battleRoomId, body);
-    });
+    const result = await runWithLease(`battle.${battleRoomId}`, { ttlMs: 10_000 }, () =>
+      mutate("battle.action.submitted", async (state) => {
+        await applyRequestGuard(state, req, "battle.action", accountId, body);
+        getAccount(state, accountId);
+        return submitTurnBattleAction(state, accountId, battleRoomId, body);
+      }),
+    );
     sendJson(res, 201, result);
     return;
   }
@@ -596,6 +622,27 @@ async function mutate(eventType, mutator) {
   const result = await updateState(mutator);
   broadcast(eventType, { changed: true });
   return result;
+}
+
+async function runWithLease(name, options, task) {
+  const lease = await lockManager.acquire(name, options);
+  if (!lease.acquired) {
+    if (options?.skipIfBusy) return null;
+    throw leaseBusyError(name, options?.retryAfterSeconds);
+  }
+  try {
+    return await task();
+  } finally {
+    await lease.release();
+  }
+}
+
+function leaseBusyError(name, retryAfterSeconds = 2) {
+  const error = new Error(`League operation is already running: ${name}.`);
+  error.status = 409;
+  error.code = "LEASE_BUSY";
+  error.retry_after_seconds = retryAfterSeconds;
+  return error;
 }
 
 async function applyRequestGuard(state, req, routeKey, accountId, body) {
@@ -756,6 +803,7 @@ async function healthStatus() {
       bridge: bridgeStatus(),
       realtime: realtimeBus.status(),
       request_guard: requestGuard.status(),
+      locks: lockManager.status(),
       counts: stateCounts(state),
       live_clients: liveClients.size,
       checked_at: new Date().toISOString(),
@@ -786,6 +834,9 @@ async function metricsText() {
     "# HELP codex_pet_request_guard_info Static request guard labels.",
     "# TYPE codex_pet_request_guard_info gauge",
     `codex_pet_request_guard_info{provider="${metricLabel(requestGuard.status().provider)}",namespace="${metricLabel(requestGuard.status().namespace)}"} 1`,
+    "# HELP codex_pet_lock_info Static distributed lock labels.",
+    "# TYPE codex_pet_lock_info gauge",
+    `codex_pet_lock_info{provider="${metricLabel(lockManager.status().provider)}",namespace="${metricLabel(lockManager.status().namespace)}"} 1`,
     "# HELP codex_pet_uptime_seconds League server uptime in seconds.",
     "# TYPE codex_pet_uptime_seconds gauge",
     `codex_pet_uptime_seconds ${uptimeSeconds()}`,

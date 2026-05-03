@@ -30,6 +30,9 @@ const checks = [
   ["CODEX_PET_REALTIME_CHANNEL", process.env.CODEX_PET_REALTIME_CHANNEL ?? "codex-pet-league:events"],
   ["CODEX_PET_REQUEST_GUARD", process.env.CODEX_PET_REQUEST_GUARD ?? "local"],
   ["CODEX_PET_REQUEST_GUARD_NAMESPACE", process.env.CODEX_PET_REQUEST_GUARD_NAMESPACE ?? "codex-pet-league"],
+  ["CODEX_PET_DISTRIBUTED_LOCK", process.env.CODEX_PET_DISTRIBUTED_LOCK ?? "local"],
+  ["CODEX_PET_LOCK_NAMESPACE", process.env.CODEX_PET_LOCK_NAMESPACE ?? "codex-pet-league"],
+  ["CODEX_PET_LOCK_TTL_MS", process.env.CODEX_PET_LOCK_TTL_MS ?? "30000"],
   ["CODEX_PET_REDIS_URL", process.env.CODEX_PET_REDIS_URL ? "configured" : "missing"],
 ];
 

@@ -14,6 +14,7 @@ const syntaxFiles = [
   "src/domain/audit.js",
   "src/domain/battleEngine.js",
   "src/domain/authConfig.js",
+  "src/domain/distributedLock.js",
   "src/domain/distributedRequestGuard.js",
   "src/storage/jsonStore.js",
   "src/storage/assetStore.js",

@@ -38,7 +38,7 @@ SQLite remains useful for local persistence: migrate once with `npm run db:migra
 Before a Postgres run, set `CODEX_PET_POSTGRES_URL`, run `npm run db:postgres:migrate`, then set `CODEX_PET_STORAGE_DRIVER=postgres`.
 Keep `CODEX_PET_ASSET_ROOT` on persistent storage. The server stores uploaded hatch atlas PNGs under that root and serves visible active pets through `/api/assets/:asset_id/atlas`; hidden or blocked assets return 404.
 For S3-compatible storage, set `CODEX_PET_ASSET_STORAGE=s3_compatible` and keep the bucket private unless a CDN URL is configured.
-For more than one server instance, set `CODEX_PET_REALTIME_BUS=redis` and `CODEX_PET_REQUEST_GUARD=redis`, then point `CODEX_PET_REDIS_URL` at the shared Redis deployment.
+For more than one server instance, set `CODEX_PET_REALTIME_BUS=redis`, `CODEX_PET_REQUEST_GUARD=redis`, and `CODEX_PET_DISTRIBUTED_LOCK=redis`, then point `CODEX_PET_REDIS_URL` at the shared Redis deployment.
 Run `npm run backup` before upgrades or risky maintenance.
 
 The admin console shows open review cases, audit findings, active abuse alerts, recent risk events, enforcement history, and asset moderation history. Audit-driven alerts are review-only signals; ranked locks stay manual to avoid false-positive punishment.
