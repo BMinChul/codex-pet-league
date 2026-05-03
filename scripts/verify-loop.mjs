@@ -10,6 +10,7 @@ const nodeBin = process.execPath;
 const syntaxFiles = [
   "src/server/index.js",
   "src/domain/state.js",
+  "src/domain/antiCheat.js",
   "src/domain/audit.js",
   "src/domain/battleEngine.js",
   "src/storage/jsonStore.js",

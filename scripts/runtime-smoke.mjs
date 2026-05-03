@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -237,10 +237,14 @@ async function requestJson(baseUrl, path, options) {
 }
 
 async function requestJsonWithHeaders(baseUrl, path, options) {
+  const body =
+    options.body && ["POST", "PUT", "PATCH"].includes(options.method)
+      ? { ...options.body, request_id: options.body.request_id ?? randomUUID() }
+      : options.body;
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method,
     headers: { "content-type": "application/json", ...options.headers },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();
   const payload = text ? JSON.parse(text) : {};

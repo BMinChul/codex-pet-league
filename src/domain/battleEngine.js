@@ -184,6 +184,17 @@ export function hashRoomState(room) {
     .digest("hex");
 }
 
+export function hashReplayEntry(roomId, entry) {
+  const { hash, ...rest } = entry;
+  return createHash("sha256").update(JSON.stringify({ room_id: roomId, ...rest })).digest("hex");
+}
+
+export function hashReplayFinal(room) {
+  return createHash("sha256")
+    .update(JSON.stringify({ room_id: room.id, last_turn_hash: room.log.at(-1)?.hash ?? null, result: room.result }))
+    .digest("hex");
+}
+
 export function maxHpForStats(stats) {
   return Math.round(140 + stats.guard * 2.3 + stats.recovery * 1.7);
 }
@@ -338,6 +349,7 @@ function resolveTurn(room, now) {
   const turnLog = {
     turn: room.turn_index,
     resolved_at: now,
+    previous_hash: room.log.at(-1)?.hash ?? null,
     actions: {
       player: summarizeAction(playerAction),
       opponent: summarizeAction(opponentAction),
@@ -351,6 +363,8 @@ function resolveTurn(room, now) {
       opponent: summarizeVitals(opponent),
     },
   };
+  turnLog.state_hash = hashReplayTurnState(turnLog);
+  turnLog.hash = hashReplayEntry(room.id, turnLog);
   room.log.push(turnLog);
   room.pending_actions = {};
 
@@ -489,9 +503,7 @@ function finishBattle(room, result, now, reason, metadata = {}) {
   };
   room.pending_actions = {};
   room.updated_at = now;
-  room.replay_hash = createHash("sha256")
-    .update(JSON.stringify({ room_id: room.id, log: room.log, result: room.result }))
-    .digest("hex");
+  room.replay_hash = hashReplayFinal(room);
   room.state_hash = hashRoomState(room);
 }
 
@@ -530,6 +542,12 @@ function summarizeVitals(side) {
     vulnerable_turns: side.vulnerable_turns,
     timeout_count: side.timeout_count,
   };
+}
+
+function hashReplayTurnState(turnLog) {
+  return createHash("sha256")
+    .update(JSON.stringify({ turn: turnLog.turn, actions: turnLog.actions, effects: turnLog.effects, sides: turnLog.sides }))
+    .digest("hex");
 }
 
 function assertInProgress(room) {

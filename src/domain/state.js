@@ -28,6 +28,9 @@ import {
 } from "./battleEngine.js";
 import { appendRiskEvent, auditState, riskTrainingReport } from "./audit.js";
 
+const MAX_APPEARANCE_BYTES = 4096;
+const MAX_ATLAS_BYTES = 6 * 1024 * 1024;
+
 export function getAccount(state, accountId = "acct_demo") {
   const account = state.accounts.find((entry) => entry.id === accountId);
   if (!account || !account.verified) {
@@ -157,14 +160,25 @@ export function revokeSession(state, accountId, input = {}) {
 export function createPetAsset(state, accountId, input = {}) {
   const manifest = validateManifest(input.manifest ?? defaultManifest());
   const atlas = validateAtlasDataUrl(input.atlas_data_url, manifest);
+  const appearance = sanitizeAppearance(input.appearance ?? {});
   const canonicalInput = {
     owner_account_id: accountId,
     manifest,
-    appearance: input.appearance ?? {},
+    appearance,
     atlas_sha256: atlas?.sha256 ?? null,
-    hatch_source: input.hatch_source ?? "codex_app",
+    hatch_source: sanitizeHatchSource(input.hatch_source ?? "codex_app"),
   };
   const canonicalHash = hashJson(canonicalInput);
+  state.assets ??= [];
+  const duplicate = state.assets.find(
+    (entry) =>
+      entry.owner_account_id === accountId &&
+      entry.canonical_hash === canonicalHash &&
+      entry.asset_status === "active" &&
+      entry.safety_status === "clear",
+  );
+  if (duplicate) return duplicate;
+
   const now = new Date().toISOString();
   const asset = {
     id: `asset_${randomUUID()}`,
@@ -183,7 +197,7 @@ export function createPetAsset(state, accountId, input = {}) {
     asset_status: "active",
     safety_status: "clear",
     visibility: "public",
-    appearance: canonicalInput.appearance,
+    appearance,
     created_at: now,
     activated_at: now,
   };
@@ -312,7 +326,10 @@ export function adminAudit(state) {
 export function draftTrainingReport(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
   const counters = dailyCounters(state, accountId, pet.id);
-  const classification = classifyTrainingReport(input.signals ?? {});
+  const signals = input.signals ?? {};
+  const baseClassification = classifyTrainingReport(signals);
+  const riskContext = trainingRiskContext(state, accountId, pet.id, signals, baseClassification.reportType);
+  const classification = { ...baseClassification, ...riskContext };
   const isFirstDailyReport = counters.trainingReportsUsed === 0;
   const award = calculateTrainingAward({
     reportType: classification.reportType,
@@ -348,7 +365,10 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
   }
 
   const counters = dailyCounters(state, accountId, pet.id);
-  const classification = classifyTrainingReport(input.signals ?? {});
+  const signals = input.signals ?? {};
+  const baseClassification = classifyTrainingReport(signals);
+  const riskContext = trainingRiskContext(state, accountId, pet.id, signals, baseClassification.reportType);
+  const classification = { ...baseClassification, ...riskContext };
   const isFirstDailyReport = counters.trainingReportsUsed === 0;
   const award = calculateTrainingAward({
     reportType: classification.reportType,
@@ -356,7 +376,7 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     isFirstDailyReport,
   });
   const risk = riskTrainingReport({
-    signals: input.signals ?? {},
+    signals,
     counters,
     classification,
     trust: input.server_trust ?? { trusted: false, reason: "not_verified" },
@@ -370,7 +390,8 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     account_id: accountId,
     pet_id: pet.id,
     client_report_id: clientReportId,
-    summary_json: input.signals ?? {},
+    summary_json: signals,
+    summary_hash: riskContext.summaryHash,
     status: risk.hold_for_review ? "review" : "approved",
     report_type: classification.reportType,
     element_signal: classification.elementSignal,
@@ -506,7 +527,10 @@ export function joinMatchmakingQueue(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
   const mode = ["ranked", "casual"].includes(input.mode) ? input.mode : "ranked";
   const season = activeSeason(state);
-  if (mode === "ranked") ensureActiveSeasonRating(pet, season);
+  if (mode === "ranked") {
+    assertRankedAllowed(state, accountId);
+    ensureActiveSeasonRating(pet, season);
+  }
   assertPetAvailableForBattle(state, pet.id);
   state.matchTickets ??= [];
 
@@ -1229,6 +1253,14 @@ function ensureActiveSeasonRating(pet, season) {
   };
 }
 
+function assertRankedAllowed(state, accountId) {
+  const account = getAccount(state, accountId);
+  const lockedUntil = account.enforcement?.ranked_locked_until;
+  if (lockedUntil && new Date(lockedUntil) > new Date()) {
+    throw httpError(403, "RANKED_LOCKED", "Ranked matchmaking is locked for this account pending integrity review.");
+  }
+}
+
 function effectiveMatchWindow(ticket, candidate, now = new Date()) {
   return Math.max(ticketSearchWindow(ticket, ticketWaitSeconds(ticket, now)), ticketSearchWindow(candidate, ticketWaitSeconds(candidate, now)));
 }
@@ -1376,6 +1408,41 @@ function defaultManifest() {
   };
 }
 
+function trainingRiskContext(state, accountId, petId, signals, reportType) {
+  const now = Date.now();
+  const dayStart = now - 24 * 60 * 60 * 1000;
+  const burstStart = now - 15 * 60 * 1000;
+  const summaryHash = hashJson(signals ?? {});
+  const recentReports = (state.trainingReports ?? []).filter(
+    (report) => report.account_id === accountId && report.pet_id === petId && new Date(report.created_at).getTime() >= dayStart,
+  );
+  return {
+    summaryHash,
+    recentDuplicateEvidenceCount: recentReports.filter((report) => report.summary_hash === summaryHash).length,
+    recentHighValueCount: recentReports.filter(
+      (report) => ["major", "milestone"].includes(report.report_type) && new Date(report.created_at).getTime() >= dayStart,
+    ).length,
+    recentBurstCount: recentReports.filter((report) => new Date(report.created_at).getTime() >= burstStart).length,
+    currentReportType: reportType,
+  };
+}
+
+function sanitizeAppearance(appearance) {
+  if (!appearance || typeof appearance !== "object" || Array.isArray(appearance)) return {};
+  const json = JSON.stringify(appearance);
+  if (json.length > MAX_APPEARANCE_BYTES) {
+    throw httpError(413, "APPEARANCE_TOO_LARGE", `Pet appearance metadata must be ${MAX_APPEARANCE_BYTES} bytes or smaller.`);
+  }
+  return JSON.parse(json);
+}
+
+function sanitizeHatchSource(source) {
+  return String(source)
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]/g, "")
+    .slice(0, 64) || "codex_app";
+}
+
 function sanitizeName(name) {
   return String(name).trim().replace(/[<>]/g, "").slice(0, 32) || "Codex Pet";
 }
@@ -1457,9 +1524,15 @@ function validateAtlasDataUrl(dataUrl, manifest) {
   }
 
   const buffer = Buffer.from(match[1], "base64");
+  if (buffer.length > MAX_ATLAS_BYTES) {
+    throw httpError(413, "ASSET_TOO_LARGE", `Atlas upload must be ${MAX_ATLAS_BYTES} bytes or smaller.`);
+  }
   const pngSignature = "89504e470d0a1a0a";
-  if (buffer.length < 24 || buffer.subarray(0, 8).toString("hex") !== pngSignature) {
+  if (buffer.length < 45 || buffer.subarray(0, 8).toString("hex") !== pngSignature) {
     throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas upload is not a valid PNG file.");
+  }
+  if (buffer.readUInt32BE(8) !== 13 || buffer.subarray(12, 16).toString("ascii") !== "IHDR") {
+    throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas PNG is missing a valid IHDR chunk.");
   }
 
   const width = buffer.readUInt32BE(16);
@@ -1471,6 +1544,17 @@ function validateAtlasDataUrl(dataUrl, manifest) {
       `Atlas PNG must be ${manifest.width}x${manifest.height}; received ${width}x${height}.`,
     );
   }
+  const bitDepth = buffer.readUInt8(24);
+  const colorType = buffer.readUInt8(25);
+  const compression = buffer.readUInt8(26);
+  const filter = buffer.readUInt8(27);
+  const interlace = buffer.readUInt8(28);
+  if (bitDepth !== 8 || ![2, 3, 4, 6].includes(colorType) || compression !== 0 || filter !== 0 || interlace > 1) {
+    throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas PNG uses unsupported image settings.");
+  }
+  if (!buffer.includes(Buffer.from("IEND", "ascii"), 8)) {
+    throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas PNG is missing an IEND chunk.");
+  }
 
   return {
     width,
@@ -1481,13 +1565,17 @@ function validateAtlasDataUrl(dataUrl, manifest) {
 }
 
 function logEvent(state, type, accountId, payload) {
-  state.events.unshift({
+  state.events ??= [];
+  const event = {
     id: `event_${randomUUID()}`,
     type,
     account_id: accountId,
     payload,
+    previous_hash: state.events[0]?.hash ?? null,
     created_at: new Date().toISOString(),
-  });
+  };
+  event.hash = createHash("sha256").update(JSON.stringify(event)).digest("hex");
+  state.events.unshift(event);
   state.events = state.events.slice(0, 200);
 }
 

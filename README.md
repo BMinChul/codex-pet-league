@@ -34,7 +34,7 @@ http://localhost:4317
   - Battle XP `300/day`
   - Friend Duel XP `75/day`
   - Style XP `1,000/day`, `5,000/week`
-- Server-authoritative 30-second turn battle rooms with Strike, Guard, Focus, Skill, replay hash, and AFK loss.
+- Server-authoritative 30-second turn battle rooms with Strike, Guard, Focus, Skill, turn nonce freshness, replay hash chain, and AFK loss.
 - Random PvP matchmaking with same Battle Class and LP-window matching.
 - Active season tracking. Season 1 runs from `2026-05-03` to `2026-08-01`.
 - Ranked queue LP windows expand with wait time: `150 -> 300 -> 500 -> 800`.
@@ -43,7 +43,8 @@ http://localhost:4317
 - Skill loadout updates with cosmetic skill aliases.
 - Public pet profiles and replay logs.
 - Cookie-backed auth challenge/session flow for passkey, magic link, and OAuth-shaped account binding.
-- Local audit checks for XP/LP/replay/risk integrity.
+- Local audit checks for XP/LP/replay/risk/event-log integrity with tamper-evident hash chains.
+- Anti-cheat request guards for rate limits, idempotency/replay prevention, repeated Training Report evidence, and asset upload abuse.
 - Sandbox battle simulation for result testing. It does not award official XP or ranked LP.
 - LP and tier/division updates only for official Ranked PvP matchmaking battles.
 - Leaderboard and server event log.
@@ -118,6 +119,8 @@ CODEX_PET_BRIDGE_SECRET=shared_bridge_hmac_secret
 `CODEX_PET_SESSION_TOKEN` or the HttpOnly `league_session` cookie is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and is disabled unless `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true`.
 `CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. Production auth should deliver codes through the chosen email/passkey/OAuth provider.
 `CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; untrusted high-value reports are held for review.
+High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; the browser, CLI, and MCP bridge add one automatically.
+Risk scores are review signals first. Automatic ranked lock only respects an explicit/manual `ranked_locked_until` or future tamper-confirmed policy, so false positives do not silently punish normal players.
 
 ## Codex App MCP Bridge
 

@@ -15,6 +15,8 @@ import {
   verifyAuthChallenge,
   joinMatchmakingQueue,
 } from "../src/domain/state.js";
+import { accountIntegrityStatus, appendRiskEvent } from "../src/domain/audit.js";
+import { enforceRequestGuard, hashRequestBody } from "../src/domain/antiCheat.js";
 import { createDefaultState } from "../src/storage/jsonStore.js";
 
 test("auth challenge verification creates a signed League session", () => {
@@ -185,8 +187,98 @@ test("asset validation rejects invalid atlas uploads", () => {
   );
 
   const asset = createPetAsset(state, "acct_demo", { atlas_data_url: pngDataUrl(1536, 1872) });
+  const duplicate = createPetAsset(state, "acct_demo", { atlas_data_url: pngDataUrl(1536, 1872) });
   assert.equal(asset.width, 1536);
+  assert.equal(duplicate.id, asset.id);
   assert.match(asset.atlas_sha256, /^[a-f0-9]{64}$/);
+});
+
+test("request guards rate-limit abusive traffic and reject replayed mutation ids", () => {
+  const state = createDefaultState();
+  const body = { kind: "strike", turn_index: 1, turn_nonce: "nonce" };
+
+  enforceRequestGuard(state, {
+    accountId: "acct_demo",
+    routeKey: "battle.action",
+    requestId: "req_first_123",
+    bodyHash: hashRequestBody(body),
+    requireIdempotency: true,
+  });
+  assert.throws(
+    () =>
+      enforceRequestGuard(state, {
+        accountId: "acct_demo",
+        routeKey: "battle.action",
+        requestId: "req_first_123",
+        bodyHash: hashRequestBody(body),
+        requireIdempotency: true,
+      }),
+    /already used/,
+  );
+
+  for (let i = 0; i < 5; i += 1) {
+    enforceRequestGuard(state, {
+      actorKey: "ip:test@example.test",
+      routeKey: "auth.challenge",
+      bodyHash: hashRequestBody({ identifier: "test@example.test" }),
+    });
+  }
+  assert.throws(
+    () =>
+      enforceRequestGuard(state, {
+        actorKey: "ip:test@example.test",
+        routeKey: "auth.challenge",
+        bodyHash: hashRequestBody({ identifier: "test@example.test" }),
+      }),
+    /Too many auth.challenge/,
+  );
+});
+
+test("risk score recommends review without auto-locking ranked", () => {
+  const state = createDefaultState();
+  appendRiskEvent(state, {
+    accountId: "acct_demo",
+    type: "training.report_held",
+    severity: "high",
+    score: 90,
+  });
+  appendRiskEvent(state, {
+    accountId: "acct_demo",
+    type: "request.replayed",
+    severity: "medium",
+    score: 40,
+  });
+
+  const status = accountIntegrityStatus(state, "acct_demo");
+  assert.equal(status.level, "watch");
+  assert.equal(status.automatic_restrictions.ranked_locked, false);
+
+  const asset = createPetAsset(state, "acct_demo", {});
+  const pet = createPet(state, "acct_demo", {
+    name: "False Positive Safe",
+    pet_asset_id: asset.id,
+    primary_element: "Forge",
+    secondary_element: "Trace",
+  });
+  const queued = joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" });
+  assert.equal(queued.status, "waiting");
+});
+
+test("audit detects tampered event and replay hash chains", () => {
+  const { state, pet } = createPetFixture();
+  const started = startTurnBattle(state, "acct_demo", pet.id, { mode: "casual" });
+  let battle = started.battle;
+  for (let i = 0; i < 20 && battle.status === "in_progress"; i += 1) {
+    battle = submitTurnBattleAction(state, "acct_demo", battle.id, actionFor(battle, "strike")).battle;
+  }
+
+  assert.equal(adminAudit(state).ok, true);
+  state.events[0].payload.tampered = true;
+  state.battleRooms[0].log[0].actions.player.kind = "guard";
+  const audit = adminAudit(state);
+  assert.equal(audit.ok, false);
+  assert.equal(audit.findings.some((finding) => finding.code === "event_log_hash_invalid"), true);
+  assert.equal(audit.findings.some((finding) => finding.code === "battle_replay_entry_hash_invalid"), true);
 });
 
 test("audit reports no high integrity findings for a clean state", () => {
@@ -210,9 +302,27 @@ function createPetFixture() {
 }
 
 function pngDataUrl(width, height) {
-  const bytes = Buffer.alloc(24);
+  const bytes = Buffer.alloc(45);
   Buffer.from("89504e470d0a1a0a", "hex").copy(bytes, 0);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write("IHDR", 12, "ascii");
   bytes.writeUInt32BE(width, 16);
   bytes.writeUInt32BE(height, 20);
+  bytes.writeUInt8(8, 24);
+  bytes.writeUInt8(6, 25);
+  bytes.writeUInt8(0, 26);
+  bytes.writeUInt8(0, 27);
+  bytes.writeUInt8(0, 28);
+  bytes.writeUInt32BE(0, 33);
+  bytes.write("IEND", 37, "ascii");
   return `data:image/png;base64,${bytes.toString("base64")}`;
+}
+
+function actionFor(battle, kind) {
+  return {
+    kind,
+    turn_index: battle.turn_index,
+    turn_nonce: battle.turn_nonce,
+    request_id: `req_${battle.turn_index}_${kind}`,
+  };
 }

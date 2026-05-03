@@ -321,7 +321,8 @@ function createApiClient(baseUrl, auth) {
 
 async function request(root, auth, method, path, body) {
   const headers = { "content-type": "application/json" };
-  const bodyText = body ? JSON.stringify(body) : undefined;
+  const guardedBody = body && method !== "GET" ? { ...body, request_id: body.request_id ?? body.idempotency_key ?? randomUUID() } : body;
+  const bodyText = guardedBody ? JSON.stringify(guardedBody) : undefined;
   if (auth.sessionToken) {
     headers["x-league-session-token"] = auth.sessionToken;
   } else {

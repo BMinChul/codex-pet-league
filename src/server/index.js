@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +41,7 @@ import {
   verifyAuthChallenge,
   xpStatus,
 } from "../domain/state.js";
+import { IDEMPOTENCY_REQUIRED_ROUTES, enforceRequestGuard, hashRequestBody } from "../domain/antiCheat.js";
 import { loadState, updateState } from "../storage/jsonStore.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
@@ -65,6 +66,7 @@ const server = createServer(async (req, res) => {
       error: {
         code: error.code ?? "INTERNAL_ERROR",
         message: error.status ? error.message : "Unexpected server error.",
+        retry_after_seconds: error.retry_after_seconds,
       },
     });
   }
@@ -98,14 +100,20 @@ async function handleApi(req, res, url) {
   let accountId = null;
 
   if (req.method === "POST" && path === "/api/auth/challenge") {
-    const result = await updateState((state) => createAuthChallenge(state, body));
+    const result = await updateState((state) => {
+      applyRequestGuard(state, req, "auth.challenge", null, body);
+      return createAuthChallenge(state, body);
+    });
     sendJson(res, 201, publicAuthChallenge(result));
     broadcast("auth.challenge.created", { method: result.method });
     return;
   }
 
   if (req.method === "POST" && path === "/api/auth/verify") {
-    const result = await updateState((state) => verifyAuthChallenge(state, body));
+    const result = await updateState((state) => {
+      applyRequestGuard(state, req, "auth.verify", null, body);
+      return verifyAuthChallenge(state, body);
+    });
     sendJson(res, 201, result, { "set-cookie": sessionCookie(result.session_token, result.session.expires_at) });
     broadcast("auth.session.created", { account_id: result.account.id });
     return;
@@ -140,7 +148,10 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && path === "/api/sessions/revoke") {
     const currentToken = getSessionToken(req);
-    const result = await mutate("auth.session.revoked", (state) => revokeSession(state, accountId, body));
+    const result = await mutate("auth.session.revoked", (state) => {
+      applyRequestGuard(state, req, "session.revoke", accountId, body);
+      return revokeSession(state, accountId, body);
+    });
     const headers =
       currentToken && (result.session.id === body.session_id || currentToken === body.token)
         ? { "set-cookie": clearSessionCookie() }
@@ -167,6 +178,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && path === "/api/pet-assets/uploads") {
     const result = await mutate("asset.active", (state) => {
+      applyRequestGuard(state, req, "asset.upload", accountId, body);
       getAccount(state, accountId);
       return createPetAsset(state, accountId, body);
     });
@@ -176,6 +188,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && path === "/api/pets") {
     const result = await mutate("pet.created", (state) => {
+      applyRequestGuard(state, req, "pet.create", accountId, body);
       getAccount(state, accountId);
       return createPet(state, accountId, body);
     });
@@ -197,7 +210,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/matchmaking/cancel") {
-    const result = await mutate("matchmaking.cancelled", (state) => cancelMatchmakingTicket(state, accountId, body));
+    const result = await mutate("matchmaking.cancelled", (state) => {
+      applyRequestGuard(state, req, "matchmaking.cancel", accountId, body);
+      return cancelMatchmakingTicket(state, accountId, body);
+    });
     sendJson(res, 201, result);
     return;
   }
@@ -261,6 +277,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
   if (req.method === "PUT" && subpath === "loadout") {
     const result = await mutate("pet.loadout.updated", (state) => {
+      applyRequestGuard(state, req, "pet.loadout", accountId, body);
       getAccount(state, accountId);
       return updatePetLoadout(state, accountId, petId, body);
     });
@@ -276,14 +293,18 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "training-reports/draft") {
-    const state = await loadState();
-    getAccount(state, accountId);
-    sendJson(res, 200, { draft: draftTrainingReport(state, accountId, petId, body) });
+    const result = await mutate("training.report.drafted", (state) => {
+      applyRequestGuard(state, req, "training.report.draft", accountId, body);
+      getAccount(state, accountId);
+      return { draft: draftTrainingReport(state, accountId, petId, body) };
+    });
+    sendJson(res, 200, result);
     return;
   }
 
   if (req.method === "POST" && subpath === "training-reports") {
     const result = await mutate("training.report.submitted", (state) => {
+      applyRequestGuard(state, req, "training.report.submit", accountId, body);
       getAccount(state, accountId);
       return submitTrainingReport(state, accountId, petId, {
         ...body,
@@ -296,6 +317,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
   if (req.method === "POST" && subpath === "battles/simulate") {
     const result = await mutate("battle.simulated", (state) => {
+      applyRequestGuard(state, req, "battle.simulate", accountId, body);
       getAccount(state, accountId);
       return simulateBattle(state, accountId, petId, body);
     });
@@ -305,6 +327,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
   if (req.method === "POST" && subpath === "battles") {
     const result = await mutate("battle.room.started", (state) => {
+      applyRequestGuard(state, req, "battle.start", accountId, body);
       getAccount(state, accountId);
       return startTurnBattle(state, accountId, petId, body);
     });
@@ -314,6 +337,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
   if (req.method === "POST" && subpath === "matchmaking/queue") {
     const result = await mutate("matchmaking.queue", (state) => {
+      applyRequestGuard(state, req, "matchmaking.queue", accountId, body);
       getAccount(state, accountId);
       return joinMatchmakingQueue(state, accountId, petId, body);
     });
@@ -323,6 +347,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
   if (req.method === "POST" && subpath === "friend-invites") {
     const result = await mutate("friend_invite.created", (state) => {
+      applyRequestGuard(state, req, "friend_invite.create", accountId, body);
       getAccount(state, accountId);
       return createFriendInvite(state, accountId, petId, body);
     });
@@ -332,6 +357,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
   if (req.method === "POST" && subpath === "friend-invites/accept") {
     const result = await mutate("friend_invite.accepted", (state) => {
+      applyRequestGuard(state, req, "friend_invite.accept", accountId, body);
       getAccount(state, accountId);
       return acceptFriendInvite(state, accountId, petId, body);
     });
@@ -354,6 +380,7 @@ async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body)
 
   if (req.method === "POST" && subpath === "actions") {
     const result = await mutate("battle.action.submitted", (state) => {
+      applyRequestGuard(state, req, "battle.action", accountId, body);
       getAccount(state, accountId);
       return submitTurnBattleAction(state, accountId, battleRoomId, body);
     });
@@ -383,6 +410,33 @@ async function mutate(eventType, mutator) {
   const result = await updateState(mutator);
   broadcast(eventType, { changed: true });
   return result;
+}
+
+function applyRequestGuard(state, req, routeKey, accountId, body) {
+  enforceRequestGuard(state, {
+    accountId,
+    actorKey: requestActorKey(req, accountId, body),
+    routeKey,
+    requestId: requestId(req, body),
+    bodyHash: hashRequestBody(body),
+    requireIdempotency: IDEMPOTENCY_REQUIRED_ROUTES.has(routeKey),
+  });
+}
+
+function requestId(req, body) {
+  return req.headers["idempotency-key"]?.toString() || body?.request_id || body?.idempotency_key || "";
+}
+
+function requestActorKey(req, accountId, body) {
+  if (accountId) return `account:${accountId}`;
+  const subject = body?.identifier || body?.challenge_id || "anonymous";
+  return `${clientIpHash(req)}:${subject}`;
+}
+
+function clientIpHash(req) {
+  const forwarded = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim();
+  const raw = forwarded || req.socket.remoteAddress || "unknown";
+  return createHash("sha256").update(raw).digest("hex");
 }
 
 async function handleLive(req, res) {

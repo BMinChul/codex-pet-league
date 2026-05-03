@@ -680,11 +680,14 @@ async function loadOptional(path, fallbackMessage) {
 }
 
 async function api(path, options = {}) {
+  const method = options.method ?? "GET";
+  const body = options.body ? { ...options.body } : undefined;
+  if (body && method !== "GET" && !body.request_id) body.request_id = randomId();
   const response = await fetch(path, {
-    method: options.method ?? "GET",
+    method,
     headers: { "content-type": "application/json" },
     credentials: "same-origin",
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();
   const payload = text ? parseJson(text) : {};

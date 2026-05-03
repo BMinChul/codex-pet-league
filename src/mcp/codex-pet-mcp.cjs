@@ -508,7 +508,8 @@ async function apiPut(route, body) {
 
 async function request(method, route, body) {
   const headers = { "content-type": "application/json" };
-  const bodyText = body ? JSON.stringify(body) : undefined;
+  const guardedBody = body && method !== "GET" ? { ...body, request_id: body.request_id || body.idempotency_key || randomUUID() } : body;
+  const bodyText = guardedBody ? JSON.stringify(guardedBody) : undefined;
   if (sessionToken) {
     headers["x-league-session-token"] = sessionToken;
   } else {

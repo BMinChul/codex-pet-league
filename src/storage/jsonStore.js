@@ -76,6 +76,8 @@ export function createDefaultState() {
     sessions: [],
     authChallenges: [],
     riskEvents: [],
+    rateLimits: [],
+    idempotencyKeys: [],
     events: [],
   };
 }
@@ -111,6 +113,8 @@ function migrateState(state) {
     sessions: state.sessions ?? [],
     authChallenges: state.authChallenges ?? [],
     riskEvents: state.riskEvents ?? [],
+    rateLimits: state.rateLimits ?? [],
+    idempotencyKeys: state.idempotencyKeys ?? [],
     events: state.events ?? [],
   };
 }
