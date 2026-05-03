@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "codexpet": "./src/cli/index.js"
+  },
   "scripts": {
+    "cli": "node src/cli/index.js",
     "start": "node src/server/index.js",
     "dev": "node --watch src/server/index.js",
     "test": "node --test"

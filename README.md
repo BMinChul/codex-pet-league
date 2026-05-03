@@ -39,6 +39,38 @@ http://localhost:4317
 npm test
 npm start
 npm run dev
+npm run cli -- help
 ```
 
 Runtime state is stored in `data/league-state.json` and ignored by git.
+
+## CLI Bridge
+
+The CLI is the local bridge that Codex App slash commands or natural-language tool triggers can call.
+
+```bash
+npm run cli -- session
+npm run cli -- pet create --name Pebble --primary Forge --secondary Trace
+npm run cli -- pets
+npm run cli -- xp status
+npm run cli -- report draft --implementation --verification --tests-run 3
+npm run cli -- report submit --milestone --files large
+npm run cli -- battle simulate --mode ranked --result win --opponent-lp 1500
+npm run cli -- leaderboard
+```
+
+Natural-language trigger mapping:
+
+```text
+펫 훈련 리포트 만들어줘 -> codexpet report draft
+오늘 작업 pet XP로 제출해줘 -> codexpet report submit
+펫 XP 상태 보여줘 -> codexpet xp status
+내 펫 서버에 올려줘 -> codexpet pet create --atlas <path>
+```
+
+Environment:
+
+```bash
+CODEX_PET_LEAGUE_URL=http://localhost:4317
+CODEX_PET_ACCOUNT_ID=acct_demo
+```

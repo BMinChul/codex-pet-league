@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 export const STATE_PATH = new URL("../../data/league-state.json", import.meta.url);
 const STATE_FILE_PATH = fileURLToPath(STATE_PATH);
+let writeQueue = Promise.resolve();
 
 export async function loadState() {
   try {
@@ -21,10 +22,14 @@ export async function saveState(state) {
 }
 
 export async function updateState(mutator) {
-  const state = await loadState();
-  const result = await mutator(state);
-  await saveState(state);
-  return result;
+  const next = writeQueue.then(async () => {
+    const state = await loadState();
+    const result = await mutator(state);
+    await saveState(state);
+    return result;
+  });
+  writeQueue = next.catch(() => {});
+  return next;
 }
 
 export function createDefaultState() {
