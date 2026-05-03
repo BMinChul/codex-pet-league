@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="Codex pet placeholder">
+  <rect width="180" height="180" rx="24" fill="#f4f7fb"/>
+  <ellipse cx="90" cy="112" rx="48" ry="38" fill="#8ad0c2"/>
+  <circle cx="66" cy="80" r="22" fill="#8ad0c2"/>
+  <circle cx="114" cy="80" r="22" fill="#8ad0c2"/>
+  <circle cx="75" cy="98" r="6" fill="#18202a"/>
+  <circle cx="105" cy="98" r="6" fill="#18202a"/>
+  <path d="M78 120c7 8 17 8 24 0" fill="none" stroke="#18202a" stroke-width="5" stroke-linecap="round"/>
+  <path d="M52 65 38 44M128 65l14-21" stroke="#2864d8" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="38" cy="44" r="8" fill="#f4b942"/>
+  <circle cx="142" cy="44" r="8" fill="#f4b942"/>
+  <rect x="48" y="138" width="84" height="13" rx="6.5" fill="#2864d8"/>
+</svg>

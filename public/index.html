@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Codex Pet League</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="/pet-placeholder.svg" alt="" class="brand-mark" />
+          <div>
+            <h1>Codex Pet League</h1>
+            <p id="sessionLabel">Connecting...</p>
+          </div>
+        </div>
+
+        <section class="panel compact">
+          <h2>Active Pet</h2>
+          <select id="petSelect" class="field"></select>
+          <button id="seedPetButton" class="primary-button">Register Demo Pet</button>
+        </section>
+
+        <section class="panel compact">
+          <h2>Create Pet</h2>
+          <label>
+            Name
+            <input id="petNameInput" class="field" value="Pebble" maxlength="32" />
+          </label>
+          <label>
+            Primary
+            <select id="primaryElementInput" class="field"></select>
+          </label>
+          <label>
+            Secondary
+            <select id="secondaryElementInput" class="field"></select>
+          </label>
+          <label>
+            Hatch atlas PNG
+            <input id="atlasFileInput" class="field" type="file" accept="image/png" />
+          </label>
+          <button id="createPetButton" class="secondary-button">Upload Asset + Create</button>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <h2 id="petTitle">No pet registered</h2>
+            <p id="petSubtitle">Create a pet to start testing the League loop.</p>
+          </div>
+          <div class="status-pills">
+            <span id="classPill">Class -</span>
+            <span id="rankPill">Rank -</span>
+          </div>
+        </header>
+
+        <section class="grid">
+          <article class="panel pet-panel">
+            <div class="pet-visual">
+              <img id="petImage" src="/pet-placeholder.svg" alt="Active pet appearance" />
+            </div>
+            <div class="stat-list" id="statList"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <h2>Today Progress</h2>
+              <button id="refreshButton" class="icon-button" title="Refresh">Refresh</button>
+            </div>
+            <div id="xpStatus" class="meter-stack"></div>
+            <p id="resetText" class="muted"></p>
+          </article>
+
+          <article class="panel">
+            <h2>Training Report</h2>
+            <div class="signal-grid">
+              <label><input type="checkbox" id="implementationActivity" checked /> Implementation</label>
+              <label><input type="checkbox" id="debuggingActivity" /> Debugging</label>
+              <label><input type="checkbox" id="verificationActivity" checked /> Tests</label>
+              <label><input type="checkbox" id="docsActivity" /> Docs</label>
+              <label><input type="checkbox" id="releaseActivity" /> Release</label>
+              <label><input type="checkbox" id="milestone" /> Milestone</label>
+            </div>
+            <label>
+              Files changed
+              <select id="filesChangedBucket" class="field">
+                <option value="small">Small</option>
+                <option value="medium" selected>Medium</option>
+                <option value="large">Large</option>
+              </select>
+            </label>
+            <label>
+              Tests run
+              <input id="testsRun" class="field" type="number" min="0" max="20" value="3" />
+            </label>
+            <div class="button-row">
+              <button id="draftReportButton" class="secondary-button">Draft</button>
+              <button id="submitReportButton" class="primary-button">Submit</button>
+            </div>
+            <pre id="trainingPreview" class="output">No draft yet.</pre>
+          </article>
+
+          <article class="panel">
+            <h2>Battle Simulator</h2>
+            <label>
+              Mode
+              <select id="battleMode" class="field">
+                <option value="ranked">Ranked</option>
+                <option value="casual">Casual</option>
+                <option value="friend">Friend Duel</option>
+                <option value="training">Training Battle</option>
+              </select>
+            </label>
+            <label>
+              Result
+              <select id="battleResult" class="field">
+                <option value="win">Win</option>
+                <option value="draw">Draw</option>
+                <option value="loss">Loss</option>
+                <option value="afk_loss">AFK Loss</option>
+              </select>
+            </label>
+            <label>
+              Opponent LP
+              <input id="opponentLp" class="field" type="number" value="1500" />
+            </label>
+            <button id="simulateBattleButton" class="primary-button">Resolve Server Battle</button>
+            <pre id="battleOutput" class="output">No battle yet.</pre>
+          </article>
+
+          <article class="panel wide">
+            <h2>Leaderboard</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Pet</th>
+                  <th>Class</th>
+                  <th>Rank</th>
+                  <th>LP</th>
+                  <th>Record</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboardBody"></tbody>
+            </table>
+          </article>
+
+          <article class="panel wide">
+            <h2>Server Event Log</h2>
+            <div id="eventLog" class="event-log"></div>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

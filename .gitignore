@@ -1,4 +1,5 @@
 runs/
 identity-probe/logs/
 identity-probe/codex-exec-output.txt
-
+data/*.json
+node_modules/
