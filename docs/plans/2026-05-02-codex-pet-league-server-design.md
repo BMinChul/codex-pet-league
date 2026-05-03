@@ -140,6 +140,7 @@ There is no manual pre-approval queue for normal pet usage. The user should be a
 - `id`
 - `owner_account_id`
 - `pet_asset_id`
+- `bound_account_id`
 - `name`
 - `status`: `active`, `retired`, `asset_hold`
 - `primary_element`
@@ -159,6 +160,10 @@ There is no manual pre-approval queue for normal pet usage. The user should be a
 - `rerolled_at`
 
 Primary element is chosen from server-accepted activity summary inputs. It affects starting template, not total starting power.
+
+Official pets are permanently account-bound. `owner_account_id` and `bound_account_id` are set at creation and cannot be reassigned through normal user flows. There is no 1.0 trading, gifting, selling, transfer, merge, marketplace, or progression migration between accounts.
+
+Pet assets may have immutable revisions for the same owner's visual lineage, but registered competitive identity, progression, stats, LP history, titles, and mastery do not transfer to another account.
 
 ### Stats And Progression
 
@@ -873,6 +878,7 @@ Security tests:
 - client submits action after deadline
 - client replays old action
 - client submits fake XP or cap counter state
+- client attempts to transfer pet ownership or progression
 - client tries ranked with inactive or quarantined asset
 - client changes local asset after registration
 
@@ -883,6 +889,7 @@ Security tests:
 - OpenAI-attested identity is future-only until OpenAI provides a signed claim that the League server can verify.
 - User hatch appearance is preserved.
 - Server asset registry makes the canonical official copy.
+- Official pets and their progression are permanently account-bound.
 - Structurally valid assets are active immediately; safety enforcement is automatic and post-hoc unless the file is invalid or clearly abusive.
 - Skill mechanics are official and server-defined.
 - Season 1 starts with five official skills per element, for 30 official skills total.
