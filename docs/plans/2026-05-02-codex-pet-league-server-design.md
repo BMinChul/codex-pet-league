@@ -114,6 +114,7 @@ Device binding improves abuse detection and session continuity, but device ident
 - `rows`
 - `asset_status`: `active`, `format_rejected`, `quarantined`, `removed`
 - `safety_status`: `unscanned`, `clear`, `flagged`
+- `visibility`: `public`, `hidden`
 - `created_at`
 - `activated_at`
 
@@ -132,6 +133,8 @@ Device binding improves abuse detection and session continuity, but device ident
 Assets become active immediately after automatic format validation passes. Revisions are new immutable records linked to the same visual lineage.
 
 There is no manual pre-approval queue for normal pet usage. The user should be able to use the pet they made as soon as the atlas is structurally valid. Safety checks run automatically and asynchronously; clearly abusive or invalid assets can be quarantined or removed after the fact.
+
+Active official pet assets are public by default. Other players can see them in profiles, battle screens, friend rooms, replays, and other League surfaces where pets are shown. `hidden` is reserved for moderation, safety, legal, or account enforcement states, not the default registration flow.
 
 ### Pet
 
@@ -891,6 +894,7 @@ Security tests:
 - OpenAI-attested identity is future-only until OpenAI provides a signed claim that the League server can verify.
 - User hatch appearance is preserved.
 - Server asset registry makes the canonical official copy.
+- Active official pet assets are public by default.
 - Official pets and their progression are permanently account-bound.
 - Structurally valid assets are active immediately; safety enforcement is automatic and post-hoc unless the file is invalid or clearly abusive.
 - Skill mechanics are official and server-defined.
@@ -913,7 +917,3 @@ Security tests:
 - Ranked season entry uses five placement matches from a neutral 1500 hidden seed.
 - Ranked LP changes use fixed base results, opponent LP modifiers, and per-battle clamps.
 - Battle, XP, LP, and ranked outcomes are server-authoritative.
-
-## Open Questions
-
-- Should active pet assets be public by default or private until first battle?

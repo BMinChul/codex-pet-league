@@ -97,6 +97,10 @@ Ranked battles use only server-registered assets. If a user modifies a local ima
 
 There is no manual pre-approval queue for normal pet usage. Users should be able to use the pet they made right away once the atlas is structurally valid.
 
+Active official pet assets are public by default. Other players can see the pet's appearance in profiles, battle screens, friend rooms, replays, and other League surfaces where pets are shown. Seeing other users' pets is a core part of the platform's social and collection appeal.
+
+Private-by-default pet assets are not part of the main League experience. The server may still hide, quarantine, or remove assets for safety, moderation, legal, or account enforcement reasons.
+
 Official pets are permanently account-bound. Users cannot trade, sell, gift, or transfer official pets, pet progression, stats, LP history, titles, mastery, or registered competitive identity to another account.
 
 This preserves the core fantasy that a pet is a user's unique Codex-born companion shaped by that user's own activity and battles. It also avoids high-level pet markets, bot farming, paid boosting, ownership disputes, and ranked integrity problems.
