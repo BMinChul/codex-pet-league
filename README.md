@@ -74,3 +74,28 @@ Environment:
 CODEX_PET_LEAGUE_URL=http://localhost:4317
 CODEX_PET_ACCOUNT_ID=acct_demo
 ```
+
+## Codex App MCP Bridge
+
+The MCP bridge exposes the same product actions as tools:
+
+- `pet_status`
+- `pet_create`
+- `training_report_draft`
+- `training_report_submit`
+- `battle_simulate`
+- `leaderboard`
+
+Run directly:
+
+```bash
+npm run mcp
+```
+
+Example Codex CLI registration:
+
+```powershell
+codex mcp add codex-pet-league -- node C:\Users\Chul\Desktop\codexpet\src\mcp\codex-pet-mcp.cjs
+```
+
+The League server must be running at `CODEX_PET_LEAGUE_URL` before tool calls can create pets, submit reports, or resolve battles.
