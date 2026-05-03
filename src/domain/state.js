@@ -16,6 +16,7 @@ import {
   OFFICIAL_SKILLS,
   ELEMENTS,
 } from "./rules.js";
+import { assertAuthMethodConfigured, authProviderStatus } from "./authConfig.js";
 import {
   createBattleRoomSnapshot,
   publicBattleRoom,
@@ -107,9 +108,12 @@ export function verifyAuthChallenge(state, input = {}) {
     throw httpError(409, "AUTH_CHALLENGE_EXPIRED", "Auth challenge expired.");
   }
   const submittedCode = String(input.code ?? "").trim();
-  const codeMatches = challenge.code_hash
-    ? challenge.code_hash === hashAuthCode(challenge.id, submittedCode)
-    : challenge.code === submittedCode;
+  const providerVerified = input.provider_verified === true;
+  const codeMatches = providerVerified
+    ? true
+    : challenge.code_hash
+      ? challenge.code_hash === hashAuthCode(challenge.id, submittedCode)
+      : challenge.code === submittedCode;
   if (!codeMatches) {
     appendRiskEvent(state, {
       type: "auth.challenge_failed",
@@ -141,6 +145,8 @@ export function verifyAuthChallenge(state, input = {}) {
     session_id: session.id,
     method: session.method,
     client_context: sessionContextLevel(session),
+    provider_verified: providerVerified,
+    provider_reason: providerVerified ? sanitizeProviderReason(input.provider_reason) : null,
   });
   return {
     account,
@@ -1134,11 +1140,13 @@ export function petAsset(state, pet) {
 
 export function publicPetView(state, pet) {
   const asset = petAsset(state, pet);
+  const isVisible = Boolean(asset && asset.visibility !== "private" && asset.safety_status !== "blocked");
   return {
     ...pet,
     asset: {
       ...asset,
-      is_visible: asset.visibility !== "private" && asset.safety_status !== "blocked",
+      is_visible: isVisible,
+      atlas_url: isVisible && asset?.atlas_sha256 ? `/api/assets/${encodeURIComponent(asset.id)}/atlas` : null,
     },
     cosmetic_rewards: cosmeticRewardsFor(pet),
     skills: pet.skills
@@ -2340,44 +2348,6 @@ function appendRiskEventOnce(state, input) {
   return appendRiskEvent(state, input);
 }
 
-function authProviderStatus() {
-  const provider = process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev";
-  return {
-    provider,
-    passkey:
-      provider === "local_dev" && process.env.CODEX_PET_PASSKEY_PROVIDER !== "true"
-        ? "dev_stub"
-        : process.env.CODEX_PET_PASSKEY_PROVIDER === "true"
-          ? "configured"
-          : "missing",
-    email_magic_link:
-      provider === "local_dev" && !process.env.CODEX_PET_EMAIL_PROVIDER
-        ? "dev_stub"
-        : process.env.CODEX_PET_EMAIL_PROVIDER
-          ? "configured"
-          : "missing",
-    oauth:
-      provider === "local_dev" && !process.env.CODEX_PET_OAUTH_ISSUER
-        ? "dev_stub"
-        : process.env.CODEX_PET_OAUTH_ISSUER
-          ? "configured"
-          : "missing",
-    dev_codes_exposed: process.env.CODEX_PET_AUTH_DEV_CODE === "true",
-  };
-}
-
-function assertAuthMethodConfigured(method) {
-  const provider = process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev";
-  if (provider === "local_dev") return;
-  const configured = {
-    passkey: process.env.CODEX_PET_PASSKEY_PROVIDER === "true",
-    email_magic_link: Boolean(process.env.CODEX_PET_EMAIL_PROVIDER),
-    league_oauth: Boolean(process.env.CODEX_PET_OAUTH_ISSUER),
-  };
-  if (configured[method]) return;
-  throw httpError(503, "AUTH_PROVIDER_NOT_CONFIGURED", `${method} auth is not configured for this League server.`);
-}
-
 function bridgeAttestationStatus() {
   return {
     hmac_bridge_secret: process.env.CODEX_PET_BRIDGE_SECRET ? "configured" : "missing",
@@ -2734,6 +2704,10 @@ function sanitizeAppearance(appearance) {
 
 function sanitizeReviewNote(value) {
   return String(value ?? "").trim().replace(/[<>]/g, "").slice(0, 160) || "review";
+}
+
+function sanitizeProviderReason(value) {
+  return String(value ?? "").trim().replace(/[<>]/g, "").slice(0, 80) || "external_provider_verified";
 }
 
 function cosmeticRewardsFor(pet) {

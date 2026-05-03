@@ -10,6 +10,7 @@ import {
   MATCHMAKING_POLICY,
   totalXpForLevel100,
 } from "../domain/rules.js";
+import { authProviderStatus } from "../domain/authConfig.js";
 import {
   adminAudit,
   adminConsole,
@@ -50,10 +51,13 @@ import {
   xpStatus,
 } from "../domain/state.js";
 import { IDEMPOTENCY_REQUIRED_ROUTES, enforceRequestGuard, hashRequestBody } from "../domain/antiCheat.js";
-import { loadState, updateState } from "../storage/jsonStore.js";
+import { deliverAuthChallenge, verifyExternalAuth } from "./authProviders.js";
+import { assetStorageStatus, readAssetObject, saveAtlasObject } from "../storage/assetStore.js";
+import { loadState, storageStatus, updateState } from "../storage/jsonStore.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
 const PUBLIC_DIR = fileURLToPath(new URL("../../public", import.meta.url));
+const SERVER_STARTED_AT = Date.now();
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const ALLOW_DEV_ACCOUNT_HEADER = process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER === "true";
 const EXPOSE_AUTH_DEV_CODE = process.env.CODEX_PET_AUTH_DEV_CODE === "true";
@@ -111,6 +115,17 @@ setInterval(async () => {
 }, Math.max(15_000, OPS_JOB_INTERVAL_MS)).unref();
 
 async function handleApi(req, res, url) {
+  if (req.method === "GET" && url.pathname === "/api/health") {
+    const health = await healthStatus();
+    sendJson(res, health.status === "ok" ? 200 : 503, health);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/metrics") {
+    sendText(res, 200, await metricsText(), "text/plain; charset=utf-8");
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/live") {
     await handleLive(req, res);
     return;
@@ -125,15 +140,29 @@ async function handleApi(req, res, url) {
       applyRequestGuard(state, req, "auth.challenge", null, body);
       return createAuthChallenge(state, body);
     });
-    sendJson(res, 201, publicAuthChallenge(result));
+    const delivery = await deliverAuthChallenge(result);
+    sendJson(res, 201, publicAuthChallenge({ ...result, ...delivery }));
     broadcast("auth.challenge.created", { method: result.method });
     return;
   }
 
   if (req.method === "POST" && path === "/api/auth/verify") {
-    const result = await updateState((state) => {
+    await updateState((state) => {
       applyRequestGuard(state, req, "auth.verify", null, body);
-      return verifyAuthChallenge(state, { ...body, client_context: requestClientContext(req) });
+      return null;
+    });
+    const snapshot = await loadState();
+    const challenge = (snapshot.authChallenges ?? []).find((entry) => entry.id === body.challenge_id);
+    const externalVerification = await verifyExternalAuth(challenge, body);
+    const result = await updateState((state) => {
+      return verifyAuthChallenge(state, {
+        challenge_id: body.challenge_id,
+        code: body.code,
+        provider_verified: externalVerification?.verified === true,
+        provider_reason: externalVerification?.provider_reason,
+        provider_subject: externalVerification?.provider_subject,
+        client_context: requestClientContext(req),
+      });
     });
     sendJson(res, 201, result, { "set-cookie": sessionCookie(result.session_token, result.session.expires_at) });
     broadcast("auth.session.created", { account_id: result.account.id });
@@ -159,6 +188,12 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && path === "/api/bridge/status") {
     sendJson(res, 200, bridgeStatus());
+    return;
+  }
+
+  const assetAtlasMatch = path.match(/^\/api\/assets\/([^/]+)\/atlas$/);
+  if (req.method === "GET" && assetAtlasMatch) {
+    await handleAssetAtlas(res, assetAtlasMatch[1]);
     return;
   }
 
@@ -208,10 +243,12 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/pet-assets/uploads") {
-    const result = await mutate("asset.active", (state) => {
+    const result = await mutate("asset.active", async (state) => {
       applyRequestGuard(state, req, "asset.upload", accountId, body);
       getAccount(state, accountId);
-      return createPetAsset(state, accountId, body);
+      const asset = createPetAsset(state, accountId, body);
+      await saveAtlasObject(asset.atlas_object_key, body.atlas_data_url);
+      return asset;
     });
     sendJson(res, 201, { asset: result });
     return;
@@ -497,6 +534,38 @@ async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body)
   sendJson(res, 404, { error: { code: "NOT_FOUND", message: "Battle API route not found." } });
 }
 
+async function handleAssetAtlas(res, assetId) {
+  const state = await loadState();
+  const asset = (state.assets ?? []).find((entry) => entry.id === assetId);
+  if (
+    !asset ||
+    asset.asset_status !== "active" ||
+    asset.visibility === "private" ||
+    asset.safety_status === "blocked" ||
+    !asset.atlas_object_key
+  ) {
+    sendJson(res, 404, { error: { code: "ASSET_NOT_FOUND", message: "Asset atlas not found." } });
+    return;
+  }
+  try {
+    const content = await readAssetObject(asset.atlas_object_key);
+    const headers = {
+      ...securityHeaders(),
+      "content-type": "image/png",
+      "cache-control": "public, max-age=31536000, immutable",
+    };
+    if (asset.atlas_sha256) headers.etag = `"${asset.atlas_sha256}"`;
+    res.writeHead(200, headers);
+    res.end(content);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      sendJson(res, 404, { error: { code: "ASSET_OBJECT_MISSING", message: "Asset atlas object is missing." } });
+      return;
+    }
+    throw error;
+  }
+}
+
 async function resolveAccountId(req) {
   const sessionToken = getSessionToken(req);
   if (sessionToken) {
@@ -647,24 +716,82 @@ function bridgeAttestationTrust(req, body) {
   return { trusted: true, reason: "attestation_valid" };
 }
 
-function authProviderStatus() {
-  const provider = process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev";
-  return {
-    provider,
-    passkey: provider === "local_dev" && !process.env.CODEX_PET_PASSKEY_PROVIDER ? "dev_stub" : process.env.CODEX_PET_PASSKEY_PROVIDER === "true" ? "configured" : "missing",
-    email_magic_link: provider === "local_dev" && !process.env.CODEX_PET_EMAIL_PROVIDER ? "dev_stub" : process.env.CODEX_PET_EMAIL_PROVIDER ? "configured" : "missing",
-    oauth: provider === "local_dev" && !process.env.CODEX_PET_OAUTH_ISSUER ? "dev_stub" : process.env.CODEX_PET_OAUTH_ISSUER ? "configured" : "missing",
-    dev_codes_exposed: EXPOSE_AUTH_DEV_CODE,
-  };
-}
-
 function bridgeStatus() {
   return {
     hmac_bridge_secret: BRIDGE_SECRET ? "configured" : "missing",
     codex_app_attestation_secret: BRIDGE_ATTESTATION_SECRET ? "configured" : "missing",
     replay_signing_secret: process.env.CODEX_PET_REPLAY_SIGNING_SECRET ? "configured" : "local_dev",
     official_openai_identity: "unconfirmed",
+    asset_storage: assetStorageStatus(),
   };
+}
+
+async function healthStatus() {
+  try {
+    const state = await loadState();
+    return {
+      status: "ok",
+      service: "codex-pet-league",
+      uptime_seconds: uptimeSeconds(),
+      storage: storageStatus(),
+      auth_provider: authProviderStatus(),
+      bridge: bridgeStatus(),
+      counts: stateCounts(state),
+      live_clients: liveClients.size,
+      checked_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      status: "degraded",
+      service: "codex-pet-league",
+      uptime_seconds: uptimeSeconds(),
+      error: error.message,
+      checked_at: new Date().toISOString(),
+    };
+  }
+}
+
+async function metricsText() {
+  const state = await loadState();
+  const counts = stateCounts(state);
+  const storage = storageStatus();
+  const auth = authProviderStatus();
+  const lines = [
+    "# HELP codex_pet_info Static Codex Pet League runtime labels.",
+    "# TYPE codex_pet_info gauge",
+    `codex_pet_info{storage_driver="${metricLabel(storage.driver)}",auth_provider="${metricLabel(auth.provider)}"} 1`,
+    "# HELP codex_pet_uptime_seconds League server uptime in seconds.",
+    "# TYPE codex_pet_uptime_seconds gauge",
+    `codex_pet_uptime_seconds ${uptimeSeconds()}`,
+    "# HELP codex_pet_live_clients Connected SSE clients.",
+    "# TYPE codex_pet_live_clients gauge",
+    `codex_pet_live_clients ${liveClients.size}`,
+  ];
+  for (const [name, value] of Object.entries(counts)) {
+    lines.push(`# TYPE codex_pet_${name}_total gauge`);
+    lines.push(`codex_pet_${name}_total ${value}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function stateCounts(state) {
+  return {
+    accounts: (state.accounts ?? []).length,
+    pets: (state.pets ?? []).length,
+    assets: (state.assets ?? []).length,
+    active_battles: (state.battleRooms ?? []).filter((room) => room.status === "active").length,
+    match_tickets: (state.matchTickets ?? []).filter((ticket) => ticket.status === "waiting").length,
+    held_training_reports: (state.trainingReports ?? []).filter((report) => report.status === "review").length,
+    abuse_alerts: (state.abuseAlerts ?? []).filter((alert) => alert.status === "open").length,
+  };
+}
+
+function uptimeSeconds() {
+  return Math.max(0, Math.round((Date.now() - SERVER_STARTED_AT) / 1000));
+}
+
+function metricLabel(value) {
+  return String(value ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function safeEqual(left, right) {
@@ -721,6 +848,11 @@ async function readJson(req) {
 function sendJson(res, status, payload, headers = {}) {
   res.writeHead(status, { ...securityHeaders(), "content-type": "application/json; charset=utf-8", ...headers });
   res.end(JSON.stringify(payload, null, 2));
+}
+
+function sendText(res, status, payload, contentType) {
+  res.writeHead(status, { ...securityHeaders(), "content-type": contentType });
+  res.end(payload);
 }
 
 function securityHeaders() {

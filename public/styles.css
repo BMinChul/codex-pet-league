@@ -255,6 +255,15 @@ select:disabled {
   height: auto;
 }
 
+.pet-visual img.sprite-atlas {
+  width: 192px;
+  height: 208px;
+  object-fit: none;
+  object-position: left top;
+  transform: scale(0.72);
+  transform-origin: center;
+}
+
 .stat-list {
   display: grid;
   gap: 8px;

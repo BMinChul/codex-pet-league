@@ -114,6 +114,10 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       assert(providers.provider, "auth provider status did not return a provider");
       const bridge = await getJson(baseUrl, "/api/bridge/status", {});
       assert(bridge.official_openai_identity === "unconfirmed", "bridge status changed unexpectedly");
+      const health = await getJson(baseUrl, "/api/health", {});
+      assert(health.status === "ok", "health endpoint did not return ok");
+      const metrics = await getText(baseUrl, "/api/metrics", {});
+      assert(metrics.includes("codex_pet_uptime_seconds"), "metrics endpoint did not expose uptime");
 
       runCli("session", baseUrl, sessionA.session_token);
       runCli("audit", baseUrl, sessionA.session_token);
@@ -234,6 +238,13 @@ async function createSmokePet(baseUrl, headers, name, primary, secondary) {
 
 async function getJson(baseUrl, path, headers = {}) {
   return requestJson(baseUrl, path, { method: "GET", headers });
+}
+
+async function getText(baseUrl, path, headers = {}) {
+  const response = await fetch(`${baseUrl}${path}`, { headers });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`GET ${path} failed (${response.status}): ${text}`);
+  return text;
 }
 
 async function postJson(baseUrl, path, body, headers = {}) {

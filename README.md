@@ -25,6 +25,7 @@ http://localhost:4317
 - League demo account session.
 - Public pet asset registration with server-side manifest validation.
 - Optional Codex hatch atlas PNG upload, with server-side PNG dimension and hash validation.
+- Local filesystem atlas storage and public atlas URLs for visible active pets.
 - Official pet creation with primary and secondary elements.
 - Server-derived stats, level, Battle Class, skill loadout, and ranked rating.
 - Training Report draft and submit flow with risk scoring and review holds.
@@ -46,6 +47,7 @@ http://localhost:4317
 - Local audit checks for XP/LP/replay/risk/event-log integrity with tamper-evident hash chains.
 - Anti-cheat request guards for rate limits, idempotency/replay prevention, repeated Training Report evidence, and asset upload abuse.
 - Server authority ops job for matchmaking, settlement reconciliation, audit review, and abuse alert generation.
+- Deployment readiness endpoints: `/api/health` JSON and `/api/metrics` Prometheus-style text.
 - Admin operations console for held Training Reports, moderation queue, risk cases, manual enforcement, and season operations.
 - Asset report/moderation flow with report threshold privacy protection.
 - Level cosmetic rewards and season reward generation for non-ranked and ranked loops.
@@ -61,7 +63,10 @@ http://localhost:4317
 npm test
 npm run test:runtime
 npm run test:abuse
+npm run test:storage
+npm run test:load
 npm run test:browser
+npm run db:migrate -- data/league-state.json data/league-state.sqlite
 npm run verify:loop -- 2
 npm run ops:check
 npm start
@@ -69,8 +74,8 @@ npm run dev
 npm run cli -- help
 ```
 
-Runtime state is stored in `data/league-state.json` and ignored by git.
-The JSON store is dev-only. It now writes atomically with temp-file rename and ledger hash chains, but production must use a real append-only database.
+Runtime state is stored in `data/league-state.json` by default and ignored by git.
+Set `CODEX_PET_STORAGE_DRIVER=sqlite` with `CODEX_PET_SQLITE_PATH` to use the SQLite snapshot backend. It keeps transaction-protected, hashable state snapshots with WAL enabled, and `npm run db:migrate -- <json> <sqlite>` moves the current JSON state into that backend.
 
 ## CLI Bridge
 
@@ -120,17 +125,38 @@ CODEX_PET_STATE_PATH=C:\path\to\league-state.json
 CODEX_PET_SESSION_TOKEN=league_session_token
 CODEX_PET_ACCOUNT_ID=acct_demo
 CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
+CODEX_PET_AUTH_PROVIDER=local_dev
 CODEX_PET_AUTH_DEV_CODE=false
+CODEX_PET_PUBLIC_BASE_URL=http://localhost:4317
+CODEX_PET_EMAIL_PROVIDER=webhook
+CODEX_PET_EMAIL_WEBHOOK_URL=https://email-provider.example/send
+CODEX_PET_EMAIL_WEBHOOK_SECRET=shared_email_hmac_secret
+CODEX_PET_PASSKEY_PROVIDER=true
+CODEX_PET_PASSKEY_VERIFY_URL=https://passkey-provider.example/verify
+CODEX_PET_PASSKEY_RP_ID=league.example.com
+CODEX_PET_OAUTH_ISSUER=https://oauth-provider.example
+CODEX_PET_OAUTH_AUTHORIZE_URL=https://oauth-provider.example/authorize
+CODEX_PET_OAUTH_CLIENT_ID=codex-pet-league
+CODEX_PET_OAUTH_REDIRECT_URI=https://league.example.com/oauth/callback
+CODEX_PET_OAUTH_VERIFY_URL=https://oauth-provider.example/verify
 CODEX_PET_BRIDGE_SECRET=shared_bridge_hmac_secret
 CODEX_PET_BRIDGE_ATTESTATION_SECRET=shared_codex_app_attestation_secret
 CODEX_PET_OPS_JOB_INTERVAL_MS=60000
+CODEX_PET_STORAGE_DRIVER=json
+CODEX_PET_SQLITE_PATH=C:\path\to\league-state.sqlite
+CODEX_PET_SQLITE_SNAPSHOT_RETENTION=500
+CODEX_PET_ASSET_STORAGE=local_fs
+CODEX_PET_ASSET_ROOT=C:\path\to\asset-root
+CODEX_PET_ASSET_CDN_BASE_URL=
 ```
 
 `CODEX_PET_SESSION_TOKEN` or the HttpOnly `league_session` cookie is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and is disabled unless `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true`.
-`CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. Production auth should deliver codes through the chosen email/passkey/OAuth provider.
+`CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. When `CODEX_PET_AUTH_PROVIDER` is not `local_dev`, auth fails closed unless at least one real method is fully configured: email magic-link webhook, passkey verify hook, or OAuth authorize plus verify hook.
+Email delivery webhooks receive a signed JSON payload when `CODEX_PET_EMAIL_WEBHOOK_SECRET` is set. Passkey and OAuth verification hooks must return JSON with `verified: true` before the server creates an official League session.
 `CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. Untrusted high-value reports are held for review.
 High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; the browser, CLI, and MCP bridge add one automatically.
 Risk scores are review signals first. Automatic ranked lock only respects an explicit/manual `ranked_locked_until` or future tamper-confirmed policy, so false positives do not silently punish normal players.
+`npm run test:load` starts a strict temp server, performs concurrent auth/read traffic, and checks security headers on `/api/health`.
 
 See `docs/OPERATIONS.md` for the 1-13 operational checklist before the final DB migration.
 

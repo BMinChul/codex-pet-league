@@ -48,6 +48,7 @@ const els = queryElements({
   createPetButton: "#createPetButton",
   petTitle: "#petTitle",
   petSubtitle: "#petSubtitle",
+  petImage: "#petImage",
   classPill: "#classPill",
   rankPill: "#rankPill",
   statList: "#statList",
@@ -320,16 +321,25 @@ function renderActivePet() {
     setText(els.classPill, `Class ${EMPTY_LABEL}`);
     setText(els.rankPill, `Rank ${EMPTY_LABEL}`);
     clear(els.statList);
+    setPetImage(null);
     renderBattleSkills(null);
     return;
   }
 
+  setPetImage(pet);
   setText(els.petTitle, safeText(pet.name));
   setText(els.petSubtitle, `${elementLine(pet)} · Lv ${pet.level ?? 1} · ${pet.stats?.total ?? 0} stats`);
   setText(els.classPill, String(pet.battle_class ?? EMPTY_LABEL).toUpperCase());
   setText(els.rankPill, `${pet.rating?.label ?? EMPTY_LABEL} · ${pet.rating?.lp ?? 0} LP`);
   renderStats(pet);
   renderBattleSkills(pet);
+}
+
+function setPetImage(pet) {
+  if (!els.petImage) return;
+  const atlasUrl = pet?.asset?.atlas_url;
+  els.petImage.src = atlasUrl || "/pet-placeholder.svg";
+  els.petImage.classList.toggle("sprite-atlas", Boolean(atlasUrl));
 }
 
 function renderStats(pet) {
@@ -486,26 +496,73 @@ async function startAuthChallenge() {
   });
   state.authChallenge = result;
   if (els.authCodeInput && result.dev_code) els.authCodeInput.value = result.dev_code;
-  setText(
-    els.authHint,
-    result.dev_code ? `Local dev code: ${result.dev_code}` : "Challenge created. Use the code from your provider.",
-  );
+  if (result.oauth_authorize_url) window.open(result.oauth_authorize_url, "_blank", "noopener,noreferrer");
+  setText(els.authHint, authChallengeHint(result));
 }
 
 async function verifyAuthChallenge() {
   if (!state.authChallenge?.challenge_id) throw new Error("Create an auth challenge first.");
+  const body = {
+    challenge_id: state.authChallenge.challenge_id,
+    code: els.authCodeInput?.value,
+  };
+  if (state.authChallenge.method === "league_oauth" && body.code) body.oauth_code = body.code;
+  if (state.authChallenge.method === "passkey" && !body.code && state.authChallenge.passkey_options) {
+    body.assertion = await collectPasskeyAssertion(state.authChallenge.passkey_options);
+  }
   const result = await api("/api/auth/verify", {
     method: "POST",
-    body: {
-      challenge_id: state.authChallenge.challenge_id,
-      code: els.authCodeInput?.value,
-    },
+    body,
   });
   state.session = { account: result.account };
   state.authChallenge = null;
   setText(els.authHint, "Signed in.");
   connectLiveEvents();
   await refresh();
+}
+
+function authChallengeHint(result) {
+  if (result.dev_code) return `Local dev code: ${result.dev_code}`;
+  if (result.oauth_authorize_url) return "OAuth provider opened. Paste the returned code to finish sign-in.";
+  if (result.passkey_options) return "Passkey challenge ready. Use Verify to continue with this browser.";
+  return result.delivery?.message ?? "Challenge created. Use the code from your provider.";
+}
+
+async function collectPasskeyAssertion(options) {
+  if (!window.PublicKeyCredential || !navigator.credentials?.get) {
+    throw new Error("This browser does not expose passkey credentials.");
+  }
+  const credential = await navigator.credentials.get({
+    publicKey: {
+      challenge: new TextEncoder().encode(options.challenge),
+      rpId: options.rp_id,
+      timeout: options.timeout_ms,
+      userVerification: options.user_verification ?? "preferred",
+    },
+  });
+  return serializeCredential(credential);
+}
+
+function serializeCredential(credential) {
+  const response = credential.response;
+  return {
+    id: credential.id,
+    type: credential.type,
+    raw_id: bufferToBase64Url(credential.rawId),
+    response: {
+      authenticator_data: bufferToBase64Url(response.authenticatorData),
+      client_data_json: bufferToBase64Url(response.clientDataJSON),
+      signature: bufferToBase64Url(response.signature),
+      user_handle: response.userHandle ? bufferToBase64Url(response.userHandle) : null,
+    },
+  };
+}
+
+function bufferToBase64Url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 async function draftTrainingReport() {

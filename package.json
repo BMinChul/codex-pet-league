@@ -14,10 +14,13 @@
     "test": "node --test test/*.test.js",
     "test:runtime": "node scripts/runtime-smoke.mjs",
     "test:abuse": "node scripts/abuse-smoke.mjs",
+    "test:storage": "node scripts/storage-smoke.mjs",
+    "test:load": "node scripts/load-smoke.mjs",
     "test:browser": "playwright test test/browser-smoke.spec.mjs --browser=chromium --workers=1 --output=runs/playwright",
     "balance:sim": "node scripts/balance-sim.mjs",
     "verify:loop": "node scripts/verify-loop.mjs",
-    "ops:check": "node scripts/ops-check.mjs"
+    "ops:check": "node scripts/ops-check.mjs",
+    "db:migrate": "node scripts/migrate-json-to-sqlite.mjs"
   },
   "engines": {
     "node": ">=20"

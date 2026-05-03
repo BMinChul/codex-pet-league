@@ -13,12 +13,18 @@ const syntaxFiles = [
   "src/domain/antiCheat.js",
   "src/domain/audit.js",
   "src/domain/battleEngine.js",
+  "src/domain/authConfig.js",
   "src/storage/jsonStore.js",
+  "src/storage/assetStore.js",
+  "src/server/authProviders.js",
   "src/cli/index.js",
   "src/mcp/codex-pet-mcp.cjs",
   "public/app.js",
   "scripts/runtime-smoke.mjs",
   "scripts/abuse-smoke.mjs",
+  "scripts/storage-smoke.mjs",
+  "scripts/load-smoke.mjs",
+  "scripts/migrate-json-to-sqlite.mjs",
   "scripts/balance-sim.mjs",
   "scripts/ops-check.mjs",
   "scripts/verify-loop.mjs",
@@ -47,6 +53,8 @@ for (let index = 1; index <= iterations; index += 1) {
   runStaticScan();
   run("git", ["diff", "--check"], "diff whitespace check");
   run(nodeBin, ["--test", "test/*.test.js"], "unit tests");
+  run(nodeBin, ["scripts/storage-smoke.mjs"], "storage smoke");
+  run(nodeBin, ["scripts/load-smoke.mjs"], "load and security smoke");
   run(nodeBin, ["scripts/balance-sim.mjs"], "balance sim");
   run(nodeBin, ["scripts/abuse-smoke.mjs"], "abuse smoke");
   run(nodeBin, ["scripts/runtime-smoke.mjs"], "runtime smoke");
