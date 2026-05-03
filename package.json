@@ -24,6 +24,7 @@
     "backup": "node scripts/backup-state.mjs",
     "healthcheck": "node scripts/healthcheck.mjs",
     "db:schema:check": "node scripts/postgres-schema-check.mjs",
+    "db:postgres:migrate": "node scripts/postgres-migrate.mjs",
     "db:migrate": "node scripts/migrate-json-to-sqlite.mjs"
   },
   "engines": {
@@ -31,5 +32,8 @@
   },
   "devDependencies": {
     "@playwright/test": "1.59.1"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
   }
 }

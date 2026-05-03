@@ -16,6 +16,8 @@ const checks = [
   ["CODEX_PET_STORAGE_DRIVER", process.env.CODEX_PET_STORAGE_DRIVER || "json"],
   ["CODEX_PET_STATE_PATH", process.env.CODEX_PET_STATE_PATH ?? "data/league-state.json"],
   ["CODEX_PET_SQLITE_PATH", process.env.CODEX_PET_SQLITE_PATH ?? "data/league-state.sqlite"],
+  ["CODEX_PET_POSTGRES_URL", process.env.CODEX_PET_POSTGRES_URL ? "configured" : "missing"],
+  ["CODEX_PET_POSTGRES_SNAPSHOT_RETENTION", process.env.CODEX_PET_POSTGRES_SNAPSHOT_RETENTION ?? "500"],
   ["CODEX_PET_ASSET_STORAGE", process.env.CODEX_PET_ASSET_STORAGE || "local_fs"],
   ["CODEX_PET_ASSET_ROOT", process.env.CODEX_PET_ASSET_ROOT ?? "data/assets"],
   ["CODEX_PET_ASSET_CDN_BASE_URL", process.env.CODEX_PET_ASSET_CDN_BASE_URL ?? "missing"],

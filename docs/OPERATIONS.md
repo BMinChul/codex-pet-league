@@ -1,6 +1,6 @@
 # Codex Pet League Operations
 
-This project defaults to the JSON store for local development. For production-like runs, switch to `CODEX_PET_STORAGE_DRIVER=sqlite`, keep authoritative decisions server-side, and keep the audit trails tamper-evident.
+This project defaults to the JSON store for local development. For production-like runs, switch to `CODEX_PET_STORAGE_DRIVER=postgres`, keep authoritative decisions server-side, and keep the audit trails tamper-evident.
 
 ## Daily Loop
 
@@ -26,6 +26,7 @@ npm run test:storage
 npm run test:load
 npm run test:browser
 npm run db:schema:check
+npm run db:postgres:migrate
 npm run verify:loop -- 2
 npm run prod:check
 ```
@@ -33,7 +34,8 @@ npm run prod:check
 Use `/api/health` for load balancer checks and `/api/metrics` for scraping runtime counts such as accounts, pets, active battles, waiting match tickets, held Training Reports, and open abuse alerts.
 Keep `CODEX_PET_AUTH_DEV_CODE=false` and `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false` outside local testing. Configure `CODEX_PET_BRIDGE_SECRET` and `CODEX_PET_BRIDGE_ATTESTATION_SECRET` before trusting high-value Training Reports from CLI or MCP bridge flows.
 Set `CODEX_PET_COOKIE_SECURE=true` when serving over HTTPS.
-Before a SQLite run, migrate once with `npm run db:migrate -- data/league-state.json data/league-state.sqlite`, then set `CODEX_PET_STORAGE_DRIVER=sqlite` and `CODEX_PET_SQLITE_PATH=data/league-state.sqlite`.
+SQLite remains useful for local persistence: migrate once with `npm run db:migrate -- data/league-state.json data/league-state.sqlite`, then set `CODEX_PET_STORAGE_DRIVER=sqlite` and `CODEX_PET_SQLITE_PATH=data/league-state.sqlite`.
+Before a Postgres run, set `CODEX_PET_POSTGRES_URL`, run `npm run db:postgres:migrate`, then set `CODEX_PET_STORAGE_DRIVER=postgres`.
 Keep `CODEX_PET_ASSET_ROOT` on persistent storage. The server stores uploaded hatch atlas PNGs under that root and serves visible active pets through `/api/assets/:asset_id/atlas`; hidden or blocked assets return 404.
 For S3-compatible storage, set `CODEX_PET_ASSET_STORAGE=s3_compatible` and keep the bucket private unless a CDN URL is configured.
 For more than one server instance, set `CODEX_PET_REALTIME_BUS=redis` and point `CODEX_PET_REDIS_URL` at the shared Redis deployment.

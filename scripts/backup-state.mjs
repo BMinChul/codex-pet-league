@@ -16,6 +16,17 @@ await copyIfExists(sqlitePath, join(outputRoot, basename(sqlitePath)));
 for (const suffix of ["-wal", "-shm"]) {
   await copyIfExists(`${sqlitePath}${suffix}`, join(outputRoot, `${basename(sqlitePath)}${suffix}`));
 }
+if ((process.env.CODEX_PET_STORAGE_DRIVER || "json") === "postgres" && process.env.CODEX_PET_POSTGRES_URL) {
+  const store = await import(`../src/storage/jsonStore.js?backup=${Date.now()}`);
+  try {
+    const state = await store.loadState();
+    const snapshotPath = join(outputRoot, "postgres-state-snapshot.json");
+    await writeFile(snapshotPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    copied.push(snapshotPath);
+  } finally {
+    await store.closeStorage();
+  }
+}
 await copyDirIfExists(assetRoot, join(outputRoot, "assets"));
 
 const manifest = {

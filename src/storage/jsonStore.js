@@ -15,9 +15,11 @@ const STATE_FILE_PATH = fileURLToPath(STATE_PATH);
 const SQLITE_FILE_PATH = fileURLToPath(SQLITE_PATH);
 let writeQueue = Promise.resolve();
 let sqliteHandle = null;
+let postgresHandle = null;
 
 export async function loadState() {
   if (storageDriver() === "sqlite") return loadSqliteState();
+  if (storageDriver() === "postgres") return loadPostgresState();
   try {
     const raw = await retryTransientFileOperation(() => readFile(STATE_FILE_PATH, "utf8"));
     return migrateState(JSON.parse(raw));
@@ -29,6 +31,7 @@ export async function loadState() {
 
 export async function saveState(state) {
   if (storageDriver() === "sqlite") return saveSqliteState(state);
+  if (storageDriver() === "postgres") return savePostgresState(state);
   await mkdir(dirname(STATE_FILE_PATH), { recursive: true });
   const tempPath = `${STATE_FILE_PATH}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
@@ -53,18 +56,26 @@ export async function updateState(mutator) {
 
 export function storageStatus() {
   const driver = storageDriver();
+  if (driver === "postgres" && postgresHandle) return postgresHandle.status();
   return {
     driver,
     json_path: STATE_FILE_PATH,
     sqlite_path: SQLITE_FILE_PATH,
     sqlite_snapshot_retention: sqliteSnapshotRetention(),
+    postgres_url: redactConfiguredUrl(process.env.CODEX_PET_POSTGRES_URL || ""),
+    postgres_snapshot_retention: postgresSnapshotRetention(),
   };
 }
 
-export function closeStorage() {
-  if (!sqliteHandle) return;
-  sqliteHandle.close();
-  sqliteHandle = null;
+export async function closeStorage() {
+  if (sqliteHandle) {
+    sqliteHandle.close();
+    sqliteHandle = null;
+  }
+  if (postgresHandle) {
+    await postgresHandle.close();
+    postgresHandle = null;
+  }
 }
 
 export function createDefaultState() {
@@ -126,6 +137,13 @@ async function loadSqliteState() {
   return migrateState(JSON.parse(row.state_json));
 }
 
+async function loadPostgresState() {
+  const store = await postgresStore();
+  const state = await store.load();
+  if (!state) return createDefaultState();
+  return migrateState(state);
+}
+
 async function saveSqliteState(state) {
   await mkdir(dirname(SQLITE_FILE_PATH), { recursive: true });
   const db = await sqliteDatabase();
@@ -148,6 +166,11 @@ async function saveSqliteState(state) {
   }
 }
 
+async function savePostgresState(state) {
+  const store = await postgresStore();
+  await store.save(state);
+}
+
 async function sqliteDatabase() {
   if (sqliteHandle) return sqliteHandle;
   await mkdir(dirname(SQLITE_FILE_PATH), { recursive: true });
@@ -167,15 +190,39 @@ async function sqliteDatabase() {
   return sqliteHandle;
 }
 
+async function postgresStore() {
+  if (postgresHandle) return postgresHandle;
+  const { createPostgresSnapshotStore } = await import("./postgresStore.js");
+  postgresHandle = await createPostgresSnapshotStore(process.env);
+  return postgresHandle;
+}
+
 function storageDriver() {
   const driver = process.env.CODEX_PET_STORAGE_DRIVER || STORAGE_DRIVER || "json";
-  if (driver === "json" || driver === "sqlite") return driver;
+  if (driver === "json" || driver === "sqlite" || driver === "postgres") return driver;
   throw new Error(`Unsupported CODEX_PET_STORAGE_DRIVER: ${driver}`);
 }
 
 function sqliteSnapshotRetention() {
   const value = Number(process.env.CODEX_PET_SQLITE_SNAPSHOT_RETENTION ?? 500);
   return Number.isInteger(value) && value >= 10 ? value : 500;
+}
+
+function postgresSnapshotRetention() {
+  const value = Number(process.env.CODEX_PET_POSTGRES_SNAPSHOT_RETENTION ?? 500);
+  return Number.isInteger(value) && value >= 10 ? value : 500;
+}
+
+function redactConfiguredUrl(value) {
+  if (!value) return "missing";
+  try {
+    const url = new URL(value);
+    if (url.password) url.password = "REDACTED";
+    if (url.username) url.username = "REDACTED";
+    return url.toString();
+  } catch {
+    return "invalid";
+  }
 }
 
 function migrateState(state) {

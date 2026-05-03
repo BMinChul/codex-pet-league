@@ -32,7 +32,7 @@ In production mode it fails if:
 - secure cookies are off
 - bridge/replay secrets are missing or default-looking
 - no real auth method is fully configured
-- storage still uses JSON
+- storage is not `postgres` or `CODEX_PET_POSTGRES_URL` is missing
 - public base URL is not HTTPS
 - realtime bus is still local or Redis is not configured
 
@@ -40,7 +40,7 @@ In production mode it fails if:
 
 Use persistent storage for:
 
-- `CODEX_PET_SQLITE_PATH`
+- `CODEX_PET_POSTGRES_URL`
 - `CODEX_PET_ASSET_ROOT`
 - backups from `npm run backup`
 
@@ -49,13 +49,14 @@ For object storage instead of a local volume, set `CODEX_PET_ASSET_STORAGE=s3_co
 
 ## Database And Realtime Scale-Out
 
-The current runtime store can run on JSON or SQLite snapshots. The next production DB path is staged under `db/migrations` as a Postgres schema:
+The current runtime store can run on JSON, SQLite snapshots, or Postgres snapshots. For production, apply the Postgres schema first and then switch `CODEX_PET_STORAGE_DRIVER=postgres`:
 
 ```bash
 npm run db:schema:check
+CODEX_PET_POSTGRES_URL=postgres://user:password@db.example.com:5432/league npm run db:postgres:migrate
 ```
 
-The schema keeps narrow indexed columns for hot paths and JSONB documents for compatibility with the current domain state while the table-backed store is implemented.
+The schema keeps narrow indexed columns for hot paths and JSONB documents for compatibility with the current snapshot-backed domain state. The runtime now writes authoritative snapshots to `league_state_snapshots`; table-specific write-through can be added after the DB backend is live.
 
 For multi-instance realtime updates, use Redis pub/sub:
 
@@ -74,7 +75,7 @@ npm run backup
 npm run backup -- runs/backups/manual-before-upgrade
 ```
 
-The backup script copies the JSON state, SQLite database files, WAL/SHM files when present, and atlas assets into a timestamped folder with a manifest.
+The backup script copies the JSON state, SQLite database files, WAL/SHM files when present, atlas assets, and a Postgres state snapshot when `CODEX_PET_STORAGE_DRIVER=postgres`.
 
 ## User-Owned Setup Kept For Last
 
@@ -84,5 +85,5 @@ These cannot be completed locally without your accounts or provider choices:
 - production host or cloud project
 - email/passkey/OAuth provider credentials
 - bridge and replay signing secrets
-- persistent object storage or volume location
+- Postgres, Redis, and persistent object storage locations
 - monitoring destination for `/api/metrics`

@@ -46,6 +46,6 @@ try {
   assert.equal(store.storageStatus().driver, "sqlite");
   console.log("storage smoke ok");
 } finally {
-  store?.closeStorage();
+  await store?.closeStorage();
   await rm(tempRoot, { recursive: true, force: true });
 }
