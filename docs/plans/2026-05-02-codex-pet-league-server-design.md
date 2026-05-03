@@ -413,6 +413,8 @@ Server caps apply per day, week, season, and pet. XP awards must be written thro
 
 Official skill behavior is fixed by server config. Nicknames are cosmetic only.
 
+Skill nicknames are displayed in battle screens, replays, battle logs, pet profiles, and loadout views. They are not displayed on leaderboards. Every surface that displays a nickname must also expose the official skill name and element.
+
 Season 1 starts with 30 official skills: five per element across six elements. Each element should have one skill in each catalog role:
 
 - offense
@@ -894,6 +896,7 @@ Security tests:
 - Skill mechanics are official and server-defined.
 - Season 1 starts with five official skills per element, for 30 official skills total.
 - User skill nicknames are cosmetic only.
+- Skill nicknames display in battle, replay, log, profile, and loadout surfaces, but not leaderboards.
 - Battle loadouts use exactly four active skill slots.
 - Every turn uses a fixed 30 second timer.
 - Pet XP is capped at 700 per day, split into 400 Training Report XP and 300 Battle XP.

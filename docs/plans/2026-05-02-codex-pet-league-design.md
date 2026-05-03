@@ -339,6 +339,18 @@ Each skill has:
 
 Users may set pet-specific cosmetic nicknames for skills. Nicknames do not alter behavior.
 
+Skill nicknames should be visible wherever pet personality matters:
+
+- battle screen
+- replay
+- battle log
+- pet profile
+- loadout view
+
+Skill nicknames should not appear on the leaderboard. The leaderboard is for ranking data, not loadout personality.
+
+Whenever a nickname is shown, the official skill identity must also be available so ranked play, replay review, and balance discussion remain understandable.
+
 Each pet battle loadout has exactly four active skill slots.
 
 Season 1 starts with five official skills per element:
@@ -517,7 +529,3 @@ Requirements for using OpenAI identity:
 - documented OpenAI verification endpoint or public keys
 
 Until that exists, OpenAI identity must not be used as official League ownership.
-
-## Open Questions
-
-- Should skill nicknames be globally visible in leaderboards/replays, or only during battle?
