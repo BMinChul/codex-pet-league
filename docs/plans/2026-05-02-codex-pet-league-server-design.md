@@ -171,6 +171,9 @@ Primary element is chosen from server-accepted activity summary inputs. It affec
 - `focus`
 - `recovery`
 - `insight`
+- `total_stats`
+- `battle_class`: `hatch`, `core`, `surge`, `apex`, `prime`
+- `growth_meters_json`
 - `stat_version`
 - `updated_at`
 
@@ -178,6 +181,7 @@ Primary element is chosen from server-accepted activity summary inputs. It affec
 
 - `pet_id`
 - `level`
+- `mastery_level`
 - `xp`
 - `battle_xp`
 - `training_xp`
@@ -186,30 +190,53 @@ Primary element is chosen from server-accepted activity summary inputs. It affec
 
 The server derives these values. The client never submits final stats.
 
-### Ranked Stat Normalization
+Leveling rules:
 
-Ranked matchmaking prioritizes similar tier and LP, but matching alone is not enough to guarantee fair combat. A long-grown pet and a newer pet can still meet within the same competitive band, especially during placements, early season volatility, casual-to-ranked transitions, or after a strong player climbs quickly.
+- Level 1 starts at 100 total stats from the primary element template.
+- Levels 2-100 grant +2 actual stat points per level.
+- Level 100 reaches 298 total stats.
+- Level 101+ is Mastery progression and grants cosmetics, titles, aura, prestige, and profile rewards instead of battle stats.
+- Stat growth is automatic. Users do not manually assign stat points.
+- Growth distribution is based on the pet's primary and secondary element profile, weighted 70% primary and 30% secondary.
+- `growth_meters_json` may hold fractional internal progress so long-term 70/30 distribution works even though visible stats increase as integers.
 
-Ranked battles use normalized effective stats.
+### Ranked Battle Classes
 
-Inputs:
+Main Ranked uses actual server-derived stats. It does not compress grown pets down to a near-new-pet stat budget.
 
-- primary element starting template
-- secondary element modifier
-- legal four-skill loadout
-- server-derived growth bonuses
-- active season ruleset
+Newer pets are protected through Battle Class matchmaking:
 
-Rules:
+| Battle Class | Total Stats | Typical Level Band |
+| --- | ---: | --- |
+| Hatch | 100-139 | Lv 1-20 |
+| Core | 140-179 | Lv 21-40 |
+| Surge | 180-219 | Lv 41-60 |
+| Apex | 220-259 | Lv 61-80 |
+| Prime | 260-298 | Lv 81-100 |
 
-- Each season defines a ranked effective level cap.
-- Base ranked stats are computed from the pet template and legal build.
-- Growth bonuses are applied after base stats.
-- Per-stat ranked growth bonus is capped at +10%.
-- Total ranked stat bonus is capped at +15% over the normalized base budget.
-- Any growth beyond ranked caps remains useful for cosmetics, titles, unlocks, skill options, non-ranked progression, and future season rules.
+Ranked matchmaking first separates pets by current Battle Class, then matches by LP, tier, division, placement state, and repeated-opponent limits. Main Ranked LP matches should not cross Battle Class.
 
-The battle engine reads only normalized effective stats for ranked battle resolution. Raw progression stats are never used directly in ranked damage, defense, speed, recovery, or status formulas.
+LP remains a seasonal pet value. When a pet grows into a new Battle Class, it keeps its current LP and continues ranked play against pets in the new class.
+
+Equalized stats may be introduced later as a special event or optional mode, but they are not the main ranked ruleset.
+
+### Element Advantage
+
+Element advantage uses a six-element cycle:
+
+```text
+Logic > Pulse > Trace > Deploy > Patch > Forge > Logic
+```
+
+Server rules:
+
+- Primary element advantage: +10% damage or status chance.
+- Secondary element advantage: +5% damage or status chance.
+- Primary element disadvantage: -10%.
+- Secondary element disadvantage: -5%.
+- Final element modifier is capped between -15% and +15%.
+
+The battle engine computes element modifiers from server-owned pet and skill data. The client may display matchup hints, but it never submits advantage calculations.
 
 ### Training
 
@@ -385,6 +412,7 @@ Normal ranked LP movement is clamped between -45 and +45. Placement matches doub
 - `pet_id`
 - `mode`: `ranked`, `casual`
 - `status`: `queued`, `matched`, `cancelled`, `expired`
+- `battle_class`
 - `rating_band_min`
 - `rating_band_max`
 - `region`
@@ -426,6 +454,8 @@ Friend codes and random matching both result in a battle room.
 - `account_id`
 - `pet_id`
 - `side`: `a`, `b`
+- `battle_class_at_start`
+- `stats_snapshot_json`
 - `connection_status`
 - `result`: `win`, `loss`, `draw`, `afk_loss`, `cancelled`
 
@@ -696,7 +726,9 @@ Unit tests:
 - energy and cooldown validation
 - timeout defaults
 - stat template totals
-- ranked normalization caps
+- level-to-stat growth totals
+- Battle Class boundary calculation
+- element advantage cap calculation
 - LP delta rules
 
 Property tests:
@@ -706,6 +738,8 @@ Property tests:
 - cooldowns cannot skip illegally
 - every ranked battle produces exactly one result
 - LP changes only from server battle results
+- ranked matchmaking does not cross Battle Class
+- element advantage never exceeds the -15% to +15% cap
 
 Integration tests:
 
@@ -739,7 +773,11 @@ Security tests:
 - User skill nicknames are cosmetic only.
 - Battle loadouts use exactly four active skill slots.
 - Every turn uses a fixed 30 second timer.
-- Ranked battles use normalized effective stats with +10% per-stat and +15% total ranked growth bonus caps.
+- Leveling increases actual stats through level 100; Mastery levels do not add battle stats.
+- Main Ranked uses actual server-derived stats instead of stat compression.
+- Main Ranked separates pets by Battle Class before LP matching.
+- Element advantage follows Logic > Pulse > Trace > Deploy > Patch > Forge > Logic.
+- Element advantage is capped between -15% and +15%.
 - Ranked uses seven top-level LP tiers: Bronze, Silver, Gold, Platinum, Diamond, Mythic, and Codex.
 - Bronze through Mythic each have three divisions. Codex is leaderboard rank based.
 - Ranked season entry uses five placement matches from a neutral 1500 hidden seed.

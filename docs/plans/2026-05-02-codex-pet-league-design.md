@@ -125,6 +125,22 @@ Primary element is determined automatically by Codex activity analysis during pe
 
 Secondary element unlocks later. The system analyzes activity patterns and presents 2-3 candidates. The user chooses one.
 
+Element advantage uses a six-element cycle:
+
+```text
+Logic > Pulse > Trace > Deploy > Patch > Forge > Logic
+```
+
+Element advantage should matter, but not dominate the match.
+
+- Primary element advantage: +10% damage or status chance.
+- Secondary element advantage: +5% damage or status chance.
+- Primary element disadvantage: -10%.
+- Secondary element disadvantage: -5%.
+- Final element modifier is capped between -15% and +15%.
+
+This creates matchup strategy without letting element choice erase level, stats, skill loadout, and turn decisions.
+
 ## Starting Balance
 
 All new pets start with the same total stat budget. Codex activity determines style, not starting strength.
@@ -180,21 +196,28 @@ Battle growth rewards participation and good decisions, not only wins.
 - Good play: bonus XP for useful guards, good element choices, focus-skill combos, and comeback play.
 - AFK or suspicious behavior: reduced or zero XP.
 
-Ranked battle power is bounded through caps and normalization so older pets gain strategy depth and identity, not overwhelming raw stat advantage.
+Leveling always increases actual pet stats until the core level cap.
 
-Ranked matchmaking and stat normalization solve different problems. Matchmaking decides who should fight, prioritizing similar tier and LP. Normalization decides how much raw growth can affect the fight once it starts.
+- Level 1 starts at 100 total stats.
+- Levels 2-100 grant +2 stat points per level.
+- Level 100 reaches 298 total stats.
+- Level 101+ becomes Mastery progression and grants cosmetics, titles, aura, prestige, and profile rewards instead of battle stats.
 
-Ranked normalization:
+Stat growth is automatic. Users do not manually assign stat points. The server distributes growth from the pet's primary and secondary element profile, weighted 70% primary and 30% secondary. Fractional growth meters may accumulate internally, then convert into integer stat gains when thresholds are reached.
 
-- Each season has a ranked effective level cap.
-- A pet's base ranked stats come from its primary template, secondary element, and legal loadout.
-- Growth can add bounded ranked bonuses.
-- Per-stat growth bonus cap: +10%.
-- Total ranked stat bonus cap: +15% over the normalized base budget.
-- Growth beyond the cap still matters for cosmetics, titles, unlocks, skill options, non-ranked progression, and future seasons.
-- Casual and Friend Duel may display broader growth, but official ranked results use normalized stats.
+Main Ranked uses actual server-derived stats. It does not compress a grown pet down to a near-new-pet budget, because that would make growth feel meaningless.
 
-This prevents a long-grown pet from crushing a newer pet through raw numbers while preserving the feeling that growth matters.
+Newer pets are protected through Battle Class matchmaking instead:
+
+| Battle Class | Total Stats | Typical Level Band |
+| --- | ---: | --- |
+| Hatch | 100-139 | Lv 1-20 |
+| Core | 140-179 | Lv 21-40 |
+| Surge | 180-219 | Lv 41-60 |
+| Apex | 220-259 | Lv 61-80 |
+| Prime | 260-298 | Lv 81-100 |
+
+Ranked matchmaking first separates pets by Battle Class, then matches by LP, tier, division, placement state, and repeated-opponent limits. Main Ranked LP matches should not cross Battle Class. Equalized stat rules may exist later as a special event mode, but not as the main ranked format.
 
 ## Battle System
 
