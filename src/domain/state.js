@@ -28,8 +28,10 @@ import {
   submitBotActionIfNeeded,
 } from "./battleEngine.js";
 import { accountIntegrityStatus, appendRiskEvent, auditState, riskTrainingReport } from "./audit.js";
+import hatchPackage from "../hatchPackage.cjs";
 
 const MAX_APPEARANCE_BYTES = 4096;
+const MAX_HATCH_MANIFEST_BYTES = 2048;
 const MAX_ATLAS_BYTES = 6 * 1024 * 1024;
 const RANKED_REMATCH_COOLDOWN_MS = 15 * 60 * 1000;
 const RANKED_PAIR_DAILY_SOFT_LIMIT = 3;
@@ -40,6 +42,7 @@ const INVITE_ACCEPT_ATTEMPT_WINDOW_MS = 60 * 60 * 1000;
 const QUEUE_CANCEL_WINDOW_MS = 10 * 60 * 1000;
 const QUEUE_CANCEL_LIMIT = 5;
 const FRIEND_PAIR_DAILY_MATCH_LIMIT = 5;
+const { HATCH_ATLAS_CONTRACT, inspectHatchSpritesheet } = hatchPackage;
 
 export function getAccount(state, accountId = "acct_demo") {
   const account = state.accounts.find((entry) => entry.id === accountId);
@@ -185,14 +188,18 @@ export function revokeSession(state, accountId, input = {}) {
 
 export function createPetAsset(state, accountId, input = {}) {
   const manifest = validateManifest(input.manifest ?? defaultManifest());
-  const atlas = validateAtlasDataUrl(input.atlas_data_url, manifest);
+  const atlas = validateAtlasDataUrl(input.atlas_data_url ?? input.spritesheet_data_url, manifest);
   const appearance = sanitizeAppearance(input.appearance ?? {});
+  const hatchPetManifest = sanitizeHatchPetManifest(input.hatch_pet ?? input.hatch_pet_manifest ?? input.pet_json);
+  const hatchSource = sanitizeHatchSource(input.hatch_source ?? (hatchPetManifest ? "openai_hatch_pet" : "codex_app"));
   const canonicalInput = {
     owner_account_id: accountId,
     manifest,
     appearance,
     atlas_sha256: atlas?.sha256 ?? null,
-    hatch_source: sanitizeHatchSource(input.hatch_source ?? "codex_app"),
+    atlas_format: atlas?.format ?? null,
+    hatch_pet_manifest: hatchPetManifest,
+    hatch_source: hatchSource,
   };
   const canonicalHash = hashJson(canonicalInput);
   state.assets ??= [];
@@ -210,10 +217,14 @@ export function createPetAsset(state, accountId, input = {}) {
     id: `asset_${randomUUID()}`,
     owner_account_id: accountId,
     canonical_hash: canonicalHash,
-    atlas_object_key: `local-dev/${canonicalHash}.png`,
+    atlas_object_key: `local-dev/${canonicalHash}.${atlas?.extension ?? "png"}`,
     atlas_sha256: atlas?.sha256 ?? null,
     atlas_byte_length: atlas?.byteLength ?? null,
+    atlas_format: atlas?.format ?? "png",
+    atlas_content_type: atlas?.contentType ?? "image/png",
     manifest_json: manifest,
+    hatch_pet_json: hatchPetManifest,
+    hatch_source: hatchSource,
     width: manifest.width,
     height: manifest.height,
     cell_width: manifest.cell_width,
@@ -2607,14 +2618,14 @@ function validateManifest(manifest) {
 
 function defaultManifest() {
   return {
-    width: 1536,
-    height: 1872,
-    cell_width: 192,
-    cell_height: 208,
-    columns: 8,
-    rows: 9,
+    width: HATCH_ATLAS_CONTRACT.width,
+    height: HATCH_ATLAS_CONTRACT.height,
+    cell_width: HATCH_ATLAS_CONTRACT.cell_width,
+    cell_height: HATCH_ATLAS_CONTRACT.cell_height,
+    columns: HATCH_ATLAS_CONTRACT.columns,
+    rows: HATCH_ATLAS_CONTRACT.rows,
     chroma_key: "#FF00FF",
-    states: ["idle", "running-right", "running-left", "waving", "jumping", "failed", "waiting", "running", "review"],
+    states: [...HATCH_ATLAS_CONTRACT.states],
   };
 }
 
@@ -2700,6 +2711,38 @@ function sanitizeAppearance(appearance) {
     throw httpError(413, "APPEARANCE_TOO_LARGE", `Pet appearance metadata must be ${MAX_APPEARANCE_BYTES} bytes or smaller.`);
   }
   return JSON.parse(json);
+}
+
+function sanitizeHatchPetManifest(manifest) {
+  if (!manifest) return null;
+  if (typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw httpError(400, "HATCH_MANIFEST_INVALID", "hatch-pet manifest must be a JSON object.");
+  }
+  const sanitized = {
+    id: String(manifest.id ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 64),
+    displayName: String(manifest.displayName ?? manifest.display_name ?? "").trim().replace(/[<>]/g, "").slice(0, 80),
+    description: String(manifest.description ?? "").trim().replace(/[<>]/g, "").slice(0, 180),
+    spritesheetPath: String(manifest.spritesheetPath ?? manifest.spritesheet_path ?? "spritesheet.webp")
+      .trim()
+      .replace(/\\/g, "/")
+      .slice(0, 160),
+  };
+  if (!sanitized.id || !sanitized.displayName || !sanitized.description) {
+    throw httpError(400, "HATCH_MANIFEST_INVALID", "hatch-pet pet.json requires id, displayName, and description.");
+  }
+  if (sanitized.spritesheetPath.startsWith("/") || sanitized.spritesheetPath.includes("../") || sanitized.spritesheetPath === "..") {
+    throw httpError(400, "HATCH_MANIFEST_INVALID", "hatch-pet spritesheetPath must be a relative file path.");
+  }
+  if (JSON.stringify(sanitized).length > MAX_HATCH_MANIFEST_BYTES) {
+    throw httpError(413, "HATCH_MANIFEST_TOO_LARGE", `hatch-pet manifest must be ${MAX_HATCH_MANIFEST_BYTES} bytes or smaller.`);
+  }
+  return sanitized;
 }
 
 function sanitizeReviewNote(value) {
@@ -2838,32 +2881,52 @@ function hashBuffer(buffer) {
 
 function validateAtlasDataUrl(dataUrl, manifest) {
   if (!dataUrl) return null;
-  const match = String(dataUrl).match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+  const match = String(dataUrl).match(/^data:image\/(png|webp);base64,([A-Za-z0-9+/=]+)$/i);
   if (!match) {
-    throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas upload must be a PNG data URL.");
+    throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas upload must be a PNG or WebP data URL.");
   }
 
-  const buffer = Buffer.from(match[1], "base64");
+  const expectedFormat = match[1].toLowerCase();
+  const buffer = Buffer.from(match[2], "base64");
   if (buffer.length > MAX_ATLAS_BYTES) {
     throw httpError(413, "ASSET_TOO_LARGE", `Atlas upload must be ${MAX_ATLAS_BYTES} bytes or smaller.`);
   }
-  const pngSignature = "89504e470d0a1a0a";
-  if (buffer.length < 45 || buffer.subarray(0, 8).toString("hex") !== pngSignature) {
-    throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas upload is not a valid PNG file.");
-  }
-  if (buffer.readUInt32BE(8) !== 13 || buffer.subarray(12, 16).toString("ascii") !== "IHDR") {
-    throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas PNG is missing a valid IHDR chunk.");
-  }
 
-  const width = buffer.readUInt32BE(16);
-  const height = buffer.readUInt32BE(20);
+  let image;
+  try {
+    image = inspectHatchSpritesheet(buffer);
+  } catch (error) {
+    const label = expectedFormat === "png" ? "PNG" : "WebP";
+    throw httpError(400, "ASSET_FORMAT_INVALID", `Atlas upload is not a valid ${label} file.`);
+  }
+  if (image.format !== expectedFormat) {
+    const label = expectedFormat === "png" ? "PNG" : "WebP";
+    throw httpError(400, "ASSET_FORMAT_INVALID", `Atlas data URL content does not match its ${label} MIME type.`);
+  }
+  if (image.format === "png") validatePngSettings(buffer);
+
+  const width = image.width;
+  const height = image.height;
   if (width !== manifest.width || height !== manifest.height) {
     throw httpError(
       400,
       "ASSET_FORMAT_INVALID",
-      `Atlas PNG must be ${manifest.width}x${manifest.height}; received ${width}x${height}.`,
+      `Atlas ${image.format.toUpperCase()} must be ${manifest.width}x${manifest.height}; received ${width}x${height}.`,
     );
   }
+
+  return {
+    width,
+    height,
+    byteLength: buffer.length,
+    sha256: hashBuffer(buffer),
+    format: image.format,
+    extension: image.extension,
+    contentType: image.content_type,
+  };
+}
+
+function validatePngSettings(buffer) {
   const bitDepth = buffer.readUInt8(24);
   const colorType = buffer.readUInt8(25);
   const compression = buffer.readUInt8(26);
@@ -2875,13 +2938,6 @@ function validateAtlasDataUrl(dataUrl, manifest) {
   if (!buffer.includes(Buffer.from("IEND", "ascii"), 8)) {
     throw httpError(400, "ASSET_FORMAT_INVALID", "Atlas PNG is missing an IEND chunk.");
   }
-
-  return {
-    width,
-    height,
-    byteLength: buffer.length,
-    sha256: hashBuffer(buffer),
-  };
 }
 
 function logEvent(state, type, accountId, payload) {

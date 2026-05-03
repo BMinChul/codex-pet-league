@@ -466,7 +466,7 @@ async function createPet({ demo }) {
   const asset = await api("/api/pet-assets/uploads", {
     method: "POST",
     body: {
-      appearance: { palette: demo ? "teal-blue" : "custom", source: "codex_app_demo" },
+      appearance: { palette: demo ? "teal-blue" : "custom", source: demo ? "codex_app_demo" : "hatch_pet_upload" },
       atlas_data_url: atlasDataUrl,
     },
   });
@@ -1377,7 +1377,7 @@ function readAtlasDataUrl() {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.addEventListener("load", () => resolve(reader.result));
-    reader.addEventListener("error", () => reject(reader.error ?? new Error("Could not read atlas PNG.")));
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Could not read hatch spritesheet.")));
     reader.readAsDataURL(file);
   });
 }

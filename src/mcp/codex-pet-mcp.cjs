@@ -3,6 +3,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { createHmac, randomUUID } = require("node:crypto");
+const { loadHatchPetPackage } = require("../hatchPackage.cjs");
 
 const baseUrl = (process.env.CODEX_PET_LEAGUE_URL || "http://localhost:4317").replace(/\/$/, "");
 const accountId = process.env.CODEX_PET_ACCOUNT_ID || "acct_demo";
@@ -63,6 +64,24 @@ const tools = [
     },
   },
   {
+    name: "league_play",
+    title: "Codex App Play Loop",
+    description: "Runs the Codex App-first loop: inspect active pet, active battle, queue state, and optionally submit the requested or recommended turn action.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+        battle_id: { type: "string" },
+        mode: { type: "string", enum: ["ranked", "casual", "training"] },
+        join_queue: { type: "boolean" },
+        submit_recommended_action: { type: "boolean" },
+        kind: { type: "string", enum: ["strike", "guard", "focus", "skill"] },
+        skill_id: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "pet_status",
     title: "Pet Status",
     description: "Shows active pet, XP caps, Training Report count, rank, and Battle Class.",
@@ -77,7 +96,7 @@ const tools = [
   {
     name: "pet_create",
     title: "Create Official Pet",
-    description: "Registers an optional Codex hatch atlas PNG and creates an official account-bound Pet League pet.",
+    description: "Registers an optional Codex hatch atlas PNG/WebP and creates an official account-bound Pet League pet.",
     inputSchema: {
       type: "object",
       properties: {
@@ -86,6 +105,22 @@ const tools = [
         secondary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
         atlas_path: { type: "string" },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "pet_import_hatch",
+    title: "Import hatch-pet Package",
+    description: "Imports an official hatch-pet package folder containing pet.json and spritesheet.webp, then creates the League pet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        package_path: { type: "string" },
+        name: { type: "string" },
+        primary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
+        secondary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
+      },
+      required: ["package_path"],
       additionalProperties: false,
     },
   },
@@ -404,13 +439,17 @@ async function callTool(name, args) {
     };
   }
 
+  if (name === "league_play") {
+    return leaguePlay(args);
+  }
+
   if (name === "pet_status") {
     const pet = await resolvePet(args.pet_id);
     return apiGet(`/api/pets/${pet.id}/xp-status`);
   }
 
   if (name === "pet_create") {
-    const atlasDataUrl = args.atlas_path ? await pngDataUrl(args.atlas_path) : null;
+    const atlasDataUrl = args.atlas_path ? await imageDataUrl(args.atlas_path) : null;
     const asset = await apiPost("/api/pet-assets/uploads", {
       appearance: {
         source: "codex_pet_mcp",
@@ -420,6 +459,22 @@ async function callTool(name, args) {
     });
     return apiPost("/api/pets", {
       name: args.name ?? "Codex Pet",
+      pet_asset_id: asset.asset.id,
+      primary_element: args.primary_element ?? "Forge",
+      secondary_element: args.secondary_element ?? "Trace",
+    });
+  }
+
+  if (name === "pet_import_hatch") {
+    const hatch = await loadHatchPetPackage(args.package_path);
+    const asset = await apiPost("/api/pet-assets/uploads", {
+      appearance: hatch.appearance,
+      atlas_data_url: hatch.data_url,
+      hatch_pet_manifest: hatch.manifest,
+      hatch_source: "openai_hatch_pet",
+    });
+    return apiPost("/api/pets", {
+      name: args.name ?? hatch.manifest.displayName,
       pet_asset_id: asset.asset.id,
       primary_element: args.primary_element ?? "Forge",
       secondary_element: args.secondary_element ?? "Trace",
@@ -591,6 +646,65 @@ async function resolvePet(petId) {
   return result.pets[0];
 }
 
+async function leaguePlay(args = {}) {
+  const home = await buildLeagueHome(args.pet_id);
+  if (!home.pet?.id) {
+    return {
+      state: "needs_pet",
+      next_action: home.next_action,
+      message: "Import an official hatch-pet package before playing.",
+    };
+  }
+
+  const activeBattleId = args.battle_id ?? home.matchmaking?.active_battles?.[0]?.id;
+  if (activeBattleId) {
+    const [result, rules] = await Promise.all([apiGet(`/api/battles/${activeBattleId}`), optional(apiGet("/api/rules"), {})]);
+    const options = battleActionOptions(result.battle, rules);
+    const requestedKind = args.kind;
+    if (requestedKind || args.submit_recommended_action) {
+      const action = requestedKind
+        ? { kind: requestedKind, skill_id: args.skill_id }
+        : { kind: options.recommendation.kind, skill_id: options.recommendation.skill_id };
+      const submitted = await apiPost(`/api/battles/${activeBattleId}/actions`, {
+        kind: action.kind,
+        skill_id: action.skill_id,
+        turn_index: result.battle.turn_index,
+        turn_nonce: result.battle.turn_nonce,
+        source: "mcp_play_loop",
+      });
+      return {
+        state: "action_submitted",
+        submitted_action: action,
+        battle: submitted.battle,
+        options: battleActionOptions(submitted.battle, rules),
+      };
+    }
+    return {
+      state: "battle_ready",
+      battle: result.battle,
+      options,
+    };
+  }
+
+  if (args.join_queue) {
+    const queued = await apiPost(`/api/pets/${home.pet.id}/matchmaking/queue`, {
+      mode: args.mode ?? "ranked",
+    });
+    return {
+      state: queued.status === "matched" ? "matched" : "queued",
+      result: queued,
+    };
+  }
+
+  return {
+    state: "idle",
+    pet: home.pet,
+    daily: home.daily,
+    matchmaking: home.matchmaking,
+    next_action: home.next_action,
+  };
+}
+
 async function apiGet(route) {
   return request("GET", route);
 }
@@ -630,9 +744,10 @@ async function request(method, route, body) {
   return payload;
 }
 
-async function pngDataUrl(filePath) {
+async function imageDataUrl(filePath) {
   const bytes = await fs.readFile(filePath);
-  return `data:image/png;base64,${bytes.toString("base64")}`;
+  const mime = String(filePath).toLowerCase().endsWith(".webp") ? "image/webp" : "image/png";
+  return `data:${mime};base64,${bytes.toString("base64")}`;
 }
 
 function battleActionOptions(battle, rules = {}) {
@@ -682,7 +797,7 @@ function recommendedNextAction(home) {
     return {
       title: "Create your first official pet",
       reason: "Official League actions need a server-registered pet.",
-      command: "pet_create with optional atlas_path",
+      command: "pet_import_hatch with package_path",
     };
   }
   const battle = home.matchmaking?.active_battles?.[0];

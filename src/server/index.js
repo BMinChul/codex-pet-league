@@ -268,7 +268,7 @@ async function handleApi(req, res, url) {
       await applyRequestGuard(state, req, "asset.upload", accountId, body);
       getAccount(state, accountId);
       const asset = createPetAsset(state, accountId, body);
-      await saveAtlasObject(asset.atlas_object_key, body.atlas_data_url);
+      await saveAtlasObject(asset.atlas_object_key, body.atlas_data_url ?? body.spritesheet_data_url);
       return asset;
     });
     sendJson(res, 201, { asset: result });
@@ -588,7 +588,7 @@ async function handleAssetAtlas(res, assetId) {
     const content = await readAssetObject(asset.atlas_object_key);
     const headers = {
       ...securityHeaders(),
-      "content-type": "image/png",
+      "content-type": asset.atlas_content_type ?? contentTypeForAsset(asset),
       "cache-control": "public, max-age=31536000, immutable",
     };
     if (asset.atlas_sha256) headers.etag = `"${asset.atlas_sha256}"`;
@@ -601,6 +601,10 @@ async function handleAssetAtlas(res, assetId) {
     }
     throw error;
   }
+}
+
+function contentTypeForAsset(asset) {
+  return String(asset?.atlas_object_key ?? "").toLowerCase().endsWith(".webp") ? "image/webp" : "image/png";
 }
 
 async function resolveAccountId(req) {

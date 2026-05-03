@@ -8,15 +8,15 @@ const DEFAULT_ASSET_ROOT = new URL("../../data/assets", import.meta.url);
 export async function saveAtlasObject(objectKey, dataUrl, env = process.env, transport = fetch) {
   if (!dataUrl) return { stored: false, reason: "no_atlas" };
   assertObjectKey(objectKey);
-  const buffer = atlasBuffer(dataUrl);
+  const atlas = atlasPayload(dataUrl);
   if (assetProvider(env) === "s3_compatible") {
-    return putS3Object(objectKey, buffer, env, transport);
+    return putS3Object(objectKey, atlas.buffer, env, transport, atlas.contentType);
   }
   const filePath = objectFilePath(objectKey, env);
   await mkdir(dirname(filePath), { recursive: true });
   try {
-    await writeFile(filePath, buffer, { flag: "wx" });
-    return { stored: true, object_key: objectKey, byte_length: buffer.length };
+    await writeFile(filePath, atlas.buffer, { flag: "wx" });
+    return { stored: true, object_key: objectKey, byte_length: atlas.buffer.length, content_type: atlas.contentType };
   } catch (error) {
     if (error.code === "EEXIST") return { stored: false, reason: "already_exists", object_key: objectKey };
     throw error;
@@ -44,15 +44,19 @@ export function assetStorageStatus(env = process.env) {
   };
 }
 
-function atlasBuffer(dataUrl) {
-  const match = String(dataUrl).match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+function atlasPayload(dataUrl) {
+  const match = String(dataUrl).match(/^data:image\/(png|webp);base64,([A-Za-z0-9+/=]+)$/i);
   if (!match) {
-    const error = new Error("Atlas upload must be a PNG data URL.");
+    const error = new Error("Atlas upload must be a PNG or WebP data URL.");
     error.status = 400;
     error.code = "ASSET_FORMAT_INVALID";
     throw error;
   }
-  return Buffer.from(match[1], "base64");
+  const format = match[1].toLowerCase();
+  return {
+    buffer: Buffer.from(match[2], "base64"),
+    contentType: `image/${format}`,
+  };
 }
 
 function objectFilePath(objectKey, env) {
@@ -74,8 +78,8 @@ function assetRoot(env) {
   return resolve(env.CODEX_PET_ASSET_ROOT || fileURLToPath(DEFAULT_ASSET_ROOT));
 }
 
-async function putS3Object(objectKey, buffer, env, transport) {
-  const request = signedS3Request("PUT", objectKey, env, buffer, { "content-type": "image/png" });
+async function putS3Object(objectKey, buffer, env, transport, contentType) {
+  const request = signedS3Request("PUT", objectKey, env, buffer, { "content-type": contentType });
   const response = await transport(request.url, {
     method: "PUT",
     headers: request.headers,
@@ -175,7 +179,7 @@ function hashHex(value) {
 
 function assertObjectKey(objectKey) {
   const cleanKey = String(objectKey ?? "").replaceAll("\\", "/");
-  if (!/^[A-Za-z0-9_.:-]+\/[A-Za-z0-9_.:-]+\.png$/.test(cleanKey)) {
+  if (!/^[A-Za-z0-9_.:-]+\/[A-Za-z0-9_.:-]+\.(?:png|webp)$/.test(cleanKey)) {
     throw providerError("ASSET_OBJECT_KEY_INVALID", "Asset object key is invalid.", 400);
   }
 }

@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomInt, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,7 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       env: {
         CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER: "false",
         CODEX_PET_AUTH_DEV_CODE: "true",
+        CODEX_PET_ASSET_ROOT: join(tempRoot, "assets"),
       },
     },
     async () => {
@@ -54,6 +55,7 @@ async function runOfficialRuntimeSmoke(tempRoot) {
 
       const petA = await createSmokePet(baseUrl, headersA, "Smoke Alpha", "Forge", "Pulse");
       const petB = await createSmokePet(baseUrl, headersB, "Smoke Beta", "Forge", "Pulse");
+      const hatchPackage = await makeHatchPackage(tempRoot);
 
       const loadout = await putJson(
         baseUrl,
@@ -120,6 +122,7 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       assert(metrics.includes("codex_pet_uptime_seconds"), "metrics endpoint did not expose uptime");
 
       runCli("session", baseUrl, sessionA.session_token);
+      runCli(["pet", "import-hatch", "--path", hatchPackage, "--primary", "Patch", "--secondary", "Logic"], baseUrl, sessionA.session_token);
       runCli("home", baseUrl, sessionA.session_token);
       runCli("daily", baseUrl, sessionA.session_token);
       runCli("next", baseUrl, sessionA.session_token);
@@ -240,6 +243,44 @@ async function createSmokePet(baseUrl, headers, name, primary, secondary) {
     headers,
   );
   return pet.pet;
+}
+
+async function makeHatchPackage(root) {
+  const dir = join(root, `hatch-${randomUUID()}`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "pet.json"),
+    JSON.stringify(
+      {
+        id: "runtime-hatch",
+        displayName: "Runtime Hatch",
+        description: "A runtime smoke hatch-pet package.",
+        spritesheetPath: "spritesheet.webp",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(join(dir, "spritesheet.webp"), webpHeader(1536, 1872));
+  return dir;
+}
+
+function webpHeader(width, height) {
+  const bytes = Buffer.alloc(30);
+  bytes.write("RIFF", 0, "ascii");
+  bytes.writeUInt32LE(22, 4);
+  bytes.write("WEBP", 8, "ascii");
+  bytes.write("VP8X", 12, "ascii");
+  bytes.writeUInt32LE(10, 16);
+  writeUInt24LE(bytes, width - 1, 24);
+  writeUInt24LE(bytes, height - 1, 27);
+  return bytes;
+}
+
+function writeUInt24LE(bytes, value, offset) {
+  bytes.writeUInt8(value & 0xff, offset);
+  bytes.writeUInt8((value >> 8) & 0xff, offset + 1);
+  bytes.writeUInt8((value >> 16) & 0xff, offset + 2);
 }
 
 async function getJson(baseUrl, path, headers = {}) {

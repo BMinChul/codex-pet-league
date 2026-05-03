@@ -24,7 +24,8 @@ http://localhost:4317
 
 - League demo account session.
 - Public pet asset registration with server-side manifest validation.
-- Optional Codex hatch atlas PNG upload, with server-side PNG dimension and hash validation.
+- Official `hatch-pet` package import: `pet.json` plus `spritesheet.webp` from `${CODEX_HOME:-~/.codex}/pets/<pet-id>`.
+- Optional Codex hatch spritesheet PNG/WebP upload, with server-side dimension, MIME, and hash validation.
 - Local filesystem atlas storage and public atlas URLs for visible active pets.
 - Official pet creation with primary and secondary elements.
 - Server-derived stats, level, Battle Class, skill loadout, and ranked rating.
@@ -61,8 +62,8 @@ http://localhost:4317
 
 Codex App and Codex CLI are the primary play surfaces. The web UI remains useful for visible battle review, profile pages, leaderboards, replays, and admin/ops work, but normal Codex Pet League play should work from the tools Codex users already live in.
 
-- Codex App: MCP tools handle natural-language pet status, Training Reports, matchmaking, action recommendations, and turn submissions.
-- Codex CLI: terminal commands handle the same flow, including game-like `battle watch` and `battle play` modes.
+- Codex App: MCP tools handle natural-language pet status, `hatch-pet` package import, Training Reports, matchmaking, action recommendations, and turn submissions.
+- Codex CLI: terminal commands handle the same flow, including `pet import-hatch`, game-like `battle watch`, and `battle play` modes.
 - Web: optional companion UI for public browsing, visual battle inspection, leaderboards, and operations.
 
 ## Scripts
@@ -103,6 +104,7 @@ npm run cli -- session list
 npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
 npm run cli -- auth verify --challenge auth_challenge_id --code 123456
 npm run cli -- league
+npm run cli -- pet import-hatch --path C:\Users\you\.codex\pets\pebble --primary Forge --secondary Trace
 npm run cli -- pet create --name Pebble --primary Forge --secondary Trace
 npm run cli -- pet profile
 npm run cli -- pet loadout --skills forge_offense,forge_defense,forge_status,trace_offense --aliases forge_offense=Hammer
@@ -136,7 +138,8 @@ Natural-language trigger mapping:
 펫 훈련 리포트 만들어줘 -> codexpet report draft
 오늘 작업 pet XP로 제출해줘 -> codexpet report submit
 펫 XP 상태 보여줘 -> codexpet xp status
-내 펫 서버에 올려줘 -> codexpet pet create --atlas <path>
+내 hatch-pet 펫 서버에 올려줘 -> codexpet pet import-hatch --path <hatch-pet-folder>
+내 펫 서버에 올려줘 -> codexpet pet create --atlas <path.png|path.webp>
 지금 배틀 액션 뭐 가능해 -> codexpet battle actions --battle <id>
 터미널에서 배틀판 보여줘 -> codexpet battle watch --battle <id>
 추천 액션으로 한 턴 해줘 -> codexpet battle play --battle <id> --auto
@@ -197,7 +200,7 @@ CODEX_PET_REDIS_URL=
 `CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. When `CODEX_PET_AUTH_PROVIDER` is not `local_dev`, auth fails closed unless at least one real method is fully configured: email magic-link webhook, passkey verify hook, or OAuth authorize plus verify hook.
 Set `CODEX_PET_COOKIE_SECURE=true` behind HTTPS so League session cookies are marked `Secure`.
 Email delivery webhooks receive a signed JSON payload when `CODEX_PET_EMAIL_WEBHOOK_SECRET` is set. Passkey and OAuth verification hooks must return JSON with `verified: true` before the server creates an official League session.
-Set `CODEX_PET_ASSET_STORAGE=s3_compatible` with the `CODEX_PET_S3_*` values to store hatch atlas PNGs in S3-compatible object storage. If `CODEX_PET_ASSET_CDN_BASE_URL` is set, public pet profiles return CDN atlas URLs.
+Set `CODEX_PET_ASSET_STORAGE=s3_compatible` with the `CODEX_PET_S3_*` values to store hatch spritesheet PNG/WebP objects in S3-compatible object storage. If `CODEX_PET_ASSET_CDN_BASE_URL` is set, public pet profiles return CDN atlas URLs.
 Set `CODEX_PET_REALTIME_BUS=redis`, `CODEX_PET_REQUEST_GUARD=redis`, and `CODEX_PET_DISTRIBUTED_LOCK=redis` with `CODEX_PET_REDIS_URL` when running more than one server instance. The Redis request guard shares rate-limit and idempotency buckets across instances, while Redis locks serialize matchmaking, ops jobs, and battle turn mutations. `npm run db:schema:check` validates the Postgres schema migrations under `db/migrations`; `npm run db:postgres:migrate` applies them to `CODEX_PET_POSTGRES_URL`.
 `CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. Untrusted high-value reports are held for review.
 High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; the browser, CLI, and MCP bridge add one automatically.
@@ -214,8 +217,10 @@ The MCP bridge exposes the same product actions as tools:
 - `auth_verify`
 - `league_home`
 - `next_action`
+- `league_play`
 - `pet_status`
 - `pet_create`
+- `pet_import_hatch`
 - `league_status`
 - `pet_profile`
 - `pet_loadout_update`

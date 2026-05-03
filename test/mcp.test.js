@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomInt } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,8 +39,10 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
       "auth_verify",
       "league_home",
       "next_action",
+      "league_play",
       "pet_status",
       "pet_create",
+      "pet_import_hatch",
       "league_status",
       "pet_profile",
       "pet_loadout_update",
@@ -97,6 +99,7 @@ test("MCP bridge supports Content-Length stdio framing", async () => {
 
 test("MCP bridge calls League tools against a strict temp server", async () => {
   const server = await startTempServer();
+  const hatch = await makeHatchPackage();
   let child;
   try {
     const session = await createSession(server.baseUrl, "demo@codexpet.local");
@@ -129,10 +132,27 @@ test("MCP bridge calls League tools against a strict temp server", async () => {
     const next = await client.callTool("next_action", { pet_id: petId });
     assert.ok(next.structuredContent.command);
 
+    const imported = await client.callTool("pet_import_hatch", {
+      package_path: hatch.dir,
+      primary_element: "Patch",
+      secondary_element: "Logic",
+    });
+    assert.equal(imported.structuredContent.pet.name, "MCP Hatch");
+
+    const loop = await client.callTool("league_play", { pet_id: petId });
+    assert.equal(loop.structuredContent.state, "idle");
+    assert.equal(loop.structuredContent.pet.id, petId);
+
     const battle = await client.callTool("battle_start", { pet_id: petId, mode: "training" });
     const options = await client.callTool("battle_action_options", { battle_id: battle.structuredContent.battle.id });
     assert.equal(options.structuredContent.battle_id, battle.structuredContent.battle.id);
     assert.ok(options.structuredContent.recommendation.kind);
+
+    const played = await client.callTool("league_play", {
+      battle_id: battle.structuredContent.battle.id,
+      submit_recommended_action: true,
+    });
+    assert.equal(played.structuredContent.state, "action_submitted");
 
     const audit = await client.callTool("admin_audit", {});
     assert.equal(audit.structuredContent.ok, true);
@@ -141,6 +161,7 @@ test("MCP bridge calls League tools against a strict temp server", async () => {
     assert.match(failed.error.message, /Waiting match ticket/);
   } finally {
     child?.kill();
+    await hatch.close();
     await server.close();
   }
 });
@@ -193,6 +214,7 @@ async function startTempServer() {
       ...process.env,
       PORT: String(port),
       CODEX_PET_STATE_PATH: join(tempRoot, "league-state.json"),
+      CODEX_PET_ASSET_ROOT: join(tempRoot, "assets"),
       CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER: "false",
       CODEX_PET_AUTH_DEV_CODE: "true",
     },
@@ -217,6 +239,47 @@ async function startTempServer() {
       await rm(tempRoot, { recursive: true, force: true });
     },
   };
+}
+
+async function makeHatchPackage() {
+  const dir = await mkdtemp(join(tmpdir(), "codexpet-hatch-"));
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "pet.json"),
+    JSON.stringify(
+      {
+        id: "mcp-hatch",
+        displayName: "MCP Hatch",
+        description: "A test pet package from hatch-pet.",
+        spritesheetPath: "spritesheet.webp",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(join(dir, "spritesheet.webp"), webpHeader(1536, 1872));
+  return {
+    dir,
+    close: () => rm(dir, { recursive: true, force: true }),
+  };
+}
+
+function webpHeader(width, height) {
+  const bytes = Buffer.alloc(30);
+  bytes.write("RIFF", 0, "ascii");
+  bytes.writeUInt32LE(22, 4);
+  bytes.write("WEBP", 8, "ascii");
+  bytes.write("VP8X", 12, "ascii");
+  bytes.writeUInt32LE(10, 16);
+  writeUInt24LE(bytes, width - 1, 24);
+  writeUInt24LE(bytes, height - 1, 27);
+  return bytes;
+}
+
+function writeUInt24LE(bytes, value, offset) {
+  bytes.writeUInt8(value & 0xff, offset);
+  bytes.writeUInt8((value >> 8) & 0xff, offset + 1);
+  bytes.writeUInt8((value >> 16) & 0xff, offset + 2);
 }
 
 async function reservePort() {

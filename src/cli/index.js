@@ -5,12 +5,14 @@ import { basename } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { buildSignalsFromWorkspace } from "./signals.js";
+import hatchPackage from "../hatchPackage.cjs";
 
 const DEFAULT_BASE_URL = process.env.CODEX_PET_LEAGUE_URL ?? "http://localhost:4317";
 const DEFAULT_ACCOUNT_ID = process.env.CODEX_PET_ACCOUNT_ID ?? "acct_demo";
 const DEFAULT_SESSION_TOKEN = process.env.CODEX_PET_SESSION_TOKEN ?? process.env.LEAGUE_SESSION_TOKEN ?? "";
 const DEFAULT_BRIDGE_SECRET = process.env.CODEX_PET_BRIDGE_SECRET ?? "";
 const DEFAULT_BRIDGE_ATTESTATION_SECRET = process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET ?? "";
+const { loadHatchPetPackage } = hatchPackage;
 
 const [, , ...argv] = process.argv;
 
@@ -119,7 +121,7 @@ async function main(args) {
     return;
   }
 
-  if (area === "pet" && action === "create") {
+  if (area === "pet" && (action === "create" || action === "import-hatch")) {
     await createPet(client, parsed.flags);
     return;
   }
@@ -341,7 +343,7 @@ async function resolveBattleId(client, flags = {}) {
 async function listPets(client) {
   const result = await client.get("/api/pets");
   if (result.pets.length === 0) {
-    console.log("No pets registered. Run: codexpet pet create --name Pebble");
+    console.log("No pets registered. Run: codexpet pet import-hatch --path <hatch-pet-folder>");
     return;
   }
   for (const pet of result.pets) {
@@ -350,7 +352,36 @@ async function listPets(client) {
 }
 
 async function createPet(client, flags) {
-  const atlasDataUrl = flags.atlas ? await pngDataUrl(flags.atlas) : null;
+  const hatchPath = flags.hatch ?? flags.hatchDir ?? flags.path ?? flags.package;
+  if (hatchPath) {
+    const hatch = await loadHatchPetPackage(hatchPath);
+    const asset = await client.post("/api/pet-assets/uploads", {
+      appearance: hatch.appearance,
+      atlas_data_url: hatch.data_url,
+      hatch_pet_manifest: hatch.manifest,
+      hatch_source: "openai_hatch_pet",
+    });
+    const pet = await client.post("/api/pets", {
+      name: flags.name ?? hatch.manifest.displayName,
+      pet_asset_id: asset.asset.id,
+      primary_element: flags.primary ?? "Forge",
+      secondary_element: flags.secondary ?? "Trace",
+    });
+    console.log(`Imported hatch-pet ${hatch.manifest.displayName}`);
+    printObject({
+      pet_id: pet.pet.id,
+      asset_id: asset.asset.id,
+      hatch_pet_id: hatch.manifest.id,
+      spritesheet: hatch.spritesheet_path,
+      format: hatch.image.format,
+      level: pet.pet.level,
+      battle_class: pet.pet.battle_class,
+      rank: `${pet.pet.rating.label} ${pet.pet.rating.lp} LP`,
+    });
+    return;
+  }
+
+  const atlasDataUrl = flags.atlas ? await imageDataUrl(flags.atlas) : null;
   const asset = await client.post("/api/pet-assets/uploads", {
     appearance: {
       source: "codexpet_cli",
@@ -381,7 +412,7 @@ async function resolvePet(client, petId) {
     if (!pet) throw new Error(`Pet not found: ${petId}`);
     return pet;
   }
-  if (!result.pets[0]) throw new Error("No pets registered. Run: codexpet pet create --name Pebble");
+  if (!result.pets[0]) throw new Error("No pets registered. Run: codexpet pet import-hatch --path <hatch-pet-folder>");
   return result.pets[0];
 }
 
@@ -467,9 +498,10 @@ function signalFlags(flags) {
   };
 }
 
-async function pngDataUrl(path) {
+async function imageDataUrl(path) {
   const bytes = await readFile(path);
-  return `data:image/png;base64,${bytes.toString("base64")}`;
+  const mime = String(path).toLowerCase().endsWith(".webp") ? "image/webp" : "image/png";
+  return `data:${mime};base64,${bytes.toString("base64")}`;
 }
 
 function printLeagueHome(home) {
@@ -482,7 +514,7 @@ function printLeagueHome(home) {
   }
   if (!home.pet) {
     console.log("Pet: none registered");
-    console.log("Next: codexpet pet create --name Pebble --primary Forge --secondary Trace");
+    console.log("Next: codexpet pet import-hatch --path <hatch-pet-folder> --primary Forge --secondary Trace");
     return;
   }
   console.log(
@@ -569,7 +601,7 @@ function recommendedNextAction(home) {
     return {
       title: "Create your first official pet",
       reason: "Official League actions need a server-registered pet.",
-      command: "codexpet pet create --name Pebble --primary Forge --secondary Trace --atlas <hatch.png>",
+      command: "codexpet pet import-hatch --path <hatch-pet-folder> --primary Forge --secondary Trace",
     };
   }
   const battle = home.matchmaking?.active_battles?.[0];
@@ -951,7 +983,8 @@ Usage:
   codexpet league
   codexpet rules
   codexpet pets
-  codexpet pet create --name Pebble --primary Forge --secondary Trace [--atlas path.png]
+  codexpet pet import-hatch --path C:\\Users\\you\\.codex\\pets\\pebble --primary Forge --secondary Trace
+  codexpet pet create --name Pebble --primary Forge --secondary Trace [--atlas path.png|path.webp]
   codexpet pet profile [--pet pet_id]
   codexpet pet loadout --skills skill1,skill2,skill3,skill4 [--aliases skill_id=Alias]
   codexpet pet replays [--pet pet_id]

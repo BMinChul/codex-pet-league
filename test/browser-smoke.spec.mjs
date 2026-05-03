@@ -265,9 +265,13 @@ async function activeBattleId(page) {
   return page.evaluate(() => JSON.parse(document.querySelector("#battleOutput").textContent).id);
 }
 
-async function fetchBattle(page, battleId) {
+async function fetchBattle(page, battleId, attempts = 5) {
   const response = await page.request.get(apiUrl(page, `/api/battles/${encodeURIComponent(battleId)}`));
   const payload = await response.json();
+  if (!response.ok() && payload.error?.code === "LEASE_BUSY" && attempts > 0) {
+    await page.waitForTimeout(150);
+    return fetchBattle(page, battleId, attempts - 1);
+  }
   if (!response.ok()) throw new Error(`battle fetch failed: ${JSON.stringify(payload)}`);
   return payload.battle;
 }

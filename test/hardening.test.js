@@ -256,6 +256,24 @@ test("asset validation rejects invalid atlas uploads", () => {
   assert.equal(asset.width, 1536);
   assert.equal(duplicate.id, asset.id);
   assert.match(asset.atlas_sha256, /^[a-f0-9]{64}$/);
+
+  assert.throws(
+    () => createPetAsset(state, "acct_demo", { atlas_data_url: webpDataUrl(128, 64) }),
+    /1536x1872/,
+  );
+  const hatchAsset = createPetAsset(state, "acct_demo", {
+    atlas_data_url: webpDataUrl(1536, 1872),
+    hatch_pet_manifest: {
+      id: "official-hatch",
+      displayName: "Official Hatch",
+      description: "A packaged hatch-pet asset.",
+      spritesheetPath: "spritesheet.webp",
+    },
+  });
+  assert.equal(hatchAsset.atlas_format, "webp");
+  assert.equal(hatchAsset.atlas_content_type, "image/webp");
+  assert.match(hatchAsset.atlas_object_key, /\.webp$/);
+  assert.equal(hatchAsset.hatch_pet_json.id, "official-hatch");
 });
 
 test("request guards rate-limit abusive traffic and reject replayed mutation ids", () => {
@@ -500,6 +518,24 @@ function pngDataUrl(width, height) {
   bytes.writeUInt32BE(0, 33);
   bytes.write("IEND", 37, "ascii");
   return `data:image/png;base64,${bytes.toString("base64")}`;
+}
+
+function webpDataUrl(width, height) {
+  const bytes = Buffer.alloc(30);
+  bytes.write("RIFF", 0, "ascii");
+  bytes.writeUInt32LE(22, 4);
+  bytes.write("WEBP", 8, "ascii");
+  bytes.write("VP8X", 12, "ascii");
+  bytes.writeUInt32LE(10, 16);
+  writeUInt24LE(bytes, width - 1, 24);
+  writeUInt24LE(bytes, height - 1, 27);
+  return `data:image/webp;base64,${bytes.toString("base64")}`;
+}
+
+function writeUInt24LE(bytes, value, offset) {
+  bytes.writeUInt8(value & 0xff, offset);
+  bytes.writeUInt8((value >> 8) & 0xff, offset + 1);
+  bytes.writeUInt8((value >> 16) & 0xff, offset + 2);
 }
 
 function actionFor(battle, kind) {
