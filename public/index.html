@@ -169,17 +169,17 @@
             </div>
             <div id="matchmakingCards" class="matchmaking-cards"></div>
             <pre id="matchmakingOutput" class="output compact-output">No matchmaking activity.</pre>
-            <div id="battleState" class="battle-state"></div>
+            <div id="battleState" class="battle-state" aria-live="polite"></div>
             <div id="battleTimeline" class="timeline-list"></div>
             <label>
               Skill
               <select id="battleSkillSelect" class="field"></select>
             </label>
             <div class="action-grid">
-              <button data-action="strike" class="secondary-button">Strike</button>
-              <button data-action="guard" class="secondary-button">Guard</button>
-              <button data-action="focus" class="secondary-button">Focus</button>
-              <button data-action="skill" class="primary-button">Skill</button>
+              <button data-action="strike" class="secondary-button" title="Damage and gain 1 energy">Strike</button>
+              <button data-action="guard" class="secondary-button" title="Reduce damage and gain 1 energy">Guard</button>
+              <button data-action="focus" class="secondary-button" title="Gain 2 energy and focus">Focus</button>
+              <button data-action="skill" class="primary-button" title="Use selected skill">Skill</button>
             </div>
             <pre id="battleOutput" class="output">No active battle.</pre>
           </article>

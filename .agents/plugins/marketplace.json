@@ -1,0 +1,20 @@
+{
+  "name": "codex-pet-local",
+  "interface": {
+    "displayName": "Codex Pet Local"
+  },
+  "plugins": [
+    {
+      "name": "codex-pet-league",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-pet-league"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Games"
+    }
+  ]
+}

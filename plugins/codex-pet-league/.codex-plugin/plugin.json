@@ -1,0 +1,43 @@
+{
+  "name": "codex-pet-league",
+  "version": "0.1.0",
+  "description": "Codex App exclusive pet growth, real-time turn battles, and League account tools.",
+  "author": {
+    "name": "Codex Pet League",
+    "email": "league-admin@example.invalid",
+    "url": "https://github.com/local/codex-pet-league"
+  },
+  "homepage": "https://github.com/local/codex-pet-league",
+  "repository": "https://github.com/local/codex-pet-league",
+  "license": "UNLICENSED",
+  "keywords": [
+    "codex",
+    "pet",
+    "league",
+    "mcp",
+    "turn-battle"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex Pet League",
+    "shortDescription": "Grow official Codex pets and run turn battles from Codex App.",
+    "longDescription": "Codex Pet League connects Codex App to a local League server for account-bound pets, hatch atlas uploads, Training Reports, random matchmaking, Friend Duel invite codes, real-time turn battles, replays, and leaderboard checks.",
+    "developerName": "Codex Pet League",
+    "category": "Games",
+    "capabilities": [
+      "Interactive",
+      "MCP",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/local/codex-pet-league",
+    "privacyPolicyURL": "https://github.com/local/codex-pet-league",
+    "termsOfServiceURL": "https://github.com/local/codex-pet-league",
+    "defaultPrompt": [
+      "내 펫 상태와 오늘 남은 XP 보여줘",
+      "훈련 리포트 초안을 만들고 제출 준비해줘",
+      "랜덤 매칭을 시작하고 배틀 액션을 추천해줘"
+    ],
+    "brandColor": "#256E73"
+  }
+}

@@ -257,6 +257,21 @@ async function loadActiveBattle() {
   if (result?.battle) state.activeBattle = result.battle;
 }
 
+function pollActiveBattle(delayMs) {
+  window.setTimeout(async () => {
+    if (!state.activeBattleId) return;
+    try {
+      const result = await api(`/api/battles/${encodeURIComponent(state.activeBattleId)}`);
+      if (result?.battle) {
+        state.activeBattle = result.battle;
+        renderApp();
+      }
+    } catch {
+      // Live/SSE refresh will retry; this small poll is only a UI freshness backup.
+    }
+  }, delayMs);
+}
+
 async function loadMatchmakingStatus() {
   const pet = activePet();
   const suffix = pet?.id ? `?pet_id=${encodeURIComponent(pet.id)}` : "";
@@ -760,6 +775,10 @@ async function submitBattleAction(kind) {
     },
   });
   setActiveBattle(result.battle);
+  if (result.battle?.status === "in_progress") {
+    pollActiveBattle(350);
+    pollActiveBattle(1000);
+  }
   if (result.battle?.status === "finished") await refresh();
 }
 
@@ -786,31 +805,29 @@ function renderBattle(battle) {
 
   const player = battle.sides?.player;
   const opponent = battle.sides?.opponent;
-  if (player) els.battleState?.append(battleSide(player.is_you ? "You" : player.name, player));
-  if (opponent) els.battleState?.append(battleSide(opponent.is_you ? "You" : opponent.name, opponent));
-
   const secondsLeft = battle.turn_deadline_at
     ? Math.max(0, Math.ceil((new Date(battle.turn_deadline_at).getTime() - Date.now()) / 1000))
     : null;
-  const turnLine = document.createElement("div");
-  turnLine.className = "turn-line";
-  appendText(turnLine, "strong", `Turn ${battle.turn_index ?? 0}`);
-  const timer = appendText(turnLine, "span", battle.status === "in_progress" ? `${secondsLeft ?? "?"}s left` : battle.result?.result ?? battle.status);
-  timer.dataset.battleTimer = "true";
-  els.battleState?.append(turnLine);
-  if (battle.status === "in_progress") {
-    const pendingLine = document.createElement("div");
-    pendingLine.className = "turn-line subtle-line";
-    appendText(pendingLine, "strong", "Actions");
-    appendText(pendingLine, "span", `Player ${battle.pending?.player ? "submitted" : "waiting"} · Opponent ${battle.pending?.opponent ? "submitted" : "waiting"}`);
-    els.battleState?.append(pendingLine);
-  } else if (battle.result) {
-    const resultLine = document.createElement("div");
-    resultLine.className = "turn-line result-line";
-    appendText(resultLine, "strong", String(battle.result.result ?? battle.status));
-    appendText(resultLine, "span", `${battle.result.reason ?? "complete"} · ${shortHash(battle.replay_hash)}`);
-    els.battleState?.append(resultLine);
-  }
+
+  const arena = document.createElement("div");
+  arena.className = "battle-arena";
+  arena.dataset.status = battle.status ?? "unknown";
+
+  const combatants = document.createElement("div");
+  combatants.className = "battle-combatants";
+  if (player) combatants.append(battleSide(player.is_you ? "You" : player.name, player));
+  combatants.append(battleCenter(battle, secondsLeft));
+  if (opponent) combatants.append(battleSide(opponent.is_you ? "You" : opponent.name, opponent));
+  arena.append(combatants);
+
+  const recommendation = battleRecommendation(battle);
+  const commandBar = document.createElement("div");
+  commandBar.className = "battle-command-bar";
+  appendText(commandBar, "strong", recommendation.label);
+  appendText(commandBar, "span", recommendation.reason);
+  arena.append(commandBar);
+
+  els.battleState?.append(arena);
   renderBattleTimeline(battle, els.battleTimeline);
 
   setJson(els.battleOutput, {
@@ -831,23 +848,103 @@ function updateBattleTimerText() {
   const deadline = state.activeBattle.turn_deadline_at;
   const secondsLeft = deadline ? Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 1000)) : null;
   timer.textContent = `${secondsLeft ?? "?"}s left`;
+  timer.dataset.urgent = secondsLeft !== null && secondsLeft <= 8 ? "true" : "false";
 }
 
 function battleSide(label, side) {
   const wrapper = document.createElement("div");
   wrapper.className = "battle-side";
+  if (side.is_you) wrapper.classList.add("is-you");
   const header = document.createElement("div");
+  header.className = "battle-side-header";
   appendText(header, "strong", safeText(label));
-  appendText(header, "span", elementLine(side));
+  appendText(header, "span", elementLine(side), "element-chip");
   wrapper.append(header);
   wrapper.append(meter(Number(side.hp ?? 0), Number(side.max_hp ?? 1), "bar hp-bar"));
-  appendText(
-    wrapper,
-    "div",
-    `${side.hp ?? 0}/${side.max_hp ?? 0} HP · ${"#".repeat(Number(side.energy ?? 0)).padEnd(6, ".")} · AFK ${side.timeout_count ?? 0}/3`,
-    "battle-meta",
-  );
+  const vitals = document.createElement("div");
+  vitals.className = "battle-vitals";
+  vitals.append(vitalChip("HP", `${side.hp ?? 0}/${side.max_hp ?? 0}`));
+  vitals.append(vitalChip("Energy", energyPips(Number(side.energy ?? 0)), true));
+  vitals.append(vitalChip("Focus", side.focus_stack ?? 0));
+  vitals.append(vitalChip("AFK", `${side.timeout_count ?? 0}/3`));
+  wrapper.append(vitals);
+
+  const skillRow = document.createElement("div");
+  skillRow.className = "battle-skill-row";
+  for (const skillId of asArray(side.skills).slice(0, 4)) {
+    appendText(skillRow, "span", side.skill_aliases?.[skillId] ?? skillId);
+  }
+  wrapper.append(skillRow);
   return wrapper;
+}
+
+function battleCenter(battle, secondsLeft) {
+  const center = document.createElement("div");
+  center.className = "battle-center";
+  appendText(center, "span", String(battle.mode ?? "battle"), "battle-mode-chip");
+  appendText(center, "strong", `Turn ${battle.turn_index ?? 0}`, "battle-turn");
+  const timer = appendText(
+    center,
+    "span",
+    battle.status === "in_progress" ? `${secondsLeft ?? "?"}s left` : battle.result?.result ?? battle.status,
+    "battle-countdown",
+  );
+  timer.dataset.battleTimer = "true";
+  timer.dataset.urgent = secondsLeft !== null && secondsLeft <= 8 ? "true" : "false";
+  if (battle.status === "in_progress") {
+    appendText(center, "span", pendingText(battle, "player"), battle.pending?.player ? "pending-chip ready" : "pending-chip");
+    appendText(center, "span", pendingText(battle, "opponent"), battle.pending?.opponent ? "pending-chip ready" : "pending-chip");
+  } else if (battle.result) {
+    appendText(center, "span", `${battle.result.reason ?? "complete"} · ${shortHash(battle.replay_hash)}`, "battle-result-chip");
+  }
+  return center;
+}
+
+function vitalChip(label, value, valueIsNode = false) {
+  const chip = document.createElement("span");
+  chip.className = "vital-chip";
+  appendText(chip, "b", label);
+  chip.append(document.createTextNode(" "));
+  if (valueIsNode) {
+    chip.append(value);
+  } else {
+    appendText(chip, "span", value);
+  }
+  return chip;
+}
+
+function energyPips(value) {
+  const wrapper = document.createElement("span");
+  wrapper.className = "energy-pips";
+  for (let index = 0; index < 6; index += 1) {
+    const pip = document.createElement("i");
+    pip.dataset.on = index < value ? "true" : "false";
+    wrapper.append(pip);
+  }
+  return wrapper;
+}
+
+function pendingText(battle, side) {
+  const label = battle.sides?.[side]?.is_you ? "You" : title(side);
+  return `${label}: ${battle.pending?.[side] ? "locked" : "waiting"}`;
+}
+
+function battleRecommendation(battle) {
+  if (battle.status !== "in_progress") {
+    return {
+      label: `Result · ${battle.result?.result ?? battle.status}`,
+      reason: battle.result?.reason ?? "Battle has finished.",
+    };
+  }
+  const side = battle.viewer_side === "opponent" ? battle.sides?.opponent : battle.sides?.player;
+  const pending = battle.viewer_side === "opponent" ? battle.pending?.opponent : battle.pending?.player;
+  if (pending) {
+    return { label: "Action Locked", reason: "Your action is submitted for this turn." };
+  }
+  const hpRatio = Number(side?.hp ?? 0) / Math.max(1, Number(side?.max_hp ?? 1));
+  if (hpRatio <= 0.32) return { label: "Recommended · Guard", reason: "Low HP. Guard reduces incoming damage and gains energy." };
+  if (Number(side?.energy ?? 0) < 2) return { label: "Recommended · Focus", reason: "Low energy. Focus builds enough energy for skill turns." };
+  return { label: "Recommended · Strike", reason: "Stable state. Strike gives reliable damage and gains energy." };
 }
 
 function renderMatchmaking(result) {
@@ -1186,6 +1283,9 @@ function updateControls() {
   const hasPet = Boolean(activePet());
   const hasSkill = Boolean(els.battleSkillSelect?.value);
   const signedIn = isSignedIn();
+  const battleReady = state.activeBattle?.status === "in_progress";
+  const ownPending =
+    state.activeBattle?.viewer_side === "opponent" ? state.activeBattle?.pending?.opponent : state.activeBattle?.pending?.player;
   const disableWhenNoPet = [
     els.draftReportButton,
     els.submitReportButton,
@@ -1202,7 +1302,7 @@ function updateControls() {
     if (control) control.disabled = state.busy || !signedIn || !hasPet;
   }
   for (const button of els.actionButtons ?? []) {
-    button.disabled = state.busy || !signedIn || !state.activeBattleId || (button.dataset.action === "skill" && !hasSkill);
+    button.disabled = state.busy || !signedIn || !state.activeBattleId || !battleReady || ownPending || (button.dataset.action === "skill" && !hasSkill);
   }
   for (const control of [els.seedPetButton, els.createPetButton, els.refreshButton, els.petSelect]) {
     if (control) control.disabled = state.busy || !signedIn;
@@ -1319,9 +1419,16 @@ async function api(path, options = {}) {
   const text = await response.text();
   const payload = text ? parseJson(text) : {};
   if (!response.ok) {
+    const retriesLeft = options.leaseRetries ?? 2;
+    if (payload.error?.code === "LEASE_BUSY" && retriesLeft > 0) {
+      await sleep(180);
+      return api(path, { ...options, leaseRetries: retriesLeft - 1 });
+    }
     const message = payload.error?.message ?? payload.message ?? `API request failed (${response.status})`;
     const error = new Error(message);
     error.status = response.status;
+    error.code = payload.error?.code;
+    error.payload = payload;
     throw error;
   }
   return payload;
@@ -1538,6 +1645,10 @@ function formatDateTime(value) {
 function formatTime(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "--:--:--" : date.toLocaleTimeString();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function title(value) {

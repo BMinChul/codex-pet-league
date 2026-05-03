@@ -39,6 +39,30 @@ const tools = [
     },
   },
   {
+    name: "league_home",
+    title: "League Home",
+    description: "Returns a combined League account, active pet, daily XP, matchmaking, and leaderboard snapshot.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "next_action",
+    title: "Recommend Next League Action",
+    description: "Recommends the next useful pet, Training Report, queue, or battle command from current server state.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "pet_status",
     title: "Pet Status",
     description: "Shows active pet, XP caps, Training Report count, rank, and Battle Class.",
@@ -186,6 +210,19 @@ const tools = [
     name: "battle_get",
     title: "Get Turn Battle",
     description: "Gets the current server state for a turn battle room and advances expired turns.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        battle_id: { type: "string" },
+      },
+      required: ["battle_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "battle_action_options",
+    title: "Battle Action Options",
+    description: "Shows valid base actions, equipped skill options, energy readiness, and a safe action recommendation.",
     inputSchema: {
       type: "object",
       properties: {
@@ -353,6 +390,20 @@ async function callTool(name, args) {
     });
   }
 
+  if (name === "league_home") {
+    return buildLeagueHome(args.pet_id);
+  }
+
+  if (name === "next_action") {
+    const home = await buildLeagueHome(args.pet_id);
+    return {
+      ...home.next_action,
+      pet: home.pet,
+      daily_remaining: home.daily?.remaining ?? null,
+      queue: home.matchmaking,
+    };
+  }
+
   if (name === "pet_status") {
     const pet = await resolvePet(args.pet_id);
     return apiGet(`/api/pets/${pet.id}/xp-status`);
@@ -441,12 +492,19 @@ async function callTool(name, args) {
       skill_id: args.skill_id,
       turn_index: args.turn_index ?? current.battle.turn_index,
       turn_nonce: args.turn_nonce ?? current.battle.turn_nonce,
+      source: "mcp",
     });
   }
 
   if (name === "battle_get") {
     if (!args.battle_id) throw new Error("battle_id is required.");
     return apiGet(`/api/battles/${args.battle_id}`);
+  }
+
+  if (name === "battle_action_options") {
+    if (!args.battle_id) throw new Error("battle_id is required.");
+    const [result, rules] = await Promise.all([apiGet(`/api/battles/${args.battle_id}`), optional(apiGet("/api/rules"), {})]);
+    return battleActionOptions(result.battle, rules);
   }
 
   if (name === "matchmaking_join") {
@@ -486,6 +544,40 @@ async function callTool(name, args) {
   }
 
   throw new Error(`Unknown tool: ${name}`);
+}
+
+async function buildLeagueHome(petId = null) {
+  const [session, league, petsResult, boardResult] = await Promise.all([
+    optional(apiGet("/api/session")),
+    optional(apiGet("/api/league")),
+    optional(apiGet("/api/pets"), { pets: [] }),
+    optional(apiGet("/api/leaderboard"), { leaderboard: [] }),
+  ]);
+  const pets = petsResult?.pets ?? [];
+  const pet = petId ? pets.find((entry) => entry.id === petId) : pets[0];
+  if (petId && !pet) throw new Error(`Pet not found: ${petId}`);
+  const [xpStatus, matchmaking] = await Promise.all([
+    pet ? optional(apiGet(`/api/pets/${pet.id}/xp-status`)) : null,
+    optional(apiGet(`/api/matchmaking/status${pet ? `?pet_id=${encodeURIComponent(pet.id)}` : ""}`)),
+  ]);
+  const next = recommendedNextAction({ pet, xpStatus, matchmaking });
+  return {
+    account: session?.account ?? null,
+    season: league?.active_season ?? league?.season ?? null,
+    pet: pet ? summarizePet(pet) : null,
+    pets: pets.map(summarizePet),
+    daily: xpStatus
+      ? {
+          remaining: xpStatus.remaining,
+          caps: xpStatus.caps,
+          reset_at: xpStatus.reset_at,
+          status_text: xpStatus.status_text,
+        }
+      : null,
+    matchmaking: summarizeMatchmaking(matchmaking),
+    leaderboard_top: (boardResult?.leaderboard ?? []).slice(0, 5),
+    next_action: next,
+  };
 }
 
 async function resolvePet(petId) {
@@ -541,6 +633,176 @@ async function request(method, route, body) {
 async function pngDataUrl(filePath) {
   const bytes = await fs.readFile(filePath);
   return `data:image/png;base64,${bytes.toString("base64")}`;
+}
+
+function battleActionOptions(battle, rules = {}) {
+  const side = viewerSide(battle);
+  const skillsById = new Map((rules.skills ?? []).map((skill) => [skill.id, skill]));
+  const recommendation = recommendBattleAction(battle, rules);
+  const skills = (side?.skills ?? []).map((skillId) => {
+    const skill = skillsById.get(skillId) ?? inferSkillFromId(skillId);
+    const cost = skillCost(skill?.role);
+    return {
+      id: skillId,
+      official_name: skill?.officialName ?? skillId,
+      alias: side?.skill_aliases?.[skillId] ?? null,
+      role: skill?.role ?? "skill",
+      energy_cost: cost,
+      ready: Number(side?.energy ?? 0) >= cost,
+    };
+  });
+  return {
+    battle_id: battle.id,
+    status: battle.status,
+    turn_index: battle.turn_index,
+    turn_deadline_at: battle.turn_deadline_at,
+    viewer_side: battle.viewer_side,
+    vitals: side
+      ? {
+          hp: side.hp,
+          max_hp: side.max_hp,
+          energy: side.energy,
+          focus_stack: side.focus_stack,
+          timeout_count: side.timeout_count,
+        }
+      : null,
+    base_actions: [
+      { kind: "strike", effect: "damage, +1 energy" },
+      { kind: "guard", effect: "damage reduction, +1 energy" },
+      { kind: "focus", effect: "+2 energy and focus stack" },
+    ],
+    skills,
+    recommendation,
+    command: `battle_action with kind=${recommendation.kind}${recommendation.skill_id ? ` skill_id=${recommendation.skill_id}` : ""}`,
+  };
+}
+
+function recommendedNextAction(home) {
+  if (!home.pet) {
+    return {
+      title: "Create your first official pet",
+      reason: "Official League actions need a server-registered pet.",
+      command: "pet_create with optional atlas_path",
+    };
+  }
+  const battle = home.matchmaking?.active_battles?.[0];
+  if (battle?.status === "in_progress") {
+    const recommendation = recommendBattleAction(battle);
+    return {
+      title: "Take the current battle turn",
+      reason: recommendation.reason,
+      command: "battle_action",
+      battle_id: battle.id,
+      kind: recommendation.kind,
+      skill_id: recommendation.skill_id ?? null,
+    };
+  }
+  const ticket = home.matchmaking?.tickets?.find((entry) => entry.status === "waiting") ?? home.matchmaking?.tickets?.[0];
+  if (ticket) {
+    return {
+      title: "Stay in queue",
+      reason: `Waiting in ${ticket.mode} ${ticket.battle_class}; search window is ±${ticket.search_window_lp ?? "?"} LP.`,
+      command: "matchmaking_status",
+    };
+  }
+  if (Number(home.xpStatus?.remaining?.trainingReports ?? 0) > 0 && Number(home.xpStatus?.remaining?.training ?? 0) > 0) {
+    return {
+      title: "Submit today's Codex work",
+      reason: `${home.xpStatus.remaining.trainingReports} Training Report slot(s) and ${home.xpStatus.remaining.training} Training XP remain today.`,
+      command: "training_report_draft",
+    };
+  }
+  if (Number(home.xpStatus?.remaining?.battle ?? 0) > 0) {
+    return {
+      title: "Play a 30-second turn battle",
+      reason: `${home.xpStatus.remaining.battle} Battle XP remains today.`,
+      command: "matchmaking_join",
+      mode: "ranked",
+    };
+  }
+  return {
+    title: "Check profile and replays",
+    reason: "Daily XP is mostly capped; profile/replays are the clean next review loop.",
+    command: "pet_profile",
+  };
+}
+
+function recommendBattleAction(battle, rules = {}) {
+  const side = viewerSide(battle);
+  const opponent = battle?.viewer_side === "opponent" ? battle.sides?.player : battle?.sides?.opponent;
+  if (!side) return { kind: "strike", reason: "No viewer side was present, so strike is the safest default." };
+  const hpRatio = Number(side.hp ?? 0) / Math.max(1, Number(side.max_hp ?? 1));
+  const opponentRatio = Number(opponent?.hp ?? 0) / Math.max(1, Number(opponent?.max_hp ?? 1));
+  const skillsById = new Map((rules.skills ?? []).map((skill) => [skill.id, skill]));
+  const skill = bestReadySkill(side, opponentRatio, skillsById);
+  if (hpRatio <= 0.32) return { kind: "guard", reason: "Your HP is low; guard reduces damage and still gains energy." };
+  if (skill) return { kind: "skill", skill_id: skill.id, reason: `${skill.role} skill is available with enough energy.` };
+  if (Number(side.energy ?? 0) < 2) return { kind: "focus", reason: "Energy is low; focus builds energy fastest." };
+  return { kind: "strike", reason: "No urgent defensive or energy need; strike is reliable damage and gains energy." };
+}
+
+function bestReadySkill(side, opponentHpRatio, skillsById) {
+  const ready = (side.skills ?? [])
+    .map((id) => skillsById.get(id) ?? inferSkillFromId(id))
+    .filter((skill) => skill && Number(side.energy ?? 0) >= skillCost(skill.role));
+  return (
+    ready.find((skill) => skill.role === "finisher" && opponentHpRatio <= 0.38) ??
+    ready.find((skill) => skill.role === "offense") ??
+    ready.find((skill) => skill.role === "tempo") ??
+    ready.find((skill) => skill.role === "status") ??
+    null
+  );
+}
+
+function inferSkillFromId(id) {
+  const role = String(id ?? "").split("_").at(-1);
+  if (!role) return null;
+  return { id, role };
+}
+
+function skillCost(role) {
+  return role === "finisher" ? 4 : 2;
+}
+
+function viewerSide(battle) {
+  if (!battle?.sides) return null;
+  return battle.viewer_side === "opponent" ? battle.sides.opponent : battle.sides.player;
+}
+
+function summarizePet(pet) {
+  return {
+    id: pet.id,
+    name: pet.name,
+    level: pet.level,
+    battle_class: pet.battle_class,
+    primary_element: pet.primary_element,
+    secondary_element: pet.secondary_element,
+    rank: pet.rating?.label,
+    lp: pet.rating?.lp,
+    stats_total: pet.stats?.total,
+  };
+}
+
+function summarizeMatchmaking(matchmaking) {
+  return {
+    tickets: matchmaking?.tickets ?? [],
+    active_battles: (matchmaking?.active_battles ?? []).map((battle) => ({
+      id: battle.id,
+      mode: battle.mode,
+      status: battle.status,
+      viewer_side: battle.viewer_side,
+      turn_index: battle.turn_index,
+      turn_deadline_at: battle.turn_deadline_at,
+    })),
+  };
+}
+
+async function optional(promise, fallback = null) {
+  try {
+    return await promise;
+  } catch {
+    return fallback;
+  }
 }
 
 function defaultSignals() {

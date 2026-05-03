@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -60,6 +61,7 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
     await page.locator('[data-action="strike"]').click();
     await expect(page.locator("#battleOutput")).toContainText("latest_turn");
     await expect(page.locator("#battleTimeline")).toContainText("Turn 1");
+    await page.waitForTimeout(250);
     await finishActiveBattleFromPage(page);
     await page.click("#refreshButton");
     await expect(page.locator("#replayList")).toContainText("casual");
@@ -119,6 +121,7 @@ test("two browser accounts complete friend PvP and avoid linked-network ranked m
 
     await pageA.locator('[data-action="strike"]').click();
     await pageB.locator('[data-action="strike"]').click();
+    await Promise.all([pageA.click("#refreshButton"), pageB.click("#refreshButton")]);
     await expect(pageA.locator("#battleTimeline")).toContainText("Turn 1");
     await expect(pageB.locator("#battleTimeline")).toContainText("Turn 1");
     await withServerDiagnostics(app, () => finishPvpBattle(pageA, pageB), () => networkFailures.join("\n"));
@@ -216,35 +219,33 @@ async function registerDemoPet(page) {
 }
 
 async function finishActiveBattleFromPage(page) {
-  return page.evaluate(async () => {
-    const current = JSON.parse(document.querySelector("#battleOutput").textContent);
-    let view = await fetch(`/api/battles/${encodeURIComponent(current.id)}`);
-    let payload = await view.json();
-    if (!view.ok) throw new Error(`battle view failed: ${JSON.stringify(payload)}`);
-    let battle = payload.battle;
-    for (let index = 0; index < 30 && battle.status === "in_progress"; index += 1) {
-      const response = await fetch(`/api/battles/${encodeURIComponent(battle.id)}/actions`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          request_id: crypto.randomUUID(),
-          kind: "strike",
-          turn_index: battle.turn_index,
-          turn_nonce: battle.turn_nonce,
-        }),
-      });
-      payload = await response.json();
-      if (!response.ok && ["TURN_STALE", "TURN_ACTION_DUPLICATE"].includes(payload.error?.code)) {
-        const latestResponse = await fetch(`/api/battles/${encodeURIComponent(battle.id)}`);
-        payload = await latestResponse.json();
-      } else if (!response.ok) {
-        throw new Error(`battle finish failed: ${JSON.stringify(payload)}`);
-      }
-      battle = payload.battle;
+  const current = JSON.parse(await page.locator("#battleOutput").textContent());
+  let view = await page.request.get(apiUrl(page, `/api/battles/${encodeURIComponent(current.id)}`));
+  let payload = await view.json();
+  if (!view.ok()) throw new Error(`battle view failed: ${JSON.stringify(payload)}`);
+  let battle = payload.battle;
+  for (let index = 0; index < 30 && battle.status === "in_progress"; index += 1) {
+    await page.waitForTimeout(40);
+    const response = await page.request.post(apiUrl(page, `/api/battles/${encodeURIComponent(battle.id)}/actions`), {
+      data: {
+        request_id: randomUUID(),
+        kind: "strike",
+        turn_index: battle.turn_index,
+        turn_nonce: battle.turn_nonce,
+      },
+    });
+    payload = await response.json();
+    if (!response.ok() && ["TURN_STALE", "TURN_INDEX_STALE", "TURN_ACTION_DUPLICATE", "LEASE_BUSY"].includes(payload.error?.code)) {
+      if (payload.error?.code === "LEASE_BUSY") await page.waitForTimeout(120);
+      const latestResponse = await page.request.get(apiUrl(page, `/api/battles/${encodeURIComponent(battle.id)}`));
+      payload = await latestResponse.json();
+    } else if (!response.ok()) {
+      throw new Error(`battle finish failed: ${JSON.stringify(payload)}`);
     }
-    if (battle.status !== "finished") throw new Error(`battle did not finish: ${JSON.stringify(battle)}`);
-    return battle.id;
-  });
+    battle = payload.battle;
+  }
+  if (battle.status !== "finished") throw new Error(`battle did not finish: ${JSON.stringify(battle)}`);
+  return battle.id;
 }
 
 async function finishPvpBattle(pageA, pageB) {
@@ -265,45 +266,35 @@ async function activeBattleId(page) {
 }
 
 async function fetchBattle(page, battleId) {
-  return page.evaluate(async (id) => {
-    let response;
-    try {
-      response = await fetch(`/api/battles/${encodeURIComponent(id)}`);
-    } catch (error) {
-      throw new Error(`battle fetch network failed at ${location.href}: ${error.message}`);
-    }
-    const payload = await response.json();
-    if (!response.ok) throw new Error(`battle fetch failed: ${JSON.stringify(payload)}`);
-    return payload.battle;
-  }, battleId);
+  const response = await page.request.get(apiUrl(page, `/api/battles/${encodeURIComponent(battleId)}`));
+  const payload = await response.json();
+  if (!response.ok()) throw new Error(`battle fetch failed: ${JSON.stringify(payload)}`);
+  return payload.battle;
 }
 
 async function submitBattleActionFromPage(page, battleId, turn) {
-  return page.evaluate(
-    async ({ id, turn_index, turn_nonce }) => {
-      let response;
-      try {
-        response = await fetch(`/api/battles/${encodeURIComponent(id)}/actions`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            request_id: crypto.randomUUID(),
-            kind: "strike",
-            turn_index,
-            turn_nonce,
-          }),
-        });
-      } catch (error) {
-        throw new Error(`battle action network failed at ${location.href}: ${error.message}`);
-      }
-      const payload = await response.json();
-      if (!response.ok && !["TURN_ACTION_DUPLICATE", "TURN_STALE"].includes(payload.error?.code)) {
-        throw new Error(`battle action failed: ${JSON.stringify(payload)}`);
-      }
-      return payload.battle;
+  await page.waitForTimeout(40);
+  const response = await page.request.post(apiUrl(page, `/api/battles/${encodeURIComponent(battleId)}/actions`), {
+    data: {
+      request_id: randomUUID(),
+      kind: "strike",
+      turn_index: turn.turn_index,
+      turn_nonce: turn.turn_nonce,
     },
-    { id: battleId, ...turn },
-  );
+  });
+  const payload = await response.json();
+  if (!response.ok() && payload.error?.code === "LEASE_BUSY") {
+    await page.waitForTimeout(120);
+    return fetchBattle(page, battleId);
+  }
+  if (!response.ok() && !["TURN_ACTION_DUPLICATE", "TURN_STALE", "TURN_INDEX_STALE"].includes(payload.error?.code)) {
+    throw new Error(`battle action failed: ${JSON.stringify(payload)}`);
+  }
+  return payload.battle;
+}
+
+function apiUrl(page, path) {
+  return new URL(path, page.url()).toString();
 }
 
 async function petRating(page) {

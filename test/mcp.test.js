@@ -37,6 +37,8 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
     [
       "auth_challenge",
       "auth_verify",
+      "league_home",
+      "next_action",
       "pet_status",
       "pet_create",
       "league_status",
@@ -49,6 +51,7 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
       "battle_start",
       "battle_action",
       "battle_get",
+      "battle_action_options",
       "matchmaking_join",
       "matchmaking_status",
       "matchmaking_cancel",
@@ -119,6 +122,17 @@ test("MCP bridge calls League tools against a strict temp server", async () => {
 
     const status = await client.callTool("pet_status", { pet_id: petId });
     assert.equal(status.structuredContent.pet.id, petId);
+
+    const home = await client.callTool("league_home", { pet_id: petId });
+    assert.equal(home.structuredContent.pet.id, petId);
+
+    const next = await client.callTool("next_action", { pet_id: petId });
+    assert.ok(next.structuredContent.command);
+
+    const battle = await client.callTool("battle_start", { pet_id: petId, mode: "training" });
+    const options = await client.callTool("battle_action_options", { battle_id: battle.structuredContent.battle.id });
+    assert.equal(options.structuredContent.battle_id, battle.structuredContent.battle.id);
+    assert.ok(options.structuredContent.recommendation.kind);
 
     const audit = await client.callTool("admin_audit", {});
     assert.equal(audit.structuredContent.ok, true);

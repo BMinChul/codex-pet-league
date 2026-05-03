@@ -87,6 +87,9 @@ Set `CODEX_PET_STORAGE_DRIVER=postgres` with `CODEX_PET_POSTGRES_URL` to use the
 The CLI is the local bridge that Codex App slash commands or natural-language tool triggers can call.
 
 ```bash
+npm run cli -- home
+npm run cli -- next
+npm run cli -- daily
 npm run cli -- session
 npm run cli -- session list
 npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
@@ -101,6 +104,7 @@ npm run cli -- xp status
 npm run cli -- report draft --implementation --verification --tests-run 3
 npm run cli -- report submit --milestone --files large
 npm run cli -- battle start --mode casual
+npm run cli -- battle actions --battle battle_room_id
 npm run cli -- battle action --battle battle_room_id --kind strike
 npm run cli -- battle get --battle battle_room_id
 npm run cli -- queue join --mode ranked
@@ -116,10 +120,14 @@ npm run cli -- leaderboard
 Natural-language trigger mapping:
 
 ```text
+내 펫 홈 보여줘 -> codexpet home
+다음에 뭐 해야돼 -> codexpet next
+오늘 남은 XP 보여줘 -> codexpet daily
 펫 훈련 리포트 만들어줘 -> codexpet report draft
 오늘 작업 pet XP로 제출해줘 -> codexpet report submit
 펫 XP 상태 보여줘 -> codexpet xp status
 내 펫 서버에 올려줘 -> codexpet pet create --atlas <path>
+지금 배틀 액션 뭐 가능해 -> codexpet battle actions --battle <id>
 ```
 
 Environment:
@@ -192,6 +200,8 @@ The MCP bridge exposes the same product actions as tools:
 
 - `auth_challenge`
 - `auth_verify`
+- `league_home`
+- `next_action`
 - `pet_status`
 - `pet_create`
 - `league_status`
@@ -204,6 +214,7 @@ The MCP bridge exposes the same product actions as tools:
 - `battle_start`
 - `battle_action`
 - `battle_get`
+- `battle_action_options`
 - `matchmaking_join`
 - `matchmaking_status`
 - `matchmaking_cancel`
@@ -225,3 +236,14 @@ codex mcp add codex-pet-league -- node C:\Users\Chul\Desktop\codexpet\src\mcp\co
 ```
 
 The League server must be running at `CODEX_PET_LEAGUE_URL` before tool calls can create pets, submit reports, or resolve battles.
+
+## Codex App Plugin
+
+This repo includes a local Codex App plugin scaffold at `plugins/codex-pet-league`.
+
+- Manifest: `plugins/codex-pet-league/.codex-plugin/plugin.json`
+- MCP config: `plugins/codex-pet-league/.mcp.json`
+- Skill guide: `plugins/codex-pet-league/skills/codex-pet-league/SKILL.md`
+- Marketplace entry: `.agents/plugins/marketplace.json`
+
+The plugin points MCP to `src/mcp/codex-pet-mcp.cjs` and expects the League server at `http://localhost:4317`.

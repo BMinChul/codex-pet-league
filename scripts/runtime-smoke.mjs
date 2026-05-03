@@ -120,6 +120,10 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       assert(metrics.includes("codex_pet_uptime_seconds"), "metrics endpoint did not expose uptime");
 
       runCli("session", baseUrl, sessionA.session_token);
+      runCli("home", baseUrl, sessionA.session_token);
+      runCli("daily", baseUrl, sessionA.session_token);
+      runCli("next", baseUrl, sessionA.session_token);
+      runCli(["battle", "actions", "--battle", battle.id], baseUrl, sessionA.session_token);
       runCli("audit", baseUrl, sessionA.session_token);
     },
   );
@@ -306,7 +310,8 @@ async function assertSseReady(baseUrl, cookie) {
 }
 
 function runCli(command, baseUrl, sessionToken) {
-  const result = spawnSync(process.execPath, ["src/cli/index.js", command], {
+  const args = Array.isArray(command) ? command : [command];
+  const result = spawnSync(process.execPath, ["src/cli/index.js", ...args], {
     cwd: repoRoot,
     env: {
       ...process.env,

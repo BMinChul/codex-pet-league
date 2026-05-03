@@ -31,6 +31,25 @@ async function main(args) {
     sessionToken: parsed.flags.sessionToken ?? DEFAULT_SESSION_TOKEN,
   });
 
+  if (area === "home" || area === "status") {
+    const home = await buildLeagueHome(client, parsed.flags.pet);
+    printLeagueHome(home);
+    return;
+  }
+
+  if (area === "daily") {
+    const pet = await resolvePet(client, parsed.flags.pet);
+    const status = await client.get(`/api/pets/${pet.id}/xp-status`);
+    printDailyStatus(status);
+    return;
+  }
+
+  if (area === "next" || area === "play") {
+    const home = await buildLeagueHome(client, parsed.flags.pet);
+    printNextAction(home);
+    return;
+  }
+
   if (area === "auth" && action === "challenge") {
     const result = await client.post("/api/auth/challenge", {
       method: parsed.flags.method ?? "email_magic_link",
@@ -193,6 +212,16 @@ async function main(args) {
     return;
   }
 
+  if (area === "battle" && action === "actions") {
+    if (!parsed.flags.battle) throw new Error("Pass --battle battle_room_id");
+    const [result, rules] = await Promise.all([
+      client.get(`/api/battles/${parsed.flags.battle}`),
+      optional(client.get("/api/rules")),
+    ]);
+    printBattleActionOptions(result.battle, rules);
+    return;
+  }
+
   if (area === "battle" && action === "action") {
     if (!parsed.flags.battle) throw new Error("Pass --battle battle_room_id");
     const current = await client.get(`/api/battles/${parsed.flags.battle}`);
@@ -201,6 +230,7 @@ async function main(args) {
       skill_id: parsed.flags.skill,
       turn_index: parsed.flags.turnIndex ?? current.battle.turn_index,
       turn_nonce: parsed.flags.turnNonce ?? current.battle.turn_nonce,
+      source: "cli",
     });
     printTurnBattle(result.battle);
     return;
@@ -259,6 +289,31 @@ async function main(args) {
   }
 
   throw new Error(`Unknown command: ${[area, action].filter(Boolean).join(" ")}`);
+}
+
+async function buildLeagueHome(client, petId = null) {
+  const [session, league, petsResult, boardResult] = await Promise.all([
+    optional(client.get("/api/session")),
+    optional(client.get("/api/league")),
+    optional(client.get("/api/pets"), { pets: [] }),
+    optional(client.get("/api/leaderboard"), { leaderboard: [] }),
+  ]);
+  const pets = petsResult?.pets ?? [];
+  const pet = petId ? pets.find((entry) => entry.id === petId) : pets[0];
+  if (petId && !pet) throw new Error(`Pet not found: ${petId}`);
+  const [xpStatus, matchmaking] = await Promise.all([
+    pet ? optional(client.get(`/api/pets/${pet.id}/xp-status`)) : null,
+    optional(client.get(`/api/matchmaking/status${pet ? `?pet_id=${encodeURIComponent(pet.id)}` : ""}`)),
+  ]);
+  return {
+    session,
+    league,
+    pets,
+    pet,
+    xpStatus,
+    matchmaking,
+    leaderboard: boardResult?.leaderboard ?? [],
+  };
 }
 
 async function listPets(client) {
@@ -395,6 +450,43 @@ async function pngDataUrl(path) {
   return `data:image/png;base64,${bytes.toString("base64")}`;
 }
 
+function printLeagueHome(home) {
+  const account = home.session?.account;
+  console.log("Codex Pet League");
+  console.log(`Account: ${account?.display_name ?? account?.email ?? account?.id ?? "development fallback"}`);
+  const season = home.league?.active_season ?? home.league?.season;
+  if (season) {
+    console.log(`Season: ${season.name ?? season.id} · ${season.status} · ends ${formatDate(season.ends_at)}`);
+  }
+  if (!home.pet) {
+    console.log("Pet: none registered");
+    console.log("Next: codexpet pet create --name Pebble --primary Forge --secondary Trace");
+    return;
+  }
+  console.log(
+    `Pet: ${home.pet.name} · Lv ${home.pet.level} · ${home.pet.battle_class} · ${home.pet.rating.label} ${home.pet.rating.lp} LP`,
+  );
+  if (home.xpStatus) {
+    console.log(
+      `Today XP: pet ${home.xpStatus.status_text.pet}, training ${home.xpStatus.status_text.training}, battle ${home.xpStatus.status_text.battle}`,
+    );
+    console.log(`Remaining: pet ${home.xpStatus.remaining.pet}, reports ${home.xpStatus.remaining.trainingReports}/3`);
+  }
+  const tickets = home.matchmaking?.tickets ?? [];
+  const battles = home.matchmaking?.active_battles ?? [];
+  if (battles.length) {
+    console.log(`Active battle: ${battles[0].id} · turn ${battles[0].turn_index}`);
+  } else if (tickets.length) {
+    console.log(`Queue: ${tickets[0].mode} · ${tickets[0].battle_class} · window ±${tickets[0].search_window_lp}`);
+  } else {
+    console.log("Queue: idle");
+  }
+  const top = home.leaderboard?.[0];
+  if (top) console.log(`Leaderboard #1: ${top.name} · ${top.tier_label} · ${top.lp} LP`);
+  const next = recommendedNextAction(home);
+  console.log(`Next: ${next.command}`);
+}
+
 function printXpStatus(status) {
   console.log(`${status.pet.name} · Lv ${status.pet.level} · ${status.pet.battle_class} · ${status.pet.rating.label}`);
   console.log(`Pet XP: ${status.status_text.pet}`);
@@ -405,6 +497,17 @@ function printXpStatus(status) {
   console.log(`Style XP: ${status.status_text.style}`);
   console.log(`Weekly Style XP: ${status.status_text.weeklyStyle}`);
   console.log(`Daily reset: ${new Date(status.reset_at).toLocaleString()}`);
+}
+
+function printDailyStatus(status) {
+  console.log(`${status.pet.name} daily progress`);
+  console.log(`Pet XP remaining: ${status.remaining.pet} / ${status.caps.petDaily}`);
+  console.log(`Training XP remaining: ${status.remaining.training} / ${status.caps.trainingDaily}`);
+  console.log(`Battle XP remaining: ${status.remaining.battle} / ${status.caps.battleDaily}`);
+  console.log(`Friend XP remaining: ${status.remaining.friend} / ${status.caps.friendDaily}`);
+  console.log(`Style XP remaining: ${status.remaining.style} today, ${status.remaining.weeklyStyle} this week`);
+  console.log(`Training Reports left: ${status.remaining.trainingReports} / ${status.caps.petEligibleTrainingReportsDaily}`);
+  console.log(`Reset: ${new Date(status.reset_at).toLocaleString()}`);
 }
 
 function printTrainingDraft(draft) {
@@ -432,6 +535,59 @@ function printLeaderboard(rows) {
   }
 }
 
+function printNextAction(home) {
+  const next = recommendedNextAction(home);
+  console.log(next.title);
+  console.log(next.reason);
+  console.log(next.command);
+}
+
+function recommendedNextAction(home) {
+  if (!home.pet) {
+    return {
+      title: "Create your first official pet",
+      reason: "Official League actions need a server-registered pet.",
+      command: "codexpet pet create --name Pebble --primary Forge --secondary Trace --atlas <hatch.png>",
+    };
+  }
+  const battle = home.matchmaking?.active_battles?.[0];
+  if (battle?.status === "in_progress") {
+    const recommendation = recommendBattleAction(battle);
+    return {
+      title: "Take the current battle turn",
+      reason: recommendation.reason,
+      command: `codexpet battle action --battle ${battle.id} --kind ${recommendation.kind}${recommendation.skillId ? ` --skill ${recommendation.skillId}` : ""}`,
+    };
+  }
+  const ticket = home.matchmaking?.tickets?.find((entry) => entry.status === "waiting") ?? home.matchmaking?.tickets?.[0];
+  if (ticket) {
+    return {
+      title: "Stay in queue",
+      reason: `Waiting in ${ticket.mode} ${ticket.battle_class}; search window is ±${ticket.search_window_lp ?? "?"} LP.`,
+      command: `codexpet queue status --pet ${home.pet.id}`,
+    };
+  }
+  if (Number(home.xpStatus?.remaining?.trainingReports ?? 0) > 0 && Number(home.xpStatus?.remaining?.training ?? 0) > 0) {
+    return {
+      title: "Submit today's Codex work",
+      reason: `${home.xpStatus.remaining.trainingReports} Training Report slot(s) and ${home.xpStatus.remaining.training} Training XP remain today.`,
+      command: `codexpet report draft --pet ${home.pet.id} --implementation --verification --tests-run 3`,
+    };
+  }
+  if (Number(home.xpStatus?.remaining?.battle ?? 0) > 0) {
+    return {
+      title: "Play a 30-second turn battle",
+      reason: `${home.xpStatus.remaining.battle} Battle XP remains today.`,
+      command: `codexpet queue join --pet ${home.pet.id} --mode ranked`,
+    };
+  }
+  return {
+    title: "Check profile and replays",
+    reason: "Daily XP is mostly capped; profile/replays are the clean next review loop.",
+    command: `codexpet pet profile --pet ${home.pet.id}`,
+  };
+}
+
 function printTurnBattle(battle) {
   const ownSide = battle.viewer_side === "opponent" ? battle.sides.opponent : battle.sides.player;
   const otherSide = battle.viewer_side === "opponent" ? battle.sides.player : battle.sides.opponent;
@@ -445,6 +601,35 @@ function printTurnBattle(battle) {
     console.log(`Result: ${battle.result.result} · replay ${battle.replay_hash}`);
   }
   if (battle.log.at(-1)) printObject({ latest_turn: battle.log.at(-1) });
+}
+
+function printBattleActionOptions(battle, rules = null) {
+  const ownSide = battle.viewer_side === "opponent" ? battle.sides.opponent : battle.sides.player;
+  const recommendation = recommendBattleAction(battle, rules);
+  console.log(`${battle.id} · ${battle.status} · turn ${battle.turn_index}`);
+  if (battle.status !== "in_progress") {
+    console.log(`Finished: ${battle.result?.result ?? battle.status}`);
+    return;
+  }
+  console.log(`Deadline: ${new Date(battle.turn_deadline_at).toLocaleTimeString()}`);
+  console.log(`Recommended: ${recommendation.kind}${recommendation.skillId ? ` (${recommendation.skillId})` : ""} · ${recommendation.reason}`);
+  console.log("Base actions:");
+  console.log("  strike · damage, +1 energy");
+  console.log("  guard  · reduce incoming damage, +1 energy");
+  console.log("  focus  · +2 energy and focus stack");
+  const skillsById = new Map((rules?.skills ?? []).map((skill) => [skill.id, skill]));
+  console.log("Skills:");
+  for (const skillId of ownSide.skills ?? []) {
+    const skill = skillsById.get(skillId);
+    const cost = skillCost(skill?.role);
+    const alias = ownSide.skill_aliases?.[skillId];
+    const label = alias ? `${alias} / ${skill?.officialName ?? skillId}` : skill?.officialName ?? skillId;
+    const ready = Number(ownSide.energy ?? 0) >= cost ? "ready" : `needs ${cost} energy`;
+    console.log(`  ${skillId} · ${label} · ${skill?.role ?? "skill"} · ${ready}`);
+  }
+  console.log(
+    `Command: codexpet battle action --battle ${battle.id} --kind ${recommendation.kind}${recommendation.skillId ? ` --skill ${recommendation.skillId}` : ""}`,
+  );
 }
 
 function parseAliases(value) {
@@ -472,6 +657,44 @@ function printMatchmaking(result) {
   printObject(result);
 }
 
+function recommendBattleAction(battle, rules = null) {
+  const side = battle.viewer_side === "opponent" ? battle.sides.opponent : battle.sides.player;
+  const opponent = battle.viewer_side === "opponent" ? battle.sides.player : battle.sides.opponent;
+  if (!side) return { kind: "strike", reason: "No viewer side was present, so strike is the safest default." };
+  if (side.is_you === false && battle.viewer_side) return { kind: "strike", reason: "Viewer side is ambiguous; strike keeps the turn valid." };
+  const hpRatio = Number(side.hp ?? 0) / Math.max(1, Number(side.max_hp ?? 1));
+  const opponentRatio = Number(opponent?.hp ?? 0) / Math.max(1, Number(opponent?.max_hp ?? 1));
+  const skillsById = new Map((rules?.skills ?? []).map((skill) => [skill.id, skill]));
+  const skill = bestReadySkill(side, opponentRatio, skillsById);
+  if (hpRatio <= 0.32) return { kind: "guard", reason: "Your HP is low; guard reduces damage and still gains energy." };
+  if (skill) return { kind: "skill", skillId: skill.id, reason: `${skill.role} skill is available with enough energy.` };
+  if (Number(side.energy ?? 0) < 2) return { kind: "focus", reason: "Energy is low; focus builds energy fastest." };
+  return { kind: "strike", reason: "No urgent defensive or energy need; strike is reliable damage and gains energy." };
+}
+
+function bestReadySkill(side, opponentHpRatio, skillsById) {
+  const ready = (side.skills ?? [])
+    .map((id) => skillsById.get(id) ?? inferSkillFromId(id))
+    .filter((skill) => skill && Number(side.energy ?? 0) >= skillCost(skill.role));
+  return (
+    ready.find((skill) => skill.role === "finisher" && opponentHpRatio <= 0.38) ??
+    ready.find((skill) => skill.role === "offense") ??
+    ready.find((skill) => skill.role === "tempo") ??
+    ready.find((skill) => skill.role === "status") ??
+    null
+  );
+}
+
+function inferSkillFromId(id) {
+  const role = String(id ?? "").split("_").at(-1);
+  if (!role) return null;
+  return { id, role };
+}
+
+function skillCost(role) {
+  return role === "finisher" ? 4 : 2;
+}
+
 function summarizePet(pet) {
   return {
     name: pet.name,
@@ -490,10 +713,26 @@ function printObject(value) {
   console.log(JSON.stringify(value, null, 2));
 }
 
+async function optional(promise, fallback = null) {
+  try {
+    return await promise;
+  } catch {
+    return fallback;
+  }
+}
+
+function formatDate(value) {
+  if (!value) return "unknown";
+  return new Date(value).toISOString().slice(0, 10);
+}
+
 function printHelp() {
   console.log(`Codex Pet League CLI
 
 Usage:
+  codexpet home
+  codexpet next
+  codexpet daily [--pet pet_id]
   codexpet session
   codexpet session list
   codexpet session revoke --session session_id|--token league_session_token
@@ -512,6 +751,7 @@ Usage:
   codexpet battle simulate [--pet pet_id] --mode ranked --result win --opponent-lp 1500
   codexpet battle start [--pet pet_id] [--mode casual] [--opponent-lp 1500]
   codexpet battle action --battle battle_room_id --kind strike|guard|focus|skill [--skill skill_id]
+  codexpet battle actions --battle battle_room_id
   codexpet battle get --battle battle_room_id
   codexpet queue join [--pet pet_id] [--mode ranked|casual]
   codexpet queue status [--pet pet_id]
