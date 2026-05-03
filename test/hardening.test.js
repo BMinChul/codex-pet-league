@@ -381,6 +381,40 @@ test("audit reports no high integrity findings for a clean state", () => {
   assert.equal(audit.findings.length, 0);
 });
 
+test("audit flags stale or duplicated matchmaking state", () => {
+  const { state, pet } = createPetFixture();
+  joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" });
+  const ticket = state.matchTickets[0];
+  state.matchTickets.push({
+    ...ticket,
+    id: "ticket_duplicate_tamper",
+    created_at: new Date(Date.now() + 1000).toISOString(),
+  });
+  ticket.battle_class = "wrong";
+
+  const audit = adminAudit(state);
+  assert.equal(audit.ok, false);
+  assert.equal(audit.findings.some((finding) => finding.code === "duplicate_waiting_ticket"), true);
+  assert.equal(audit.findings.some((finding) => finding.code === "ticket_battle_class_stale"), true);
+});
+
+test("ops job raises abuse alert for audit integrity findings without auto-punishment", () => {
+  const { state, pet } = createPetFixture();
+  const held = submitTrainingReport(state, "acct_demo", pet.id, {
+    client_report_id: "tamper-held-award",
+    signals: { testsRun: 99, milestone: true, filesChangedBucket: "large" },
+  });
+  held.report.pet_xp_delta = 10;
+
+  const job = runServerAuthorityJob(state, { adminAccountId: "acct_demo" });
+  assert.equal(job.abuse_alerts.some((alert) => alert.kind === "audit_integrity"), true);
+  assert.equal(
+    job.abuse_alerts.some((alert) => alert.summary?.code === "held_report_awarded_xp"),
+    true,
+  );
+  assert.equal(accountIntegrityStatus(state, "acct_demo").automatic_restrictions.ranked_locked, false);
+});
+
 function createPetFixture() {
   const state = createDefaultState();
   const asset = createPetAsset(state, "acct_demo", {});

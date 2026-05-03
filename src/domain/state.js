@@ -338,6 +338,9 @@ export function adminConsole(state) {
       .reverse(),
     moderation_queue: moderationQueue(state),
     abuse_alerts: activeAbuseAlerts(state),
+    recent_risk_events: (state.riskEvents ?? []).slice(0, 50),
+    recent_enforcement_events: (state.events ?? []).filter((event) => event.type === "enforcement.updated").slice(0, 20),
+    recent_moderation_events: (state.events ?? []).filter((event) => event.type === "asset.moderated").slice(0, 20),
     suspicious_accounts: (state.accounts ?? [])
       .map((account) => accountIntegrityStatus(state, account.id))
       .filter((status) => status.level !== "clear" || status.automatic_restrictions.ranked_locked),
@@ -1624,6 +1627,10 @@ function reviewCases(state) {
       pet_id: report.pet_id,
       subject_id: report.id,
       status: report.status,
+      risk_score: report.risk_score ?? 0,
+      risk_flags: report.risk_flags ?? [],
+      report_type: report.report_type,
+      quality_score: report.quality_score,
       reason: report.review_reason ?? report.risk_flags?.join(", ") ?? "review",
       created_at: report.created_at,
     }));
@@ -1637,6 +1644,7 @@ function reviewCases(state) {
       account_id: status.account_id,
       subject_id: status.account_id,
       status: status.level,
+      integrity: status,
       reason: status.recommended_actions.join(", ") || "risk_score",
       created_at: new Date().toISOString(),
     }));
@@ -1647,6 +1655,8 @@ function reviewCases(state) {
     account_id: asset.owner_account_id,
     subject_id: asset.id,
     status: asset.safety_status,
+    open_report_count: asset.open_report_count ?? 0,
+    visibility: asset.visibility,
     reason: asset.moderation_reason ?? "asset_report",
     created_at: asset.created_at,
   }));
@@ -1698,6 +1708,26 @@ function generateAbuseAlerts(state, nowIso) {
       severity: summary.score >= 250 ? "high" : "medium",
       status: "open",
       summary,
+      created_at: nowIso,
+    };
+    state.abuseAlerts.unshift(alert);
+    created.push(alert);
+  }
+  const audit = auditState(state);
+  for (const finding of audit.findings.filter((item) => item.severity === "high" || item.severity === "critical")) {
+    const dedupeKey = `audit:${finding.code}:${createHash("sha256").update(finding.message).digest("hex").slice(0, 12)}`;
+    if (state.abuseAlerts.some((alert) => alert.dedupe_key === dedupeKey && alert.status === "open")) continue;
+    const alert = {
+      id: `abuse_${randomUUID()}`,
+      dedupe_key: dedupeKey,
+      kind: "audit_integrity",
+      account_id: null,
+      severity: finding.severity,
+      status: "open",
+      summary: {
+        code: finding.code,
+        message: finding.message,
+      },
       created_at: nowIso,
     };
     state.abuseAlerts.unshift(alert);

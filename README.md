@@ -49,6 +49,7 @@ http://localhost:4317
 - Admin operations console for held Training Reports, moderation queue, risk cases, manual enforcement, and season operations.
 - Asset report/moderation flow with report threshold privacy protection.
 - Level cosmetic rewards and season reward generation for non-ranked and ranked loops.
+- Public pet profile, skill alias controls, replay timeline, and queue/invite status cards.
 - Sandbox battle simulation for result testing. It does not award official XP or ranked LP.
 - LP and tier/division updates only for official Ranked PvP matchmaking battles.
 - Leaderboard and server event log.

@@ -27,3 +27,5 @@ npm run verify:loop -- 2
 ```
 
 Keep `CODEX_PET_AUTH_DEV_CODE=false` and `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false` outside local testing. Configure `CODEX_PET_BRIDGE_SECRET` and `CODEX_PET_BRIDGE_ATTESTATION_SECRET` before trusting high-value Training Reports from CLI or MCP bridge flows.
+
+The admin console shows open review cases, audit findings, active abuse alerts, recent risk events, enforcement history, and asset moderation history. Audit-driven alerts are review-only signals; ranked locks stay manual to avoid false-positive punishment.

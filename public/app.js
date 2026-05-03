@@ -15,6 +15,8 @@ const state = {
   adminConsole: null,
   adminOutput: null,
   xpStatusByPetId: new Map(),
+  profileByPetId: new Map(),
+  replaysByPetId: new Map(),
   matchmaking: null,
   activePetId: null,
   activeBattleId: null,
@@ -44,6 +46,9 @@ const els = queryElements({
   classPill: "#classPill",
   rankPill: "#rankPill",
   statList: "#statList",
+  profileSummary: "#profileSummary",
+  skillAliasList: "#skillAliasList",
+  saveAliasesButton: "#saveAliasesButton",
   xpStatus: "#xpStatus",
   resetText: "#resetText",
   refreshButton: "#refreshButton",
@@ -55,20 +60,28 @@ const els = queryElements({
   startBattleButton: "#startBattleButton",
   joinQueueButton: "#joinQueueButton",
   queueStatusButton: "#queueStatusButton",
+  cancelQueueButton: "#cancelQueueButton",
   createInviteButton: "#createInviteButton",
   inviteCodeInput: "#inviteCodeInput",
   acceptInviteButton: "#acceptInviteButton",
+  matchmakingCards: "#matchmakingCards",
   matchmakingOutput: "#matchmakingOutput",
   battleState: "#battleState",
+  battleTimeline: "#battleTimeline",
   battleSkillSelect: "#battleSkillSelect",
   actionButtons: "[data-action]",
   battleOutput: "#battleOutput",
+  replayRefreshButton: "#replayRefreshButton",
+  replayList: "#replayList",
   leaderboardBody: "#leaderboardBody",
   eventLog: "#eventLog",
   adminRefreshButton: "#adminRefreshButton",
   adminRunOpsButton: "#adminRunOpsButton",
+  adminCaseFilter: "#adminCaseFilter",
   adminSummary: "#adminSummary",
+  adminAuditFindings: "#adminAuditFindings",
   adminReviewCases: "#adminReviewCases",
+  adminHistory: "#adminHistory",
   adminOutput: "#adminOutput",
   adminPanel: ".admin-panel",
 });
@@ -145,13 +158,17 @@ function bindEvents() {
   els.seedPetButton?.addEventListener("click", () => runAction(() => createPet({ demo: true }), "Demo pet registered."));
   els.createPetButton?.addEventListener("click", () => runAction(() => createPet({ demo: false }), "Pet created."));
   els.refreshButton?.addEventListener("click", () => runAction(refresh, "Refreshed."));
+  els.saveAliasesButton?.addEventListener("click", () => runAction(saveSkillAliases, "Skill names saved."));
   els.draftReportButton?.addEventListener("click", () => runAction(draftTrainingReport));
   els.submitReportButton?.addEventListener("click", () => runAction(submitTrainingReport, "Training report submitted."));
   els.startBattleButton?.addEventListener("click", () => runAction(startTurnBattle));
   els.joinQueueButton?.addEventListener("click", () => runAction(joinRandomMatch));
   els.queueStatusButton?.addEventListener("click", () => runAction(loadMatchmakingStatus));
+  els.cancelQueueButton?.addEventListener("click", () => runAction(cancelQueuedMatch, "Queue cancelled."));
   els.createInviteButton?.addEventListener("click", () => runAction(createFriendInvite));
   els.acceptInviteButton?.addEventListener("click", () => runAction(acceptFriendInvite));
+  els.replayRefreshButton?.addEventListener("click", () => runAction(loadActivePetDetails, "Replays refreshed."));
+  els.adminCaseFilter?.addEventListener("change", renderAdminConsole);
   els.adminRefreshButton?.addEventListener("click", () => runAction(loadAdminConsole, "Admin console refreshed."));
   els.adminRunOpsButton?.addEventListener("click", () => runAction(runAdminOpsJob, "Ops job completed."));
   for (const button of els.actionButtons ?? []) {
@@ -202,8 +219,14 @@ async function refreshSession() {
 async function loadActivePetDetails() {
   const pet = activePet();
   if (!pet?.id) return;
-  const status = await loadOptional(`/api/pets/${encodeURIComponent(pet.id)}/xp-status`, "XP status could not be loaded.");
+  const [status, profile, replays] = await Promise.all([
+    loadOptional(`/api/pets/${encodeURIComponent(pet.id)}/xp-status`, "XP status could not be loaded."),
+    loadOptional(`/api/public/pets/${encodeURIComponent(pet.id)}`, "Profile could not be loaded."),
+    loadOptional(`/api/pets/${encodeURIComponent(pet.id)}/replays`, "Replays could not be loaded."),
+  ]);
   if (status) state.xpStatusByPetId.set(pet.id, status);
+  if (profile) state.profileByPetId.set(pet.id, profile);
+  if (replays) state.replaysByPetId.set(pet.id, asArray(replays.replays));
 }
 
 async function loadMatchmakingStatus() {
@@ -222,9 +245,11 @@ function renderApp() {
   renderChrome();
   renderPetSelect();
   renderActivePet();
+  renderPublicProfile();
   renderXpStatus();
   renderMatchmaking(state.matchmaking);
   renderBattle(state.activeBattle);
+  renderReplays();
   renderLeaderboard(state.leaderboard);
   renderEvents(state.events);
   renderAdminConsole();
@@ -295,6 +320,49 @@ function renderStats(pet) {
   }
 }
 
+function renderPublicProfile() {
+  clear(els.profileSummary);
+  clear(els.skillAliasList);
+  const pet = activePet();
+  if (!pet) {
+    renderEmpty(els.profileSummary, "No pet selected.");
+    return;
+  }
+
+  const profile = state.profileByPetId.get(pet.id);
+  const record = profile?.record ?? {};
+  const rows = [
+    ["Record", `${record.wins ?? 0}-${record.losses ?? 0}-${record.draws ?? 0}`],
+    ["Battles", record.battles ?? 0],
+    ["Asset", pet.asset?.is_visible ? "public" : "restricted"],
+    ["Rewards", asArray(pet.cosmetic_rewards).map((reward) => reward.name ?? reward.id).join(", ") || EMPTY_LABEL],
+  ];
+  for (const [label, value] of rows) {
+    const item = document.createElement("div");
+    appendText(item, "strong", label);
+    appendText(item, "span", value);
+    els.profileSummary?.append(item);
+  }
+
+  const skills = asArray(pet.skills);
+  if (!skills.length) {
+    renderEmpty(els.skillAliasList, "No skills in current loadout.");
+    return;
+  }
+  for (const skill of skills) {
+    const row = document.createElement("label");
+    row.className = "skill-alias-row";
+    appendText(row, "span", `${skill.officialName ?? skill.id} · ${skill.role ?? "skill"}`);
+    const input = document.createElement("input");
+    input.className = "field";
+    input.dataset.skillAlias = skill.id;
+    input.maxLength = 32;
+    input.value = skill.alias ?? "";
+    row.append(input);
+    els.skillAliasList?.append(row);
+  }
+}
+
 function renderXpStatus() {
   clear(els.xpStatus);
   const pet = activePet();
@@ -356,6 +424,24 @@ async function createPet({ demo }) {
     },
   });
   state.activePetId = pet.pet?.id ?? state.activePetId;
+  await refresh();
+}
+
+async function saveSkillAliases() {
+  const pet = requireActivePet();
+  const aliases = {};
+  for (const input of document.querySelectorAll("[data-skill-alias]")) {
+    const value = input.value.trim();
+    if (value) aliases[input.dataset.skillAlias] = value;
+  }
+  const result = await api(`/api/pets/${encodeURIComponent(pet.id)}/loadout`, {
+    method: "PUT",
+    body: {
+      skills: asArray(pet.skills).map((skill) => skill.id),
+      aliases,
+    },
+  });
+  state.activePetId = result.pet?.id ?? pet.id;
   await refresh();
 }
 
@@ -496,6 +582,18 @@ async function joinRandomMatch() {
   renderApp();
 }
 
+async function cancelQueuedMatch() {
+  if (!state.matchmaking) await loadMatchmakingStatus();
+  const ticket = asArray(state.matchmaking?.tickets).find((entry) => entry.status === "waiting") ?? state.matchmaking?.ticket;
+  if (!ticket?.id) throw new Error("No waiting queue ticket.");
+  const result = await api("/api/matchmaking/cancel", {
+    method: "POST",
+    body: { ticket_id: ticket.id },
+  });
+  state.matchmaking = { ...state.matchmaking, status: "cancelled", ticket: result.ticket, tickets: [result.ticket] };
+  renderApp();
+}
+
 async function createFriendInvite() {
   const pet = requireActivePet();
   const result = await api(`/api/pets/${encodeURIComponent(pet.id)}/friend-invites`, {
@@ -537,8 +635,8 @@ function renderBattleSkills(pet) {
   const skills = asArray(pet?.skills);
   const options = skills.length
     ? skills.map((skill) => ({
-        value: skill.id,
-        label: `${skill.officialName ?? skill.id} · ${skill.role ?? "skill"}`,
+      value: skill.id,
+      label: `${skillLabel(skill)} · ${skill.role ?? "skill"}`,
       }))
     : [{ value: "", label: "No skills in current loadout" }];
   replaceOptions(els.battleSkillSelect, options, options[0]?.value ?? "");
@@ -546,8 +644,10 @@ function renderBattleSkills(pet) {
 
 function renderBattle(battle) {
   clear(els.battleState);
+  clear(els.battleTimeline);
   if (!battle) {
     renderEmpty(els.battleState, "No active battle.");
+    renderEmpty(els.battleTimeline, "No battle timeline.");
     setText(els.battleOutput, "No active battle.");
     return;
   }
@@ -565,6 +665,7 @@ function renderBattle(battle) {
   appendText(turnLine, "strong", `Turn ${battle.turn_index ?? 0}`);
   appendText(turnLine, "span", battle.status === "in_progress" ? `${secondsLeft ?? "?"}s left` : battle.result?.result ?? battle.status);
   els.battleState?.append(turnLine);
+  renderBattleTimeline(battle, els.battleTimeline);
 
   setJson(els.battleOutput, {
     id: battle.id,
@@ -598,6 +699,7 @@ function battleSide(label, side) {
 function renderMatchmaking(result) {
   const activeTickets = asArray(result?.tickets);
   const activeBattles = asArray(result?.active_battles);
+  renderMatchmakingCards(result, activeTickets, activeBattles);
   const payload = result
     ? {
         status: result.status ?? result.invite?.status ?? activeTickets[0]?.status ?? "status",
@@ -610,6 +712,71 @@ function renderMatchmaking(result) {
       }
     : { status: "No matchmaking activity." };
   setJson(els.matchmakingOutput, payload);
+}
+
+function renderMatchmakingCards(result, tickets = [], activeBattles = []) {
+  clear(els.matchmakingCards);
+  if (!result) {
+    renderEmpty(els.matchmakingCards, "No matchmaking activity.");
+    return;
+  }
+  const displayTickets = tickets.length ? tickets : result.ticket ? [result.ticket] : [];
+  const displayBattles = activeBattles.length ? activeBattles : result.battle ? [result.battle] : [];
+  if (result.invite) {
+    els.matchmakingCards?.append(statusCard("Invite", [
+      ["Code", result.invite.code],
+      ["Status", result.invite.status],
+      ["Class", result.invite.battle_class],
+      ["Expires", formatTime(result.invite.expires_at)],
+    ]));
+  }
+  for (const ticket of displayTickets) {
+    els.matchmakingCards?.append(statusCard("Queue", [
+      ["Mode", ticket.mode],
+      ["Status", ticket.status],
+      ["Class", ticket.battle_class],
+      ["LP", ticket.lp],
+      ["Window", `±${ticket.search_window_lp ?? "?"}`],
+      ["Wait", `${Math.floor(Number(ticket.wait_seconds ?? 0))}s`],
+    ]));
+  }
+  for (const battle of displayBattles) {
+    els.matchmakingCards?.append(statusCard("Battle", [
+      ["Mode", battle.mode],
+      ["Status", battle.status],
+      ["Side", battle.viewer_side],
+      ["Room", shortId(battle.id)],
+    ]));
+  }
+  if (!result.invite && !displayTickets.length && !displayBattles.length) {
+    renderEmpty(els.matchmakingCards, result.status ?? "No matchmaking activity.");
+  }
+}
+
+function renderReplays() {
+  clear(els.replayList);
+  const pet = activePet();
+  if (!pet) {
+    renderEmpty(els.replayList, "No pet selected.");
+    return;
+  }
+  const replays = state.replaysByPetId.get(pet.id) ?? [];
+  if (!replays.length) {
+    renderEmpty(els.replayList, "No finished replays yet.");
+    return;
+  }
+  for (const replay of replays.slice(0, 8)) {
+    const item = document.createElement("div");
+    item.className = "timeline-item replay-item";
+    const header = document.createElement("div");
+    appendText(header, "strong", `${replay.mode ?? "battle"} · ${replay.result ?? EMPTY_LABEL}`);
+    appendText(header, "span", `${replay.turn_count ?? 0} turns`);
+    item.append(header);
+    appendText(item, "div", `${shortId(replay.room_id ?? replay.battle_id)} · ${shortHash(replay.replay_hash)} · ${formatDateTime(replay.created_at)}`, "timeline-meta");
+    const latest = asArray(replay.log).at(-1);
+    if (latest) item.append(turnLogItem(latest));
+    els.replayList?.append(item);
+  }
 }
 
 function renderLeaderboard(rows) {
@@ -662,7 +829,9 @@ function renderAdminConsole() {
   if (els.adminPanel) els.adminPanel.hidden = !isAdmin();
   if (!isAdmin()) return;
   clear(els.adminSummary);
+  clear(els.adminAuditFindings);
   clear(els.adminReviewCases);
+  clear(els.adminHistory);
   const consoleState = state.adminConsole;
   if (!consoleState) {
     renderEmpty(els.adminReviewCases, "Admin console not loaded.");
@@ -673,6 +842,8 @@ function renderAdminConsole() {
     ["Held Reports", consoleState.held_training_reports?.length ?? 0],
     ["Abuse Alerts", consoleState.abuse_alerts?.length ?? 0],
     ["Moderation", consoleState.moderation_queue?.length ?? 0],
+    ["Audit Findings", consoleState.audit?.findings?.length ?? 0],
+    ["Suspicious", consoleState.suspicious_accounts?.length ?? 0],
   ];
   for (const [label, value] of summary) {
     const item = document.createElement("div");
@@ -680,7 +851,20 @@ function renderAdminConsole() {
     appendText(item, "div", value);
     els.adminSummary?.append(item);
   }
-  const cases = asArray(consoleState.review_cases);
+  renderAdminAudit(consoleState);
+  const alertCases = asArray(consoleState.abuse_alerts).map((alert) => ({
+    id: `case_${alert.id}`,
+    kind: "abuse_alert",
+    priority: alert.severity ?? "medium",
+    account_id: alert.account_id,
+    subject_id: alert.id,
+    status: alert.status,
+    reason: `${alert.kind ?? "alert"} · ${safeJson(alert.summary)}`,
+    created_at: alert.created_at,
+  }));
+  const allCases = [...asArray(consoleState.review_cases), ...alertCases];
+  const filter = els.adminCaseFilter?.value ?? "all";
+  const cases = filter === "all" ? allCases : allCases.filter((item) => item.kind === filter);
   if (!cases.length) {
     renderEmpty(els.adminReviewCases, "No open review cases.");
   }
@@ -689,7 +873,11 @@ function renderAdminConsole() {
     row.className = "review-item";
     const text = document.createElement("div");
     appendText(text, "strong", `${item.kind} · ${item.priority}`);
-    appendText(text, "div", `${item.subject_id} · ${item.reason}`);
+    appendText(text, "div", `${item.subject_id} · ${item.reason}`, "timeline-meta");
+    appendText(text, "div", `Account ${item.account_id ?? EMPTY_LABEL} · ${formatDateTime(item.created_at)}`, "timeline-meta");
+    if (item.risk_score !== undefined) appendText(text, "div", `Risk ${item.risk_score} · ${asArray(item.risk_flags).join(", ")}`, "timeline-meta");
+    if (item.integrity) appendText(text, "div", `24h risk ${item.integrity.risk_score_24h} · ${item.integrity.risk_events_24h} events`, "timeline-meta");
+    if (item.open_report_count !== undefined) appendText(text, "div", `${item.open_report_count} open reports · ${item.visibility}`, "timeline-meta");
     row.append(text);
     if (item.kind === "training_report") {
       const actions = document.createElement("div");
@@ -732,12 +920,64 @@ function renderAdminConsole() {
     }
     els.adminReviewCases?.append(row);
   }
+  renderAdminHistory(consoleState);
   setJson(els.adminOutput, state.adminOutput ?? {
     ops: consoleState.ops,
     audit_ok: consoleState.audit?.ok,
     auth_provider: consoleState.auth_provider,
     bridge_attestation: consoleState.bridge_attestation,
   });
+}
+
+function renderAdminAudit(consoleState) {
+  const findings = asArray(consoleState.audit?.findings);
+  const box = document.createElement("div");
+  box.className = "admin-block";
+  appendText(box, "strong", "Audit");
+  if (!findings.length) {
+    appendText(box, "div", "OK", "timeline-meta");
+  } else {
+    for (const finding of findings.slice(0, 6)) {
+      appendText(box, "div", `${finding.severity} · ${finding.code} · ${finding.message}`, "timeline-meta");
+    }
+  }
+  els.adminAuditFindings?.append(box);
+
+  const accounts = asArray(consoleState.suspicious_accounts);
+  const accountBox = document.createElement("div");
+  accountBox.className = "admin-block";
+  appendText(accountBox, "strong", "Accounts");
+  if (!accounts.length) {
+    appendText(accountBox, "div", "Clear", "timeline-meta");
+  } else {
+    for (const account of accounts.slice(0, 6)) {
+      appendText(accountBox, "div", `${account.account_id} · ${account.level} · risk ${account.risk_score_24h}`, "timeline-meta");
+    }
+  }
+  els.adminAuditFindings?.append(accountBox);
+}
+
+function renderAdminHistory(consoleState) {
+  const histories = [
+    ["Enforcement", consoleState.recent_enforcement_events],
+    ["Moderation", consoleState.recent_moderation_events],
+    ["Risk Events", consoleState.recent_risk_events],
+  ];
+  for (const [label, entries] of histories) {
+    const box = document.createElement("div");
+    box.className = "admin-block";
+    appendText(box, "strong", label);
+    const list = asArray(entries);
+    if (!list.length) {
+      appendText(box, "div", "No recent entries.", "timeline-meta");
+    }
+    for (const entry of list.slice(0, 5)) {
+      const type = entry.type ?? entry.kind ?? entry.id ?? "entry";
+      const detail = entry.payload ? safeJson(entry.payload) : entry.metadata ? safeJson(entry.metadata) : safeJson(entry.summary);
+      appendText(box, "div", `${formatTime(entry.created_at)} · ${type} · ${detail}`, "timeline-meta");
+    }
+    els.adminHistory?.append(box);
+  }
 }
 
 function updateControls() {
@@ -750,8 +990,11 @@ function updateControls() {
     els.startBattleButton,
     els.joinQueueButton,
     els.queueStatusButton,
+    els.cancelQueueButton,
     els.createInviteButton,
     els.acceptInviteButton,
+    els.replayRefreshButton,
+    els.saveAliasesButton,
   ];
   for (const control of disableWhenNoPet) {
     if (control) control.disabled = state.busy || !signedIn || !hasPet;
@@ -762,7 +1005,7 @@ function updateControls() {
   for (const control of [els.seedPetButton, els.createPetButton, els.refreshButton, els.petSelect]) {
     if (control) control.disabled = state.busy || !signedIn;
   }
-  for (const control of [els.adminRefreshButton, els.adminRunOpsButton]) {
+  for (const control of [els.adminRefreshButton, els.adminRunOpsButton, els.adminCaseFilter]) {
     if (control) control.disabled = state.busy || !isAdmin();
   }
   for (const control of [els.authMethodInput, els.authIdentifierInput, els.authChallengeButton, els.authCodeInput, els.authVerifyButton]) {
@@ -792,6 +1035,38 @@ function collectSignals() {
     filesChangedBucket: document.querySelector("#filesChangedBucket")?.value ?? "small",
     testsRun: Number(document.querySelector("#testsRun")?.value ?? 0),
   };
+}
+
+function renderBattleTimeline(battle, target) {
+  clear(target);
+  const log = asArray(battle?.log);
+  if (!log.length) {
+    renderEmpty(target, "Turn log pending.");
+    return;
+  }
+  for (const turn of log.slice(-6).reverse()) {
+    target?.append(turnLogItem(turn, battle));
+  }
+}
+
+function turnLogItem(turn, battle = null) {
+  const item = document.createElement("div");
+  item.className = "timeline-item";
+  const titleRow = document.createElement("div");
+  appendText(titleRow, "strong", `Turn ${turn.turn ?? EMPTY_LABEL}`);
+  appendText(titleRow, "span", formatTime(turn.resolved_at));
+  item.append(titleRow);
+
+  const actions = turn.actions ?? {};
+  const playerName = battle?.sides?.player?.is_you ? "You" : battle?.sides?.player?.name ?? "Player";
+  const opponentName = battle?.sides?.opponent?.is_you ? "You" : battle?.sides?.opponent?.name ?? "Opponent";
+  appendText(item, "div", `${playerName}: ${actionLabel(actions.player)} · ${opponentName}: ${actionLabel(actions.opponent)}`, "timeline-meta");
+
+  const effects = asArray(turn.effects)
+    .map((effect) => `${title(effect.side)} ${effect.damage ?? 0} dmg${effect.self_heal ? `, ${effect.self_heal} heal` : ""}`)
+    .join(" · ");
+  appendText(item, "div", effects || "No effects.", "timeline-meta");
+  return item;
 }
 
 function readAtlasDataUrl() {
@@ -896,6 +1171,49 @@ function summarizePet(pet) {
     rank: pet.rating?.label,
     lp: pet.rating?.lp,
   };
+}
+
+function statusCard(titleText, rows) {
+  const item = document.createElement("div");
+  item.className = "status-card";
+  appendText(item, "strong", titleText);
+  for (const [label, value] of rows) {
+    const row = document.createElement("div");
+    appendText(row, "span", label);
+    appendText(row, "b", value);
+    item.append(row);
+  }
+  return item;
+}
+
+function skillLabel(skillOrId) {
+  const skill =
+    typeof skillOrId === "string"
+      ? asArray(activePet()?.skills).find((entry) => entry.id === skillOrId) ?? { id: skillOrId }
+      : skillOrId ?? {};
+  const official = skill.officialName ?? skill.skill_name ?? skill.id ?? "skill";
+  return skill.alias ? `${skill.alias} (${official})` : official;
+}
+
+function actionLabel(action) {
+  if (!action) return "pending";
+  if (action.kind === "skill") {
+    const equipped = asArray(activePet()?.skills).find((skill) => skill.id === action.skill_id);
+    return skillLabel(equipped ?? { id: action.skill_id, skill_name: action.skill_name });
+  }
+  return action.kind ?? "action";
+}
+
+function shortId(value) {
+  const text = String(value ?? EMPTY_LABEL);
+  if (text.length <= 14) return text;
+  return `${text.slice(0, 8)}...${text.slice(-4)}`;
+}
+
+function shortHash(value) {
+  const text = String(value ?? EMPTY_LABEL);
+  if (text.length <= 16) return text;
+  return `${text.slice(0, 10)}...`;
 }
 
 function queryElements(selectors) {

@@ -7,8 +7,13 @@ export function hashLedgerEntry(entry) {
 
 export function auditState(state) {
   const findings = [];
-  const activePetIds = new Set(state.pets.filter((pet) => pet.status === "active").map((pet) => pet.id));
+  const accounts = state.accounts ?? [];
+  const pets = state.pets ?? [];
+  const accountIds = new Set(accounts.map((account) => account.id));
+  const petById = new Map(pets.map((pet) => [pet.id, pet]));
+  const activePetIds = new Set(pets.filter((pet) => pet.status === "active").map((pet) => pet.id));
   const battleRoomIds = new Set((state.battleRooms ?? []).map((room) => room.id));
+  const activeBattlePets = new Map();
 
   verifyChronologicalChain(state.xpLedger ?? [], "xp_ledger", findings);
   verifyChronologicalChain(state.lpLedger ?? [], "lp_ledger", findings);
@@ -49,6 +54,12 @@ export function auditState(state) {
   }
 
   for (const room of state.battleRooms ?? []) {
+    if (room.status === "in_progress") {
+      for (const side of [room.sides?.player, room.sides?.opponent]) {
+        if (!side?.pet_id) continue;
+        activeBattlePets.set(side.pet_id, (activeBattlePets.get(side.pet_id) ?? 0) + 1);
+      }
+    }
     if (room.status === "finished" && !room.replay_hash) {
       findings.push(finding("battle_missing_replay_hash", "medium", `Finished room ${room.id} has no replay hash.`));
     }
@@ -57,6 +68,14 @@ export function auditState(state) {
       findings.push(finding("ranked_room_source_invalid", "critical", `Ranked room ${room.id} was not made by matchmaking.`));
     }
   }
+  for (const [petId, count] of activeBattlePets) {
+    if (count > 1) {
+      findings.push(finding("pet_multiple_active_battles", "critical", `Pet ${petId} is in ${count} active battle rooms.`));
+    }
+  }
+
+  verifyMatchmakingIntegrity(state, { accountIds, activePetIds, petById }, findings);
+  verifyReviewAndReportIntegrity(state, { accountIds, petById }, findings);
 
   return {
     ok: findings.filter((item) => item.severity === "critical" || item.severity === "high").length === 0,
@@ -78,6 +97,72 @@ export function auditState(state) {
     },
     checked_at: new Date().toISOString(),
   };
+}
+
+function verifyMatchmakingIntegrity(state, context, findings) {
+  const waitingKeys = new Map();
+  const now = Date.now();
+  for (const ticket of state.matchTickets ?? []) {
+    if (!context.accountIds.has(ticket.account_id)) {
+      findings.push(finding("ticket_missing_account", "high", `Waiting ticket ${ticket.id} references missing account.`));
+    }
+    const pet = context.petById.get(ticket.pet_id);
+    if (!pet || !context.activePetIds.has(ticket.pet_id)) {
+      findings.push(finding("ticket_missing_pet", "high", `Ticket ${ticket.id} references missing or inactive pet.`));
+      continue;
+    }
+    if (ticket.status !== "waiting") continue;
+    const key = `${ticket.account_id}:${ticket.pet_id}:${ticket.mode}`;
+    waitingKeys.set(key, (waitingKeys.get(key) ?? 0) + 1);
+    if (pet.battle_class !== ticket.battle_class) {
+      findings.push(finding("ticket_battle_class_stale", "high", `Ticket ${ticket.id} has stale Battle Class.`));
+    }
+    if (Number(pet.rating?.lp ?? 0) !== Number(ticket.lp ?? 0)) {
+      findings.push(finding("ticket_lp_stale", "medium", `Ticket ${ticket.id} has stale LP.`));
+    }
+  }
+  for (const [key, count] of waitingKeys) {
+    if (count > 1) findings.push(finding("duplicate_waiting_ticket", "high", `Duplicate waiting ticket bucket ${key}.`));
+  }
+
+  for (const invite of state.friendInvites ?? []) {
+    if (!context.accountIds.has(invite.host_account_id)) {
+      findings.push(finding("invite_missing_account", "high", `Invite ${invite.id} references missing host account.`));
+    }
+    if (!context.activePetIds.has(invite.host_pet_id)) {
+      findings.push(finding("invite_missing_pet", "high", `Invite ${invite.id} references missing or inactive host pet.`));
+    }
+    if (invite.status === "open" && new Date(invite.expires_at).getTime() <= now) {
+      findings.push(finding("invite_open_after_expiry", "medium", `Invite ${invite.id} is still open after expiry.`));
+    }
+  }
+}
+
+function verifyReviewAndReportIntegrity(state, context, findings) {
+  const openAssetReportKeys = new Set();
+  for (const report of state.trainingReports ?? []) {
+    if (report.status === "review" && (Number(report.pet_xp_delta ?? 0) > 0 || Number(report.style_xp_delta ?? 0) > 0)) {
+      findings.push(finding("held_report_awarded_xp", "critical", `Held Training Report ${report.id} awarded XP.`));
+    }
+    if (!context.petById.has(report.pet_id)) {
+      findings.push(finding("training_report_missing_pet", "medium", `Training Report ${report.id} references missing pet.`));
+    }
+  }
+
+  for (const report of state.assetReports ?? []) {
+    if (report.reporter_account_id === report.owner_account_id) {
+      findings.push(finding("asset_self_report", "high", `Asset report ${report.id} is a self-report.`));
+    }
+    if (!context.accountIds.has(report.reporter_account_id) || !context.accountIds.has(report.owner_account_id)) {
+      findings.push(finding("asset_report_missing_account", "medium", `Asset report ${report.id} references missing account.`));
+    }
+    if (report.status !== "open") continue;
+    const key = `${report.asset_id}:${report.reporter_account_id}`;
+    if (openAssetReportKeys.has(key)) {
+      findings.push(finding("duplicate_open_asset_report", "high", `Asset ${report.asset_id} has duplicate open report by one account.`));
+    }
+    openAssetReportKeys.add(key);
+  }
 }
 
 export function appendRiskEvent(state, input) {

@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { spawn } from "node:child_process";
-import { randomInt, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,8 +38,12 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
 
     await page.click("#seedPetButton");
     await expect(page.locator("#petTitle")).toContainText("Pebble");
+    await expect(page.locator("#profileSummary")).toContainText("Record");
     await expect(page.locator("#xpStatus")).toContainText("Pet XP");
     await expect(page.locator("#battleSkillSelect option")).toHaveCount(4);
+    await page.locator("[data-skill-alias]").first().fill("QA Burst");
+    await page.click("#saveAliasesButton");
+    await expect(page.locator("#battleSkillSelect")).toContainText("QA Burst");
 
     await page.check("#debuggingActivity");
     await page.check("#milestone");
@@ -55,9 +59,19 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
     await expect(page.locator("#battleOutput")).toContainText("in_progress");
     await page.locator('[data-action="strike"]').click();
     await expect(page.locator("#battleOutput")).toContainText("latest_turn");
+    await expect(page.locator("#battleTimeline")).toContainText("Turn 1");
+    await finishActiveBattleFromPage(page);
+    await page.click("#refreshButton");
+    await expect(page.locator("#replayList")).toContainText("casual");
+
+    await page.click("#joinQueueButton");
+    await expect(page.locator("#matchmakingCards")).toContainText("Queue");
+    await page.click("#cancelQueueButton");
+    await expect(page.locator("#matchmakingCards")).toContainText("cancelled");
 
     const heldReportId = await createHeldTrainingReportFromPage(page);
     await page.click("#adminRefreshButton");
+    await expect(page.locator("#adminAuditFindings")).toContainText("Audit");
     await expect(page.locator("#adminReviewCases")).toContainText(heldReportId);
     const heldReportRow = page.locator(".review-item", { hasText: heldReportId });
     await heldReportRow.getByRole("button", { name: "Approve" }).click();
@@ -109,6 +123,38 @@ async function createHeldTrainingReportFromPage(page) {
   });
 }
 
+async function finishActiveBattleFromPage(page) {
+  return page.evaluate(async () => {
+    const current = JSON.parse(document.querySelector("#battleOutput").textContent);
+    let view = await fetch(`/api/battles/${encodeURIComponent(current.id)}`);
+    let payload = await view.json();
+    if (!view.ok) throw new Error(`battle view failed: ${JSON.stringify(payload)}`);
+    let battle = payload.battle;
+    for (let index = 0; index < 30 && battle.status === "in_progress"; index += 1) {
+      const response = await fetch(`/api/battles/${encodeURIComponent(battle.id)}/actions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          request_id: crypto.randomUUID(),
+          kind: "strike",
+          turn_index: battle.turn_index,
+          turn_nonce: battle.turn_nonce,
+        }),
+      });
+      payload = await response.json();
+      if (!response.ok && ["TURN_STALE", "TURN_ACTION_DUPLICATE"].includes(payload.error?.code)) {
+        const latestResponse = await fetch(`/api/battles/${encodeURIComponent(battle.id)}`);
+        payload = await latestResponse.json();
+      } else if (!response.ok) {
+        throw new Error(`battle finish failed: ${JSON.stringify(payload)}`);
+      }
+      battle = payload.battle;
+    }
+    if (battle.status !== "finished") throw new Error(`battle did not finish: ${JSON.stringify(battle)}`);
+    return battle.id;
+  });
+}
+
 async function expectNoLayoutOverflow(page) {
   const layout = await page.evaluate(() => {
     const overflowNodes = Array.from(
@@ -149,7 +195,7 @@ async function expectNoLayoutOverflow(page) {
 
 async function startTempServer() {
   const tempRoot = await mkdtemp(join(tmpdir(), "codexpet-browser-"));
-  const port = randomInt(49_001, 54_000);
+  const port = await availablePort();
   const child = spawn(process.execPath, ["src/server/index.js"], {
     cwd: repoRoot,
     env: {
@@ -183,6 +229,18 @@ async function startTempServer() {
       await closeServer(child, closed, tempRoot);
     },
   };
+}
+
+function availablePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
 }
 
 async function waitForServer(baseUrl) {

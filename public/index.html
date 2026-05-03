@@ -94,6 +94,15 @@
 
           <article class="panel">
             <div class="panel-header">
+              <h2>Public Profile</h2>
+              <button id="saveAliasesButton" class="secondary-button">Save Skill Names</button>
+            </div>
+            <div id="profileSummary" class="profile-summary"></div>
+            <div id="skillAliasList" class="skill-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
               <h2>Today Progress</h2>
               <button id="refreshButton" class="icon-button" title="Refresh">Refresh</button>
             </div>
@@ -149,14 +158,19 @@
               <button id="startBattleButton" class="secondary-button">Start Bot Battle</button>
               <button id="joinQueueButton" class="primary-button">Random Match</button>
             </div>
-            <button id="queueStatusButton" class="secondary-button full-button">Queue Status</button>
+            <div class="button-row stacked-row">
+              <button id="queueStatusButton" class="secondary-button">Queue Status</button>
+              <button id="cancelQueueButton" class="secondary-button">Cancel Queue</button>
+            </div>
             <div class="invite-row">
               <button id="createInviteButton" class="secondary-button">Create Invite</button>
               <input id="inviteCodeInput" class="field" maxlength="8" placeholder="Invite code" />
               <button id="acceptInviteButton" class="secondary-button">Accept</button>
             </div>
+            <div id="matchmakingCards" class="matchmaking-cards"></div>
             <pre id="matchmakingOutput" class="output compact-output">No matchmaking activity.</pre>
             <div id="battleState" class="battle-state"></div>
+            <div id="battleTimeline" class="timeline-list"></div>
             <label>
               Skill
               <select id="battleSkillSelect" class="field"></select>
@@ -168,6 +182,14 @@
               <button data-action="skill" class="primary-button">Skill</button>
             </div>
             <pre id="battleOutput" class="output">No active battle.</pre>
+          </article>
+
+          <article class="panel wide">
+            <div class="panel-header">
+              <h2>Replays</h2>
+              <button id="replayRefreshButton" class="secondary-button">Refresh</button>
+            </div>
+            <div id="replayList" class="timeline-list"></div>
           </article>
 
           <article class="panel wide">
@@ -196,12 +218,21 @@
             <div class="panel-header">
               <h2>Admin Operations</h2>
               <div class="button-row">
+                <select id="adminCaseFilter" class="field compact-field">
+                  <option value="all">All Cases</option>
+                  <option value="training_report">Training</option>
+                  <option value="account_integrity">Accounts</option>
+                  <option value="asset_moderation">Assets</option>
+                  <option value="abuse_alert">Alerts</option>
+                </select>
                 <button id="adminRefreshButton" class="secondary-button">Review</button>
                 <button id="adminRunOpsButton" class="primary-button">Run Ops Job</button>
               </div>
             </div>
             <div id="adminSummary" class="ops-summary"></div>
+            <div id="adminAuditFindings" class="admin-subgrid"></div>
             <div id="adminReviewCases" class="event-log"></div>
+            <div id="adminHistory" class="admin-subgrid"></div>
             <pre id="adminOutput" class="output compact-output">Admin console unavailable.</pre>
           </article>
         </section>
