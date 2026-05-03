@@ -2,6 +2,8 @@
 import { readFile } from "node:fs/promises";
 import { createHmac, randomUUID } from "node:crypto";
 import { basename } from "node:path";
+import { stdin as input, stdout as output } from "node:process";
+import { createInterface } from "node:readline/promises";
 import { buildSignalsFromWorkspace } from "./signals.js";
 
 const DEFAULT_BASE_URL = process.env.CODEX_PET_LEAGUE_URL ?? "http://localhost:4317";
@@ -222,6 +224,16 @@ async function main(args) {
     return;
   }
 
+  if (area === "battle" && action === "watch") {
+    await watchBattle(client, parsed.flags);
+    return;
+  }
+
+  if (area === "battle" && action === "play") {
+    await playBattle(client, parsed.flags);
+    return;
+  }
+
   if (area === "battle" && action === "action") {
     if (!parsed.flags.battle) throw new Error("Pass --battle battle_room_id");
     const current = await client.get(`/api/battles/${parsed.flags.battle}`);
@@ -314,6 +326,16 @@ async function buildLeagueHome(client, petId = null) {
     matchmaking,
     leaderboard: boardResult?.leaderboard ?? [],
   };
+}
+
+async function resolveBattleId(client, flags = {}) {
+  if (flags.battle) return flags.battle;
+  const pet = flags.pet ? await resolvePet(client, flags.pet) : null;
+  const suffix = pet ? `?pet_id=${encodeURIComponent(pet.id)}` : "";
+  const matchmaking = await client.get(`/api/matchmaking/status${suffix}`);
+  const active = matchmaking.active_battles?.[0];
+  if (active?.id) return active.id;
+  throw new Error("No active battle found. Pass --battle battle_room_id or start/join a battle first.");
 }
 
 async function listPets(client) {
@@ -632,6 +654,190 @@ function printBattleActionOptions(battle, rules = null) {
   );
 }
 
+async function watchBattle(client, flags = {}) {
+  const battleId = await resolveBattleId(client, flags);
+  const intervalMs = Math.max(500, Number(flags.interval ?? 1000));
+  if (!flags.once && !output.isTTY) {
+    throw new Error("battle watch needs a TTY. Use --once for a single non-interactive snapshot.");
+  }
+
+  for (;;) {
+    const [result, rules] = await Promise.all([
+      client.get(`/api/battles/${battleId}`),
+      optional(client.get("/api/rules")),
+    ]);
+    if (!flags.once) clearTerminal();
+    printTerminalBattle(result.battle, rules);
+    if (flags.once || result.battle.status === "finished") return;
+    await sleep(intervalMs);
+  }
+}
+
+async function playBattle(client, flags = {}) {
+  const battleId = await resolveBattleId(client, flags);
+  const rules = await optional(client.get("/api/rules"));
+  if (flags.auto || !input.isTTY || !output.isTTY) {
+    const result = await client.get(`/api/battles/${battleId}`);
+    if (result.battle.status !== "in_progress") {
+      printTerminalBattle(result.battle, rules);
+      return;
+    }
+    const action = actionFromRecommendation(result.battle, rules);
+    const submitted = await submitBattleTurn(client, result.battle, action);
+    printTerminalBattle(submitted.battle, rules);
+    console.log(`Submitted: ${action.kind}${action.skill_id ? ` ${action.skill_id}` : ""}`);
+    if (!flags.auto && (!input.isTTY || !output.isTTY)) {
+      console.log("Tip: run in a real terminal for interactive controls, or pass --auto from Codex sessions.");
+    }
+    return;
+  }
+
+  const rl = createInterface({ input, output });
+  try {
+    for (;;) {
+      const [result, latestRules] = await Promise.all([
+        client.get(`/api/battles/${battleId}`),
+        optional(client.get("/api/rules"), rules),
+      ]);
+      clearTerminal();
+      printTerminalBattle(result.battle, latestRules);
+      if (result.battle.status !== "in_progress") return;
+
+      const answer = (await rl.question("Action [s]trike [g]uard [f]ocus s[k]ill [a]uto [r]efresh [q]uit > ")).trim().toLowerCase();
+      if (["q", "quit", "exit"].includes(answer)) return;
+      if (["", "r", "refresh"].includes(answer)) continue;
+
+      const action = await actionFromInput(answer, result.battle, latestRules, rl);
+      if (!action) continue;
+      try {
+        const submitted = await submitBattleTurn(client, result.battle, action);
+        if (submitted.battle?.status === "finished") {
+          clearTerminal();
+          printTerminalBattle(submitted.battle, latestRules);
+          return;
+        }
+      } catch (error) {
+        console.log(`Action failed: ${error.message}`);
+        await rl.question("Press Enter to refresh.");
+      }
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+async function actionFromInput(answer, battle, rules, rl) {
+  if (["s", "strike"].includes(answer)) return { kind: "strike" };
+  if (["g", "guard"].includes(answer)) return { kind: "guard" };
+  if (["f", "focus"].includes(answer)) return { kind: "focus" };
+  if (["a", "auto"].includes(answer)) return actionFromRecommendation(battle, rules);
+  if (["k", "skill"].includes(answer)) {
+    const ownSide = viewerSide(battle);
+    const skills = ownSide.skills ?? [];
+    if (!skills.length) {
+      console.log("No equipped skills.");
+      return null;
+    }
+    const skillsById = new Map((rules?.skills ?? []).map((skill) => [skill.id, skill]));
+    console.log("Skills:");
+    skills.forEach((skillId, index) => {
+      const skill = skillsById.get(skillId) ?? inferSkillFromId(skillId);
+      const alias = ownSide.skill_aliases?.[skillId];
+      const label = alias ? `${alias} / ${skill?.officialName ?? skillId}` : skill?.officialName ?? skillId;
+      const ready = Number(ownSide.energy ?? 0) >= skillCost(skill?.role) ? "ready" : `needs ${skillCost(skill?.role)} energy`;
+      console.log(`  ${index + 1}. ${skillId} · ${label} · ${skill?.role ?? "skill"} · ${ready}`);
+    });
+    const choice = (await rl.question("Skill number or id > ")).trim();
+    const selected = /^\d+$/.test(choice) ? skills[Number(choice) - 1] : choice;
+    if (!skills.includes(selected)) {
+      console.log("Skill not equipped.");
+      return null;
+    }
+    return { kind: "skill", skill_id: selected };
+  }
+  console.log("Unknown action.");
+  return null;
+}
+
+function actionFromRecommendation(battle, rules = null) {
+  const recommendation = recommendBattleAction(battle, rules);
+  return { kind: recommendation.kind, skill_id: recommendation.skillId };
+}
+
+async function submitBattleTurn(client, battle, action) {
+  return client.post(`/api/battles/${battle.id}/actions`, {
+    kind: action.kind,
+    skill_id: action.skill_id,
+    turn_index: battle.turn_index,
+    turn_nonce: battle.turn_nonce,
+    source: "cli",
+  });
+}
+
+function printTerminalBattle(battle, rules = null) {
+  const ownSide = viewerSide(battle);
+  const otherSide = battle.viewer_side === "opponent" ? battle.sides.player : battle.sides.opponent;
+  const recommendation = recommendBattleAction(battle, rules);
+  console.log("=".repeat(72));
+  console.log(`Codex Pet Battle · ${battle.id}`);
+  console.log(`${battle.mode} · ${battle.status} · turn ${battle.turn_index}/${battle.max_turns}`);
+  if (battle.status === "in_progress") {
+    console.log(`Timer: ${secondsLeft(battle.turn_deadline_at)}s · ${pendingLine(battle)}`);
+  } else {
+    console.log(`Result: ${battle.result?.result ?? battle.status} · ${battle.result?.reason ?? "complete"}`);
+  }
+  console.log("-".repeat(72));
+  console.log(sideConsoleLine("YOU", ownSide));
+  console.log(sideConsoleLine("FOE", otherSide));
+  console.log("-".repeat(72));
+  console.log(`Recommended: ${recommendation.kind}${recommendation.skillId ? ` ${recommendation.skillId}` : ""}`);
+  console.log(`Reason: ${recommendation.reason}`);
+  if (battle.status === "in_progress") {
+    console.log("Controls: s=strike, g=guard, f=focus, k=skill, a=auto, r=refresh, q=quit");
+  }
+  const latest = battle.log?.at(-1);
+  if (latest) {
+    console.log("-".repeat(72));
+    console.log(`Last: Turn ${latest.turn} · ${actionConsoleLabel(latest.actions?.player)} vs ${actionConsoleLabel(latest.actions?.opponent)}`);
+  }
+  console.log("=".repeat(72));
+}
+
+function viewerSide(battle) {
+  return battle.viewer_side === "opponent" ? battle.sides.opponent : battle.sides.player;
+}
+
+function sideConsoleLine(label, side) {
+  const hp = `${side.hp}/${side.max_hp}`;
+  const energy = `${Number(side.energy ?? 0)}/6`;
+  return `${label.padEnd(3)} ${String(side.name ?? "Unknown").padEnd(18)} HP ${hp.padEnd(9)} ${bar(side.hp, side.max_hp)}  EN ${energy}  AFK ${side.timeout_count ?? 0}/3`;
+}
+
+function bar(value, cap, width = 18) {
+  const filled = cap > 0 ? Math.round((Math.max(0, value) / cap) * width) : 0;
+  return `[${"#".repeat(Math.min(width, filled))}${".".repeat(Math.max(0, width - filled))}]`;
+}
+
+function pendingLine(battle) {
+  const player = battle.pending?.player ? "player locked" : "player waiting";
+  const opponent = battle.pending?.opponent ? "opponent locked" : "opponent waiting";
+  return `${player}, ${opponent}`;
+}
+
+function actionConsoleLabel(action) {
+  if (!action) return "pending";
+  if (action.kind === "skill") return action.skill_alias ?? action.skill_name ?? action.skill_id ?? "skill";
+  return action.kind ?? "action";
+}
+
+function secondsLeft(value) {
+  return value ? Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 1000)) : "?";
+}
+
+function clearTerminal() {
+  output.write("\x1Bc");
+}
+
 function parseAliases(value) {
   const aliases = {};
   for (const pair of String(value ?? "").split(",")) {
@@ -721,6 +927,10 @@ async function optional(promise, fallback = null) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function formatDate(value) {
   if (!value) return "unknown";
   return new Date(value).toISOString().slice(0, 10);
@@ -752,6 +962,8 @@ Usage:
   codexpet battle start [--pet pet_id] [--mode casual] [--opponent-lp 1500]
   codexpet battle action --battle battle_room_id --kind strike|guard|focus|skill [--skill skill_id]
   codexpet battle actions --battle battle_room_id
+  codexpet battle watch [--battle battle_room_id] [--once] [--interval 1000]
+  codexpet battle play [--battle battle_room_id] [--auto]
   codexpet battle get --battle battle_room_id
   codexpet queue join [--pet pet_id] [--mode ranked|casual]
   codexpet queue status [--pet pet_id]

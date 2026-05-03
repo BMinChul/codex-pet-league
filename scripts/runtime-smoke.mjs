@@ -124,6 +124,8 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       runCli("daily", baseUrl, sessionA.session_token);
       runCli("next", baseUrl, sessionA.session_token);
       runCli(["battle", "actions", "--battle", battle.id], baseUrl, sessionA.session_token);
+      runCli(["battle", "watch", "--battle", battle.id, "--once"], baseUrl, sessionA.session_token);
+      runCli(["battle", "play", "--battle", battle.id, "--auto"], baseUrl, sessionA.session_token);
       runCli("audit", baseUrl, sessionA.session_token);
     },
   );

@@ -57,6 +57,14 @@ http://localhost:4317
 - Leaderboard and server event log.
 - Node test coverage for core rules.
 
+## Play Surface Priority
+
+Codex App and Codex CLI are the primary play surfaces. The web UI remains useful for visible battle review, profile pages, leaderboards, replays, and admin/ops work, but normal Codex Pet League play should work from the tools Codex users already live in.
+
+- Codex App: MCP tools handle natural-language pet status, Training Reports, matchmaking, action recommendations, and turn submissions.
+- Codex CLI: terminal commands handle the same flow, including game-like `battle watch` and `battle play` modes.
+- Web: optional companion UI for public browsing, visual battle inspection, leaderboards, and operations.
+
 ## Scripts
 
 ```bash
@@ -105,6 +113,8 @@ npm run cli -- report draft --implementation --verification --tests-run 3
 npm run cli -- report submit --milestone --files large
 npm run cli -- battle start --mode casual
 npm run cli -- battle actions --battle battle_room_id
+npm run cli -- battle watch --battle battle_room_id --once
+npm run cli -- battle play --battle battle_room_id --auto
 npm run cli -- battle action --battle battle_room_id --kind strike
 npm run cli -- battle get --battle battle_room_id
 npm run cli -- queue join --mode ranked
@@ -128,6 +138,8 @@ Natural-language trigger mapping:
 펫 XP 상태 보여줘 -> codexpet xp status
 내 펫 서버에 올려줘 -> codexpet pet create --atlas <path>
 지금 배틀 액션 뭐 가능해 -> codexpet battle actions --battle <id>
+터미널에서 배틀판 보여줘 -> codexpet battle watch --battle <id>
+추천 액션으로 한 턴 해줘 -> codexpet battle play --battle <id> --auto
 ```
 
 Environment:

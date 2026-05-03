@@ -9,6 +9,7 @@ Use this skill when the user asks about their Codex pet, hatch asset upload, dai
 
 ## Operating Rules
 
+- Treat Codex App and CLI as the primary play surfaces. The web UI is a companion surface for profiles, leaderboards, replays, visual inspection, and operations.
 - Treat the League server as authoritative. Do not infer XP, LP, rank, battle results, or replay outcomes locally.
 - Prefer MCP tools when available. Use CLI commands as the fallback bridge.
 - Official actions require `CODEX_PET_SESSION_TOKEN` or a League session cookie. `CODEX_PET_ACCOUNT_ID` is only a local development fallback.
@@ -38,6 +39,9 @@ npm run cli -- report submit --milestone --files large
 npm run cli -- queue join --mode ranked
 npm run cli -- invite create
 npm run cli -- invite accept --code ABC123
+npm run cli -- battle watch --battle battle_room_id
+npm run cli -- battle play --battle battle_room_id
+npm run cli -- battle play --battle battle_room_id --auto
 npm run cli -- battle actions --battle battle_room_id
 npm run cli -- battle action --battle battle_room_id --kind strike
 ```
