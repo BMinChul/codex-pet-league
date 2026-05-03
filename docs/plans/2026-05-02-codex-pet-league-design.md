@@ -196,6 +196,68 @@ Battle growth rewards participation and good decisions, not only wins.
 - Good play: bonus XP for useful guards, good element choices, focus-skill combos, and comeback play.
 - AFK or suspicious behavior: reduced or zero XP.
 
+Progression uses three separate currencies:
+
+- Pet XP: levels the pet, increases actual stats through Level 100, and moves the pet through Battle Classes.
+- Style XP: unlocks cosmetics, titles, aura, profile items, skill VFX skins, victory poses, and other non-power rewards.
+- LP: ranked rating only. LP is separate from XP and has no daily earning cap.
+
+Ranked Growth XP is not a separate currency. Main Ranked uses actual server-derived pet stats and Battle Class matchmaking, so Pet XP is the only level/stat progression XP.
+
+The target pace is:
+
+- Hardcore players reach Level 100 in about 90 days.
+- Regular players reach Level 100 in about 4-5 months.
+- Casual players reach Level 100 in 6+ months.
+
+Pet XP caps:
+
+- Total Pet XP daily cap: 700.
+- Training Report Pet XP daily cap: 400.
+- Battle Pet XP daily cap: 300 across Ranked, Casual, Friend Duel, and Training Battle.
+- Friend Duel Pet XP sub-cap: 75 per day.
+
+Training Report Pet XP:
+
+- Light Report: 30 XP.
+- Standard Report: 70 XP.
+- Major Report: 120 XP.
+- Milestone Report: 180 XP.
+- First approved Daily Training Report: +20% Pet XP bonus.
+- Maximum single Training Report reward: 216 XP.
+
+Battle Pet XP:
+
+- Ranked win: 80 XP.
+- Ranked draw: 60 XP.
+- Ranked active loss: 45 XP.
+- Casual win: 60 XP.
+- Casual draw: 45 XP.
+- Casual active loss: 35 XP.
+- Friend Duel complete: 25 XP, limited by the Friend Duel sub-cap.
+- Training Battle complete: 25-40 XP depending on activity and completion.
+- AFK battle: 0 XP.
+
+Style XP caps:
+
+- Style XP daily cap: 1,000.
+- Style XP weekly cap: 5,000.
+- Style XP never affects level, stats, LP, matchmaking, damage, defense, speed, recovery, or status formulas.
+
+Level XP table:
+
+| Current Level | XP To Next Level |
+| --- | ---: |
+| 1-10 | 100 |
+| 11-25 | 250 |
+| 26-45 | 450 |
+| 46-65 | 650 |
+| 66-80 | 850 |
+| 81-90 | 1,050 |
+| 91-99 | 1,300 |
+
+This puts Level 100 at about 61,700 Pet XP, which is roughly 88-90 days for a player who regularly reaches the 700 Pet XP daily cap.
+
 Leveling always increases actual pet stats until the core level cap.
 
 - Level 1 starts at 100 total stats.
@@ -436,7 +498,6 @@ Until that exists, OpenAI identity must not be used as official League ownership
 
 ## Open Questions
 
-- Should Training Reports have daily or weekly caps?
 - How many official skills should each element have at launch?
 - Should users be able to trade or transfer pet assets, or are pets permanently account-bound?
 - Should skill nicknames be globally visible in leaderboards/replays, or only during battle?

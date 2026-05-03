@@ -185,6 +185,7 @@ Primary element is chosen from server-accepted activity summary inputs. It affec
 - `xp`
 - `battle_xp`
 - `training_xp`
+- `style_xp`
 - `progression_version`
 - `updated_at`
 
@@ -199,6 +200,79 @@ Leveling rules:
 - Stat growth is automatic. Users do not manually assign stat points.
 - Growth distribution is based on the pet's primary and secondary element profile, weighted 70% primary and 30% secondary.
 - `growth_meters_json` may hold fractional internal progress so long-term 70/30 distribution works even though visible stats increase as integers.
+
+### XP Economy
+
+Progression uses three separate values:
+
+- Pet XP levels the pet, increases actual stats through Level 100, and moves the pet through Battle Classes.
+- Style XP unlocks cosmetics, titles, aura, profile items, skill VFX skins, victory poses, and other non-power rewards.
+- LP is ranked rating only. LP is separate from XP and has no daily earning cap.
+
+Ranked Growth XP is not a separate currency. Main Ranked uses actual server-derived pet stats and Battle Class matchmaking, so Pet XP is the only level/stat progression XP.
+
+Target pace:
+
+- Hardcore players reach Level 100 in about 90 days.
+- Regular players reach Level 100 in about 4-5 months.
+- Casual players reach Level 100 in 6+ months.
+
+Pet XP caps:
+
+| Cap | Limit |
+| --- | ---: |
+| Total Pet XP per day | 700 |
+| Training Report Pet XP per day | 400 |
+| Battle Pet XP per day | 300 |
+| Friend Duel Pet XP sub-cap per day | 75 |
+
+Training Report Pet XP:
+
+| Report Type | Pet XP |
+| --- | ---: |
+| Light | 30 |
+| Standard | 70 |
+| Major | 120 |
+| Milestone | 180 |
+
+The first approved Daily Training Report receives a +20% Pet XP bonus. The maximum single Training Report reward is 216 XP.
+
+Battle Pet XP:
+
+| Battle Result | Pet XP |
+| --- | ---: |
+| Ranked win | 80 |
+| Ranked draw | 60 |
+| Ranked active loss | 45 |
+| Casual win | 60 |
+| Casual draw | 45 |
+| Casual active loss | 35 |
+| Friend Duel complete | 25 |
+| Training Battle complete | 25-40 |
+| AFK battle | 0 |
+
+Style XP caps:
+
+| Cap | Limit |
+| --- | ---: |
+| Style XP per day | 1,000 |
+| Style XP per week | 5,000 |
+
+Style XP never affects level, stats, LP, matchmaking, damage, defense, speed, recovery, or status formulas.
+
+Level XP table:
+
+| Current Level | XP To Next Level |
+| --- | ---: |
+| 1-10 | 100 |
+| 11-25 | 250 |
+| 26-45 | 450 |
+| 46-65 | 650 |
+| 66-80 | 850 |
+| 81-90 | 1,050 |
+| 91-99 | 1,300 |
+
+Level 100 requires about 61,700 Pet XP. At the 700 Pet XP daily cap, the theoretical fastest path is about 88-90 days.
 
 ### Ranked Battle Classes
 
@@ -262,9 +336,32 @@ The battle engine computes element modifiers from server-owned pet and skill dat
 - `server_reason`
 - `created_at`
 
+`xp_ledger_entries`
+
+- `id`
+- `account_id`
+- `pet_id`
+- `source_type`: `training_report`, `ranked_battle`, `casual_battle`, `friend_duel`, `training_battle`, `style_reward`, `admin_adjustment`
+- `source_id`
+- `pet_xp_delta`
+- `style_xp_delta`
+- `cap_buckets_json`: `pet_daily`, `training_daily`, `battle_daily`, `friend_daily`, `style_daily`, `style_weekly`
+- `applied_at`
+
+`progression_cap_counters`
+
+- `id`
+- `account_id`
+- `pet_id`
+- `bucket`
+- `window_start_at`
+- `window_end_at`
+- `amount_used`
+- `updated_at`
+
 Training reports contain summarized signals only. They must not contain source code, full conversation transcripts, or private project content.
 
-Server caps apply per day, week, season, and pet.
+Server caps apply per day, week, season, and pet. XP awards must be written through the ledger so cap enforcement, refunds, audits, and abuse reviews can replay the same progression state.
 
 ### Skills
 
@@ -713,6 +810,7 @@ Record enough to investigate suspicious play:
 - repeated AFK
 - impossible action attempts
 - rejected action counts
+- XP ledger anomalies and repeated cap-bound farming
 - asset hash and asset/safety state at battle start
 
 Do not store raw Codex project content in audit records.
@@ -727,6 +825,9 @@ Unit tests:
 - timeout defaults
 - stat template totals
 - level-to-stat growth totals
+- level XP table totals
+- Pet XP daily cap enforcement
+- Style XP daily and weekly cap enforcement
 - Battle Class boundary calculation
 - element advantage cap calculation
 - LP delta rules
@@ -738,6 +839,8 @@ Property tests:
 - cooldowns cannot skip illegally
 - every ranked battle produces exactly one result
 - LP changes only from server battle results
+- XP ledger replay produces the same progression totals
+- Style XP never changes battle stats or level
 - ranked matchmaking does not cross Battle Class
 - element advantage never exceeds the -15% to +15% cap
 
@@ -758,6 +861,7 @@ Security tests:
 - client uses skill not in loadout
 - client submits action after deadline
 - client replays old action
+- client submits fake XP or cap counter state
 - client tries ranked with inactive or quarantined asset
 - client changes local asset after registration
 
@@ -773,6 +877,10 @@ Security tests:
 - User skill nicknames are cosmetic only.
 - Battle loadouts use exactly four active skill slots.
 - Every turn uses a fixed 30 second timer.
+- Pet XP is capped at 700 per day, split into 400 Training Report XP and 300 Battle XP.
+- Friend Duel Battle XP has a 75 XP daily sub-cap.
+- Style XP is capped at 1,000 per day and 5,000 per week, and never affects combat power.
+- Level 100 requires about 61,700 Pet XP, targeting roughly 90 days for hardcore players.
 - Leveling increases actual stats through level 100; Mastery levels do not add battle stats.
 - Main Ranked uses actual server-derived stats instead of stat compression.
 - Main Ranked separates pets by Battle Class before LP matching.
