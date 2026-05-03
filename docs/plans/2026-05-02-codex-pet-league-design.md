@@ -335,6 +335,22 @@ Users may set pet-specific cosmetic nicknames for skills. Nicknames do not alter
 
 Each pet battle loadout has exactly four active skill slots.
 
+Season 1 starts with five official skills per element:
+
+- 6 elements x 5 skills = 30 official skills.
+- Active loadout remains exactly 4 skills.
+- A pet can build from its primary and secondary element skill pools.
+- Skill mechanics are official and server-defined.
+- User-created skill nicknames are cosmetic aliases only.
+
+Each element's five-skill catalog should cover:
+
+- basic offense
+- defense or counterplay
+- status application
+- energy, priority, or tempo control
+- high-risk finisher
+
 Example:
 
 ```json
@@ -366,12 +382,12 @@ Official skill names should feel Codex-native but game-readable.
 
 Example official names:
 
-- Logic: Predictive Read, Clean Proof, Counterline
-- Patch: Hotfix, Stabilize, Rollback
-- Trace: Expose Path, Breakpoint, Signal Leak
-- Forge: Heavy Commit, Overclock, Build Breaker
-- Pulse: Quick Loop, Charge Cycle, Tempo Shift
-- Deploy: Final Push, Release Burst, Lock In
+- Logic: Predictive Read, Clean Proof, Counterline, Proof Net, Checkmate Thread
+- Patch: Hotfix, Stabilize, Rollback, Safe Merge, Recovery Loop
+- Trace: Expose Path, Breakpoint, Signal Leak, Stack Trace, Watchpoint
+- Forge: Heavy Commit, Overclock, Build Breaker, Refactor Hammer, Compile Surge
+- Pulse: Quick Loop, Charge Cycle, Tempo Shift, Interrupt Beat, Rapid Retry
+- Deploy: Final Push, Release Burst, Lock In, Canary Drop, Ship It
 
 These names are not final balance content. They establish tone.
 
@@ -498,6 +514,5 @@ Until that exists, OpenAI identity must not be used as official League ownership
 
 ## Open Questions
 
-- How many official skills should each element have at launch?
 - Should users be able to trade or transfer pet assets, or are pets permanently account-bound?
 - Should skill nicknames be globally visible in leaderboards/replays, or only during battle?

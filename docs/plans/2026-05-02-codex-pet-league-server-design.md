@@ -370,6 +370,7 @@ Server caps apply per day, week, season, and pet. XP awards must be written thro
 - `id`
 - `official_name`
 - `element`
+- `catalog_role`: `offense`, `defense`, `status`, `tempo`, `finisher`
 - `base_description`
 - `status`: `active`, `disabled`
 - `created_at`
@@ -406,6 +407,16 @@ Server caps apply per day, week, season, and pet. XP awards must be written thro
 - `updated_at`
 
 Official skill behavior is fixed by server config. Nicknames are cosmetic only.
+
+Season 1 starts with 30 official skills: five per element across six elements. Each element should have one skill in each catalog role:
+
+- offense
+- defense or counterplay
+- status application
+- energy, priority, or tempo control
+- high-risk finisher
+
+Pets equip exactly four active skills. A pet's legal skill pool comes from its primary and secondary elements. Skill versions, costs, cooldowns, and effect JSON are server-owned and season-versioned.
 
 ### Seasons And Rating
 
@@ -874,6 +885,7 @@ Security tests:
 - Server asset registry makes the canonical official copy.
 - Structurally valid assets are active immediately; safety enforcement is automatic and post-hoc unless the file is invalid or clearly abusive.
 - Skill mechanics are official and server-defined.
+- Season 1 starts with five official skills per element, for 30 official skills total.
 - User skill nicknames are cosmetic only.
 - Battle loadouts use exactly four active skill slots.
 - Every turn uses a fixed 30 second timer.
