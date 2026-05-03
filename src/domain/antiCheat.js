@@ -49,28 +49,38 @@ export const IDEMPOTENCY_REQUIRED_ROUTES = new Set([
 ]);
 
 export function enforceRequestGuard(state, input = {}) {
+  enforcePreparedRequestGuard(state, prepareRequestGuard(input));
+}
+
+export async function enforceRequestGuardWithDistributed(state, input = {}, distributedGuard) {
+  const prepared = prepareRequestGuard(input);
+  await distributedGuard?.enforce(prepared);
+  enforcePreparedRequestGuard(state, prepared);
+}
+
+function prepareRequestGuard(input = {}) {
   const routeKey = input.routeKey ?? "unknown";
   const policy = RATE_LIMIT_POLICIES[routeKey] ?? { limit: 60, windowMs: MINUTE, score: 10 };
   const now = input.now ? new Date(input.now) : new Date();
   const actorHash = hashText(input.accountId ? `account:${input.accountId}` : `actor:${input.actorKey ?? "anonymous"}`);
+  const requestId = sanitizeRequestId(input.requestId);
 
-  pruneGuards(state, now);
-  enforceRateLimit(state, {
+  return {
     accountId: input.accountId ?? null,
     actorHash,
     routeKey,
     policy,
     now,
-  });
-  enforceIdempotency(state, {
-    accountId: input.accountId ?? null,
-    actorHash,
-    routeKey,
-    requestId: input.requestId,
+    requestId,
     bodyHash: input.bodyHash,
     required: Boolean(input.requireIdempotency),
-    now,
-  });
+  };
+}
+
+function enforcePreparedRequestGuard(state, prepared) {
+  pruneGuards(state, prepared.now);
+  enforceRateLimit(state, prepared);
+  enforceIdempotency(state, prepared);
 }
 
 export function hashRequestBody(body) {
@@ -124,7 +134,7 @@ function enforceRateLimit(state, input) {
 
 function enforceIdempotency(state, input) {
   state.idempotencyKeys ??= [];
-  const requestId = sanitizeRequestId(input.requestId);
+  const requestId = input.requestId;
   if (!requestId) {
     if (input.required) {
       appendRiskEvent(state, {

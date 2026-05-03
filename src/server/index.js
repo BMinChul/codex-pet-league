@@ -50,7 +50,8 @@ import {
   verifyAuthChallenge,
   xpStatus,
 } from "../domain/state.js";
-import { IDEMPOTENCY_REQUIRED_ROUTES, enforceRequestGuard, hashRequestBody } from "../domain/antiCheat.js";
+import { IDEMPOTENCY_REQUIRED_ROUTES, enforceRequestGuardWithDistributed, hashRequestBody } from "../domain/antiCheat.js";
+import { createDistributedRequestGuard } from "../domain/distributedRequestGuard.js";
 import { deliverAuthChallenge, verifyExternalAuth } from "./authProviders.js";
 import { assetStorageStatus, readAssetObject, saveAtlasObject } from "../storage/assetStore.js";
 import { loadState, storageStatus, updateState } from "../storage/jsonStore.js";
@@ -69,6 +70,7 @@ const OPS_JOB_INTERVAL_MS = Number(process.env.CODEX_PET_OPS_JOB_INTERVAL_MS ?? 
 const SESSION_COOKIE = "league_session";
 const liveClients = new Set();
 const realtimeBus = createRealtimeBus();
+const requestGuard = createDistributedRequestGuard();
 
 const server = createServer(async (req, res) => {
   try {
@@ -145,8 +147,8 @@ async function handleApi(req, res, url) {
   let accountId = null;
 
   if (req.method === "POST" && path === "/api/auth/challenge") {
-    const result = await updateState((state) => {
-      applyRequestGuard(state, req, "auth.challenge", null, body);
+    const result = await updateState(async (state) => {
+      await applyRequestGuard(state, req, "auth.challenge", null, body);
       return createAuthChallenge(state, body);
     });
     const delivery = await deliverAuthChallenge(result);
@@ -156,14 +158,14 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/auth/verify") {
-    await updateState((state) => {
-      applyRequestGuard(state, req, "auth.verify", null, body);
+    await updateState(async (state) => {
+      await applyRequestGuard(state, req, "auth.verify", null, body);
       return null;
     });
     const snapshot = await loadState();
     const challenge = (snapshot.authChallenges ?? []).find((entry) => entry.id === body.challenge_id);
     const externalVerification = await verifyExternalAuth(challenge, body);
-    const result = await updateState((state) => {
+    const result = await updateState(async (state) => {
       return verifyAuthChallenge(state, {
         challenge_id: body.challenge_id,
         code: body.code,
@@ -223,8 +225,8 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && path === "/api/sessions/revoke") {
     const currentToken = getSessionToken(req);
-    const result = await mutate("auth.session.revoked", (state) => {
-      applyRequestGuard(state, req, "session.revoke", accountId, body);
+    const result = await mutate("auth.session.revoked", async (state) => {
+      await applyRequestGuard(state, req, "session.revoke", accountId, body);
       return revokeSession(state, accountId, body);
     });
     const headers =
@@ -253,7 +255,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && path === "/api/pet-assets/uploads") {
     const result = await mutate("asset.active", async (state) => {
-      applyRequestGuard(state, req, "asset.upload", accountId, body);
+      await applyRequestGuard(state, req, "asset.upload", accountId, body);
       getAccount(state, accountId);
       const asset = createPetAsset(state, accountId, body);
       await saveAtlasObject(asset.atlas_object_key, body.atlas_data_url);
@@ -264,8 +266,8 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/pets") {
-    const result = await mutate("pet.created", (state) => {
-      applyRequestGuard(state, req, "pet.create", accountId, body);
+    const result = await mutate("pet.created", async (state) => {
+      await applyRequestGuard(state, req, "pet.create", accountId, body);
       getAccount(state, accountId);
       return createPet(state, accountId, body);
     });
@@ -287,8 +289,8 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/matchmaking/cancel") {
-    const result = await mutate("matchmaking.cancelled", (state) => {
-      applyRequestGuard(state, req, "matchmaking.cancel", accountId, body);
+    const result = await mutate("matchmaking.cancelled", async (state) => {
+      await applyRequestGuard(state, req, "matchmaking.cancel", accountId, body);
       return cancelMatchmakingTicket(state, accountId, body);
     });
     sendJson(res, 201, result);
@@ -303,8 +305,8 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && publicPetMatch && publicPetMatch[2] === "report") {
-    const result = await mutate("asset.reported", (state) => {
-      applyRequestGuard(state, req, "asset.report", accountId, body);
+    const result = await mutate("asset.reported", async (state) => {
+      await applyRequestGuard(state, req, "asset.report", accountId, body);
       return reportPetAsset(state, accountId, publicPetMatch[1], body);
     });
     sendJson(res, 201, result);
@@ -346,8 +348,8 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/admin/ops/run") {
-    const result = await mutate("ops.manual_run", (state) => {
-      applyRequestGuard(state, req, "admin.ops.run", accountId, body);
+    const result = await mutate("ops.manual_run", async (state) => {
+      await applyRequestGuard(state, req, "admin.ops.run", accountId, body);
       requireAdmin(state, accountId);
       return runServerAuthorityJob(state, { adminAccountId: accountId });
     });
@@ -357,8 +359,8 @@ async function handleApi(req, res, url) {
 
   const adminTrainingMatch = path.match(/^\/api\/admin\/training-reports\/([^/]+)\/review$/);
   if (req.method === "POST" && adminTrainingMatch) {
-    const result = await mutate("admin.training.reviewed", (state) => {
-      applyRequestGuard(state, req, "admin.training.review", accountId, body);
+    const result = await mutate("admin.training.reviewed", async (state) => {
+      await applyRequestGuard(state, req, "admin.training.review", accountId, body);
       return reviewTrainingReport(state, accountId, { ...body, report_id: adminTrainingMatch[1] });
     });
     sendJson(res, 201, result);
@@ -367,8 +369,8 @@ async function handleApi(req, res, url) {
 
   const adminAccountMatch = path.match(/^\/api\/admin\/accounts\/([^/]+)\/enforcement$/);
   if (req.method === "POST" && adminAccountMatch) {
-    const result = await mutate("admin.enforcement.updated", (state) => {
-      applyRequestGuard(state, req, "admin.enforcement", accountId, body);
+    const result = await mutate("admin.enforcement.updated", async (state) => {
+      await applyRequestGuard(state, req, "admin.enforcement", accountId, body);
       return updateAccountEnforcement(state, accountId, { ...body, account_id: adminAccountMatch[1] });
     });
     sendJson(res, 201, result);
@@ -377,8 +379,8 @@ async function handleApi(req, res, url) {
 
   const adminAssetMatch = path.match(/^\/api\/admin\/assets\/([^/]+)\/moderation$/);
   if (req.method === "POST" && adminAssetMatch) {
-    const result = await mutate("admin.asset.moderated", (state) => {
-      applyRequestGuard(state, req, "admin.asset.moderation", accountId, body);
+    const result = await mutate("admin.asset.moderated", async (state) => {
+      await applyRequestGuard(state, req, "admin.asset.moderation", accountId, body);
       return moderateAsset(state, accountId, { ...body, asset_id: adminAssetMatch[1] });
     });
     sendJson(res, 201, result);
@@ -387,8 +389,8 @@ async function handleApi(req, res, url) {
 
   const adminBattleRollbackMatch = path.match(/^\/api\/admin\/battles\/([^/]+)\/rollback$/);
   if (req.method === "POST" && adminBattleRollbackMatch) {
-    const result = await mutate("admin.ranked.rollback", (state) => {
-      applyRequestGuard(state, req, "admin.ranked.rollback", accountId, body);
+    const result = await mutate("admin.ranked.rollback", async (state) => {
+      await applyRequestGuard(state, req, "admin.ranked.rollback", accountId, body);
       return rollbackRankedBattle(state, accountId, { ...body, battle_room_id: adminBattleRollbackMatch[1] });
     });
     sendJson(res, 201, result);
@@ -396,8 +398,8 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/admin/seasons/action") {
-    const result = await mutate("admin.season.action", (state) => {
-      applyRequestGuard(state, req, "admin.season.action", accountId, body);
+    const result = await mutate("admin.season.action", async (state) => {
+      await applyRequestGuard(state, req, "admin.season.action", accountId, body);
       return seasonOperation(state, accountId, body);
     });
     sendJson(res, 201, result);
@@ -428,8 +430,8 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "PUT" && subpath === "loadout") {
-    const result = await mutate("pet.loadout.updated", (state) => {
-      applyRequestGuard(state, req, "pet.loadout", accountId, body);
+    const result = await mutate("pet.loadout.updated", async (state) => {
+      await applyRequestGuard(state, req, "pet.loadout", accountId, body);
       getAccount(state, accountId);
       return updatePetLoadout(state, accountId, petId, body);
     });
@@ -445,8 +447,8 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "training-reports/draft") {
-    const result = await mutate("training.report.drafted", (state) => {
-      applyRequestGuard(state, req, "training.report.draft", accountId, body);
+    const result = await mutate("training.report.drafted", async (state) => {
+      await applyRequestGuard(state, req, "training.report.draft", accountId, body);
       getAccount(state, accountId);
       return { draft: draftTrainingReport(state, accountId, petId, body) };
     });
@@ -455,8 +457,8 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "training-reports") {
-    const result = await mutate("training.report.submitted", (state) => {
-      applyRequestGuard(state, req, "training.report.submit", accountId, body);
+    const result = await mutate("training.report.submitted", async (state) => {
+      await applyRequestGuard(state, req, "training.report.submit", accountId, body);
       getAccount(state, accountId);
       return submitTrainingReport(state, accountId, petId, {
         ...body,
@@ -468,8 +470,8 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "battles/simulate") {
-    const result = await mutate("battle.simulated", (state) => {
-      applyRequestGuard(state, req, "battle.simulate", accountId, body);
+    const result = await mutate("battle.simulated", async (state) => {
+      await applyRequestGuard(state, req, "battle.simulate", accountId, body);
       getAccount(state, accountId);
       return simulateBattle(state, accountId, petId, body);
     });
@@ -478,8 +480,8 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "battles") {
-    const result = await mutate("battle.room.started", (state) => {
-      applyRequestGuard(state, req, "battle.start", accountId, body);
+    const result = await mutate("battle.room.started", async (state) => {
+      await applyRequestGuard(state, req, "battle.start", accountId, body);
       getAccount(state, accountId);
       return startTurnBattle(state, accountId, petId, body);
     });
@@ -488,8 +490,8 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "matchmaking/queue") {
-    const result = await mutate("matchmaking.queue", (state) => {
-      applyRequestGuard(state, req, "matchmaking.queue", accountId, body);
+    const result = await mutate("matchmaking.queue", async (state) => {
+      await applyRequestGuard(state, req, "matchmaking.queue", accountId, body);
       getAccount(state, accountId);
       return joinMatchmakingQueue(state, accountId, petId, body);
     });
@@ -498,8 +500,8 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "friend-invites") {
-    const result = await mutate("friend_invite.created", (state) => {
-      applyRequestGuard(state, req, "friend_invite.create", accountId, body);
+    const result = await mutate("friend_invite.created", async (state) => {
+      await applyRequestGuard(state, req, "friend_invite.create", accountId, body);
       getAccount(state, accountId);
       return createFriendInvite(state, accountId, petId, body);
     });
@@ -508,8 +510,8 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "friend-invites/accept") {
-    const result = await mutate("friend_invite.accepted", (state) => {
-      applyRequestGuard(state, req, "friend_invite.accept", accountId, body);
+    const result = await mutate("friend_invite.accepted", async (state) => {
+      await applyRequestGuard(state, req, "friend_invite.accept", accountId, body);
       getAccount(state, accountId);
       return acceptFriendInvite(state, accountId, petId, body);
     });
@@ -522,7 +524,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
 async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body) {
   if (req.method === "GET" && subpath === "") {
-    const result = await mutate("battle.room.viewed", (state) => {
+    const result = await mutate("battle.room.viewed", async (state) => {
       getAccount(state, accountId);
       return getTurnBattle(state, accountId, battleRoomId);
     });
@@ -531,8 +533,8 @@ async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body)
   }
 
   if (req.method === "POST" && subpath === "actions") {
-    const result = await mutate("battle.action.submitted", (state) => {
-      applyRequestGuard(state, req, "battle.action", accountId, body);
+    const result = await mutate("battle.action.submitted", async (state) => {
+      await applyRequestGuard(state, req, "battle.action", accountId, body);
       getAccount(state, accountId);
       return submitTurnBattleAction(state, accountId, battleRoomId, body);
     });
@@ -596,15 +598,15 @@ async function mutate(eventType, mutator) {
   return result;
 }
 
-function applyRequestGuard(state, req, routeKey, accountId, body) {
-  enforceRequestGuard(state, {
+async function applyRequestGuard(state, req, routeKey, accountId, body) {
+  await enforceRequestGuardWithDistributed(state, {
     accountId,
     actorKey: requestActorKey(req, accountId, body),
     routeKey,
     requestId: requestId(req, body),
     bodyHash: hashRequestBody(body),
     requireIdempotency: IDEMPOTENCY_REQUIRED_ROUTES.has(routeKey),
-  });
+  }, requestGuard);
 }
 
 function requestClientContext(req) {
@@ -753,6 +755,7 @@ async function healthStatus() {
       auth_provider: authProviderStatus(),
       bridge: bridgeStatus(),
       realtime: realtimeBus.status(),
+      request_guard: requestGuard.status(),
       counts: stateCounts(state),
       live_clients: liveClients.size,
       checked_at: new Date().toISOString(),
@@ -780,6 +783,9 @@ async function metricsText() {
     "# HELP codex_pet_realtime_info Static realtime bus labels.",
     "# TYPE codex_pet_realtime_info gauge",
     `codex_pet_realtime_info{provider="${metricLabel(realtimeBus.status().provider)}",channel="${metricLabel(realtimeBus.status().channel)}"} 1`,
+    "# HELP codex_pet_request_guard_info Static request guard labels.",
+    "# TYPE codex_pet_request_guard_info gauge",
+    `codex_pet_request_guard_info{provider="${metricLabel(requestGuard.status().provider)}",namespace="${metricLabel(requestGuard.status().namespace)}"} 1`,
     "# HELP codex_pet_uptime_seconds League server uptime in seconds.",
     "# TYPE codex_pet_uptime_seconds gauge",
     `codex_pet_uptime_seconds ${uptimeSeconds()}`,

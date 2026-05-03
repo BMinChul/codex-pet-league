@@ -16,6 +16,7 @@ check("CODEX_PET_STORAGE_DRIVER", env.CODEX_PET_STORAGE_DRIVER || "json");
 check("CODEX_PET_POSTGRES_URL", env.CODEX_PET_POSTGRES_URL ? "configured" : "missing");
 check("CODEX_PET_PUBLIC_BASE_URL", env.CODEX_PET_PUBLIC_BASE_URL || "missing");
 check("CODEX_PET_REALTIME_BUS", env.CODEX_PET_REALTIME_BUS || "local");
+check("CODEX_PET_REQUEST_GUARD", env.CODEX_PET_REQUEST_GUARD || "local");
 
 const auth = authProviderStatus(env);
 const authReady = ["passkey", "email_magic_link", "league_oauth"].some(
@@ -35,7 +36,8 @@ if (production) {
   requireCondition(Boolean(env.CODEX_PET_POSTGRES_URL), "production postgres storage requires CODEX_PET_POSTGRES_URL");
   requireCondition(/^https:\/\//.test(env.CODEX_PET_PUBLIC_BASE_URL || ""), "production public base URL must be HTTPS");
   requireCondition((env.CODEX_PET_REALTIME_BUS || "local") !== "local", "production should use redis realtime bus for scale-out");
-  requireCondition(Boolean(env.CODEX_PET_REDIS_URL), "production redis realtime bus requires CODEX_PET_REDIS_URL");
+  requireCondition((env.CODEX_PET_REQUEST_GUARD || "local") === "redis", "production should use redis request guard for scale-out");
+  requireCondition(Boolean(env.CODEX_PET_REDIS_URL), "production redis realtime/request guard requires CODEX_PET_REDIS_URL");
   if ((env.CODEX_PET_ASSET_STORAGE || "local_fs") === "s3_compatible") requireS3Config();
 } else {
   warnIf(env.CODEX_PET_AUTH_DEV_CODE === "true", "auth dev codes are exposed");

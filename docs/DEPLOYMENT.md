@@ -34,7 +34,7 @@ In production mode it fails if:
 - no real auth method is fully configured
 - storage is not `postgres` or `CODEX_PET_POSTGRES_URL` is missing
 - public base URL is not HTTPS
-- realtime bus is still local or Redis is not configured
+- realtime bus or request guard is still local, or Redis is not configured
 
 ## Runtime Layout
 
@@ -62,11 +62,13 @@ For multi-instance realtime updates, use Redis pub/sub:
 
 ```bash
 CODEX_PET_REALTIME_BUS=redis
+CODEX_PET_REQUEST_GUARD=redis
 CODEX_PET_REDIS_URL=redis://default:password@redis.example.com:6379/0
 CODEX_PET_REALTIME_CHANNEL=codex-pet-league:events
+CODEX_PET_REQUEST_GUARD_NAMESPACE=codex-pet-league
 ```
 
-Local development stays on `CODEX_PET_REALTIME_BUS=local`.
+Local development stays on `CODEX_PET_REALTIME_BUS=local` and `CODEX_PET_REQUEST_GUARD=local`. In production, Redis shares realtime events, rate-limit buckets, and idempotency keys across server instances.
 
 ## Backup
 

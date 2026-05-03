@@ -28,6 +28,8 @@ const checks = [
   ["CODEX_PET_S3_SECRET_ACCESS_KEY", process.env.CODEX_PET_S3_SECRET_ACCESS_KEY ? "configured" : "missing"],
   ["CODEX_PET_REALTIME_BUS", process.env.CODEX_PET_REALTIME_BUS ?? "local"],
   ["CODEX_PET_REALTIME_CHANNEL", process.env.CODEX_PET_REALTIME_CHANNEL ?? "codex-pet-league:events"],
+  ["CODEX_PET_REQUEST_GUARD", process.env.CODEX_PET_REQUEST_GUARD ?? "local"],
+  ["CODEX_PET_REQUEST_GUARD_NAMESPACE", process.env.CODEX_PET_REQUEST_GUARD_NAMESPACE ?? "codex-pet-league"],
   ["CODEX_PET_REDIS_URL", process.env.CODEX_PET_REDIS_URL ? "configured" : "missing"],
 ];
 

@@ -165,6 +165,8 @@ CODEX_PET_S3_ACCESS_KEY_ID=
 CODEX_PET_S3_SECRET_ACCESS_KEY=
 CODEX_PET_REALTIME_BUS=local
 CODEX_PET_REALTIME_CHANNEL=codex-pet-league:events
+CODEX_PET_REQUEST_GUARD=local
+CODEX_PET_REQUEST_GUARD_NAMESPACE=codex-pet-league
 CODEX_PET_REDIS_URL=
 ```
 
@@ -173,7 +175,7 @@ CODEX_PET_REDIS_URL=
 Set `CODEX_PET_COOKIE_SECURE=true` behind HTTPS so League session cookies are marked `Secure`.
 Email delivery webhooks receive a signed JSON payload when `CODEX_PET_EMAIL_WEBHOOK_SECRET` is set. Passkey and OAuth verification hooks must return JSON with `verified: true` before the server creates an official League session.
 Set `CODEX_PET_ASSET_STORAGE=s3_compatible` with the `CODEX_PET_S3_*` values to store hatch atlas PNGs in S3-compatible object storage. If `CODEX_PET_ASSET_CDN_BASE_URL` is set, public pet profiles return CDN atlas URLs.
-Set `CODEX_PET_REALTIME_BUS=redis` with `CODEX_PET_REDIS_URL` when running more than one server instance. `npm run db:schema:check` validates the Postgres schema migrations under `db/migrations`; `npm run db:postgres:migrate` applies them to `CODEX_PET_POSTGRES_URL`.
+Set `CODEX_PET_REALTIME_BUS=redis` and `CODEX_PET_REQUEST_GUARD=redis` with `CODEX_PET_REDIS_URL` when running more than one server instance. The Redis request guard shares rate-limit and idempotency buckets across instances, so replay and burst checks do not split per server. `npm run db:schema:check` validates the Postgres schema migrations under `db/migrations`; `npm run db:postgres:migrate` applies them to `CODEX_PET_POSTGRES_URL`.
 `CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. Untrusted high-value reports are held for review.
 High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; the browser, CLI, and MCP bridge add one automatically.
 Risk scores are review signals first. Automatic ranked lock only respects an explicit/manual `ranked_locked_until` or future tamper-confirmed policy, so false positives do not silently punish normal players.

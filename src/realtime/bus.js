@@ -101,7 +101,7 @@ export class RedisRealtimeBus {
   }
 }
 
-class RedisConnection {
+export class RedisConnection {
   constructor(url, connect) {
     this.url = new URL(url);
     this.connect = connect;
