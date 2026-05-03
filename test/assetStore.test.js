@@ -26,3 +26,51 @@ test("asset store persists and reads atlas PNG objects under the configured root
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("asset store can write atlas objects to an S3-compatible provider", async () => {
+  const calls = [];
+  const env = {
+    CODEX_PET_ASSET_STORAGE: "s3_compatible",
+    CODEX_PET_S3_ENDPOINT: "https://assets.example.test",
+    CODEX_PET_S3_BUCKET: "codex-pets",
+    CODEX_PET_S3_REGION: "auto",
+    CODEX_PET_S3_ACCESS_KEY_ID: "access-key",
+    CODEX_PET_S3_SECRET_ACCESS_KEY: "secret-key",
+  };
+
+  const result = await saveAtlasObject("local-dev/asset_hash.png", tinyPng, env, async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, status: 200 };
+  });
+
+  assert.equal(result.provider, "s3_compatible");
+  assert.equal(calls[0].url, "https://assets.example.test/codex-pets/local-dev/asset_hash.png");
+  assert.equal(calls[0].init.method, "PUT");
+  assert.equal(calls[0].init.headers["content-type"], "image/png");
+  assert.match(calls[0].init.headers.authorization, /^AWS4-HMAC-SHA256 Credential=access-key\//);
+  assert.match(calls[0].init.headers["x-amz-date"], /^\d{8}T\d{6}Z$/);
+  assert.match(calls[0].init.headers["x-amz-content-sha256"], /^[a-f0-9]{64}$/);
+});
+
+test("asset store can read atlas objects from an S3-compatible provider", async () => {
+  const env = {
+    CODEX_PET_ASSET_STORAGE: "s3_compatible",
+    CODEX_PET_S3_ENDPOINT: "https://assets.example.test",
+    CODEX_PET_S3_BUCKET: "codex-pets",
+    CODEX_PET_S3_REGION: "auto",
+    CODEX_PET_S3_ACCESS_KEY_ID: "access-key",
+    CODEX_PET_S3_SECRET_ACCESS_KEY: "secret-key",
+  };
+
+  const content = await readAssetObject("local-dev/asset_hash.png", env, async (url, init) => {
+    assert.equal(url, "https://assets.example.test/codex-pets/local-dev/asset_hash.png");
+    assert.equal(init.method, "GET");
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => Buffer.from("atlas-bytes"),
+    };
+  });
+
+  assert.equal(content.toString("utf8"), "atlas-bytes");
+});

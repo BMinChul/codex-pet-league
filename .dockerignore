@@ -1,0 +1,9 @@
+node_modules
+.git
+runs
+test-results
+playwright-report
+data
+identity-probe/logs
+identity-probe/codex-exec-output.txt
+*.log

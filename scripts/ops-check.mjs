@@ -2,6 +2,7 @@ const checks = [
   ["CODEX_PET_AUTH_PROVIDER", process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev"],
   ["CODEX_PET_AUTH_DEV_CODE", process.env.CODEX_PET_AUTH_DEV_CODE ?? "false"],
   ["CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER", process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER ?? "false"],
+  ["CODEX_PET_COOKIE_SECURE", process.env.CODEX_PET_COOKIE_SECURE ?? "false"],
   ["CODEX_PET_EMAIL_PROVIDER", process.env.CODEX_PET_EMAIL_PROVIDER ?? "missing"],
   ["CODEX_PET_EMAIL_WEBHOOK_URL", process.env.CODEX_PET_EMAIL_WEBHOOK_URL ? "configured" : "missing"],
   ["CODEX_PET_PASSKEY_PROVIDER", process.env.CODEX_PET_PASSKEY_PROVIDER ?? "missing"],
@@ -18,6 +19,11 @@ const checks = [
   ["CODEX_PET_ASSET_STORAGE", process.env.CODEX_PET_ASSET_STORAGE || "local_fs"],
   ["CODEX_PET_ASSET_ROOT", process.env.CODEX_PET_ASSET_ROOT ?? "data/assets"],
   ["CODEX_PET_ASSET_CDN_BASE_URL", process.env.CODEX_PET_ASSET_CDN_BASE_URL ?? "missing"],
+  ["CODEX_PET_S3_ENDPOINT", process.env.CODEX_PET_S3_ENDPOINT ? "configured" : "missing"],
+  ["CODEX_PET_S3_BUCKET", process.env.CODEX_PET_S3_BUCKET ?? "missing"],
+  ["CODEX_PET_S3_REGION", process.env.CODEX_PET_S3_REGION ?? "auto"],
+  ["CODEX_PET_S3_ACCESS_KEY_ID", process.env.CODEX_PET_S3_ACCESS_KEY_ID ? "configured" : "missing"],
+  ["CODEX_PET_S3_SECRET_ACCESS_KEY", process.env.CODEX_PET_S3_SECRET_ACCESS_KEY ? "configured" : "missing"],
 ];
 
 for (const [name, value] of checks) {

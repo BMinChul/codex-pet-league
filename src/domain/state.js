@@ -1146,7 +1146,7 @@ export function publicPetView(state, pet) {
     asset: {
       ...asset,
       is_visible: isVisible,
-      atlas_url: isVisible && asset?.atlas_sha256 ? `/api/assets/${encodeURIComponent(asset.id)}/atlas` : null,
+      atlas_url: isVisible && asset?.atlas_sha256 ? atlasPublicUrl(asset) : null,
     },
     cosmetic_rewards: cosmeticRewardsFor(pet),
     skills: pet.skills
@@ -2704,6 +2704,14 @@ function sanitizeAppearance(appearance) {
 
 function sanitizeReviewNote(value) {
   return String(value ?? "").trim().replace(/[<>]/g, "").slice(0, 160) || "review";
+}
+
+function atlasPublicUrl(asset) {
+  const cdnBase = process.env.CODEX_PET_ASSET_CDN_BASE_URL?.replace(/\/+$/, "");
+  if (cdnBase && asset.atlas_object_key) {
+    return `${cdnBase}/${asset.atlas_object_key.split("/").map(encodeURIComponent).join("/")}`;
+  }
+  return `/api/assets/${encodeURIComponent(asset.id)}/atlas`;
 }
 
 function sanitizeProviderReason(value) {

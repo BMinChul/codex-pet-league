@@ -1,9 +1,14 @@
 runs/
 test-results/
 playwright-report/
+.env
 identity-probe/logs/
 identity-probe/codex-exec-output.txt
 data/*.json
 data/*.log
 data/*.tmp
+data/*.sqlite
+data/*.sqlite-*
+data/assets/
+backups/
 node_modules/

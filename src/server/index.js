@@ -61,6 +61,7 @@ const SERVER_STARTED_AT = Date.now();
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const ALLOW_DEV_ACCOUNT_HEADER = process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER === "true";
 const EXPOSE_AUTH_DEV_CODE = process.env.CODEX_PET_AUTH_DEV_CODE === "true";
+const COOKIE_SECURE = process.env.CODEX_PET_COOKIE_SECURE === "true";
 const BRIDGE_SECRET = process.env.CODEX_PET_BRIDGE_SECRET ?? "";
 const BRIDGE_ATTESTATION_SECRET = process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET ?? "";
 const OPS_JOB_INTERVAL_MS = Number(process.env.CODEX_PET_OPS_JOB_INTERVAL_MS ?? 60_000);
@@ -688,11 +689,11 @@ function parseCookies(cookieHeader) {
 
 function sessionCookie(token, expiresAt) {
   const maxAge = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${COOKIE_SECURE ? "; Secure" : ""}`;
 }
 
 function clearSessionCookie() {
-  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${COOKIE_SECURE ? "; Secure" : ""}`;
 }
 
 function trainingReportTrust(req, body) {

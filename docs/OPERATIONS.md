@@ -26,11 +26,15 @@ npm run test:storage
 npm run test:load
 npm run test:browser
 npm run verify:loop -- 2
+npm run prod:check
 ```
 
 Use `/api/health` for load balancer checks and `/api/metrics` for scraping runtime counts such as accounts, pets, active battles, waiting match tickets, held Training Reports, and open abuse alerts.
 Keep `CODEX_PET_AUTH_DEV_CODE=false` and `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false` outside local testing. Configure `CODEX_PET_BRIDGE_SECRET` and `CODEX_PET_BRIDGE_ATTESTATION_SECRET` before trusting high-value Training Reports from CLI or MCP bridge flows.
+Set `CODEX_PET_COOKIE_SECURE=true` when serving over HTTPS.
 Before a SQLite run, migrate once with `npm run db:migrate -- data/league-state.json data/league-state.sqlite`, then set `CODEX_PET_STORAGE_DRIVER=sqlite` and `CODEX_PET_SQLITE_PATH=data/league-state.sqlite`.
 Keep `CODEX_PET_ASSET_ROOT` on persistent storage. The server stores uploaded hatch atlas PNGs under that root and serves visible active pets through `/api/assets/:asset_id/atlas`; hidden or blocked assets return 404.
+For S3-compatible storage, set `CODEX_PET_ASSET_STORAGE=s3_compatible` and keep the bucket private unless a CDN URL is configured.
+Run `npm run backup` before upgrades or risky maintenance.
 
 The admin console shows open review cases, audit findings, active abuse alerts, recent risk events, enforcement history, and asset moderation history. Audit-driven alerts are review-only signals; ranked locks stay manual to avoid false-positive punishment.

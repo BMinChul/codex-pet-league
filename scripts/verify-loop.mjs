@@ -24,6 +24,9 @@ const syntaxFiles = [
   "scripts/abuse-smoke.mjs",
   "scripts/storage-smoke.mjs",
   "scripts/load-smoke.mjs",
+  "scripts/healthcheck.mjs",
+  "scripts/production-check.mjs",
+  "scripts/backup-state.mjs",
   "scripts/migrate-json-to-sqlite.mjs",
   "scripts/balance-sim.mjs",
   "scripts/ops-check.mjs",
@@ -55,6 +58,7 @@ for (let index = 1; index <= iterations; index += 1) {
   run(nodeBin, ["--test", "test/*.test.js"], "unit tests");
   run(nodeBin, ["scripts/storage-smoke.mjs"], "storage smoke");
   run(nodeBin, ["scripts/load-smoke.mjs"], "load and security smoke");
+  run(nodeBin, ["scripts/production-check.mjs"], "production readiness local check");
   run(nodeBin, ["scripts/balance-sim.mjs"], "balance sim");
   run(nodeBin, ["scripts/abuse-smoke.mjs"], "abuse smoke");
   run(nodeBin, ["scripts/runtime-smoke.mjs"], "runtime smoke");
