@@ -80,7 +80,30 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  margin-bottom: 10px;
+}
+
+.app-status {
+  min-height: 36px;
   margin-bottom: 18px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.app-status[data-tone="success"] {
+  border-color: rgba(20, 128, 94, 0.35);
+  background: #eef8f3;
+  color: var(--green);
+}
+
+.app-status[data-tone="error"] {
+  border-color: rgba(185, 64, 58, 0.35);
+  background: #fff2f1;
+  color: var(--red);
 }
 
 .status-pills {
@@ -144,6 +167,11 @@ h2 {
   margin-top: 8px;
 }
 
+.full-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .field {
   width: 100%;
   height: 38px;
@@ -170,6 +198,12 @@ label {
   padding: 8px 11px;
   cursor: pointer;
   font-weight: 750;
+}
+
+button:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .primary-button {
@@ -349,6 +383,19 @@ th {
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
+}
+
+.empty-state,
+.empty-cell {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.empty-state {
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: #f9fbfd;
 }
 
 @media (max-width: 920px) {

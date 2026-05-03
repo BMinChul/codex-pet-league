@@ -21,7 +21,7 @@ http://localhost:4317
 - Optional Codex hatch atlas PNG upload, with server-side PNG dimension and hash validation.
 - Official pet creation with primary and secondary elements.
 - Server-derived stats, level, Battle Class, skill loadout, and ranked rating.
-- Training Report draft and submit flow.
+- Training Report draft and submit flow with risk scoring and review holds.
 - Daily XP cap display:
   - Pet XP `700/day`
   - Training XP `400/day`
@@ -33,6 +33,11 @@ http://localhost:4317
 - Active season tracking. Season 1 runs from `2026-05-03` to `2026-08-01`.
 - Ranked queue LP windows expand with wait time: `150 -> 300 -> 500 -> 800`.
 - Friend Duel invite codes that create PvP turn battle rooms.
+- Real-time browser updates over `/api/live` SSE.
+- Skill loadout updates with cosmetic skill aliases.
+- Public pet profiles and replay logs.
+- Dev auth challenge/session flow for passkey, magic link, and OAuth-shaped account binding.
+- Local audit checks for XP/LP/replay/risk integrity.
 - Sandbox battle simulation for result testing. It does not award official XP or ranked LP.
 - LP and tier/division updates only for official Ranked PvP matchmaking battles.
 - Leaderboard and server event log.
@@ -48,6 +53,7 @@ npm run cli -- help
 ```
 
 Runtime state is stored in `data/league-state.json` and ignored by git.
+The JSON store is dev-only. It now writes atomically with temp-file rename and ledger hash chains, but production must use a real append-only database.
 
 ## CLI Bridge
 
@@ -55,8 +61,14 @@ The CLI is the local bridge that Codex App slash commands or natural-language to
 
 ```bash
 npm run cli -- session
+npm run cli -- session list
+npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
+npm run cli -- auth verify --challenge auth_challenge_id --code 123456
 npm run cli -- league
 npm run cli -- pet create --name Pebble --primary Forge --secondary Trace
+npm run cli -- pet profile
+npm run cli -- pet loadout --skills forge_offense,forge_defense,forge_status,trace_offense --aliases forge_offense=Hammer
+npm run cli -- pet replays
 npm run cli -- pets
 npm run cli -- xp status
 npm run cli -- report draft --implementation --verification --tests-run 3
@@ -66,8 +78,10 @@ npm run cli -- battle action --battle battle_room_id --kind strike
 npm run cli -- battle get --battle battle_room_id
 npm run cli -- queue join --mode ranked
 npm run cli -- queue status
+npm run cli -- queue cancel --ticket ticket_id
 npm run cli -- invite create
 npm run cli -- invite accept --code ABC123
+npm run cli -- audit
 npm run cli -- battle simulate --mode ranked --result win --opponent-lp 1500
 npm run cli -- leaderboard
 ```
@@ -85,16 +99,28 @@ Environment:
 
 ```bash
 CODEX_PET_LEAGUE_URL=http://localhost:4317
+CODEX_PET_STATE_PATH=C:\path\to\league-state.json
+CODEX_PET_SESSION_TOKEN=league_session_token
 CODEX_PET_ACCOUNT_ID=acct_demo
+CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true
+CODEX_PET_AUTH_DEV_CODE=true
 ```
+
+`CODEX_PET_SESSION_TOKEN` is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and should be disabled in production with `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false`.
+`CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only; production auth should set it to `false` and deliver codes through the chosen email/passkey/OAuth provider.
 
 ## Codex App MCP Bridge
 
 The MCP bridge exposes the same product actions as tools:
 
+- `auth_challenge`
+- `auth_verify`
 - `pet_status`
 - `pet_create`
 - `league_status`
+- `pet_profile`
+- `pet_loadout_update`
+- `pet_replays`
 - `training_report_draft`
 - `training_report_submit`
 - `battle_simulate`
@@ -103,6 +129,8 @@ The MCP bridge exposes the same product actions as tools:
 - `battle_get`
 - `matchmaking_join`
 - `matchmaking_status`
+- `matchmaking_cancel`
+- `admin_audit`
 - `friend_invite_create`
 - `friend_invite_accept`
 - `leaderboard`

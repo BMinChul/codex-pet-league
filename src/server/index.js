@@ -8,31 +8,45 @@ import {
   XP_CAPS,
   MATCHMAKING_POLICY,
   totalXpForLevel100,
-  tierForLp,
 } from "../domain/rules.js";
 import {
+  adminAudit,
+  cancelMatchmakingTicket,
+  createAuthChallenge,
   createPet,
   createPetAsset,
   draftTrainingReport,
   getAccount,
+  getAccountBySession,
   leaderboard,
   acceptFriendInvite,
   createFriendInvite,
   joinMatchmakingQueue,
   leagueStatus,
   matchmakingStatus,
+  petProfile,
+  petReplays,
+  processMatchmakingQueues,
   publicPetView,
+  revokeSession,
   simulateBattle,
   getTurnBattle,
   startTurnBattle,
+  listSessions,
   submitTurnBattleAction,
   submitTrainingReport,
+  updatePetLoadout,
+  verifyAuthChallenge,
   xpStatus,
 } from "../domain/state.js";
-import { loadState, saveState, updateState } from "../storage/jsonStore.js";
+import { loadState, updateState } from "../storage/jsonStore.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
 const PUBLIC_DIR = fileURLToPath(new URL("../../public", import.meta.url));
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const ALLOW_DEV_ACCOUNT_HEADER = process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER !== "false";
+const EXPOSE_AUTH_DEV_CODE = process.env.CODEX_PET_AUTH_DEV_CODE !== "false";
+const liveClients = new Set();
 
 const server = createServer(async (req, res) => {
   try {
@@ -56,15 +70,62 @@ server.listen(PORT, () => {
   console.log(`Codex Pet League dev server running at http://localhost:${PORT}`);
 });
 
+setInterval(async () => {
+  try {
+    const result = await updateState((state) => processMatchmakingQueues(state));
+    if (result.matches.length > 0) broadcast("matchmaking.background_matched", { matches: result.matches.length });
+  } catch (error) {
+    console.error(`background matcher failed: ${error.message}`);
+  }
+}, 3000).unref();
+
+setInterval(() => {
+  broadcast("heartbeat", { live_clients: liveClients.size });
+}, 15000).unref();
+
 async function handleApi(req, res, url) {
-  const accountId = req.headers["x-league-account-id"]?.toString() || "acct_demo";
+  if (req.method === "GET" && url.pathname === "/api/live") {
+    await handleLive(req, res);
+    return;
+  }
+
   const path = url.pathname;
   const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readJson(req) : {};
+  let accountId = null;
+
+  if (req.method === "POST" && path === "/api/auth/challenge") {
+    const result = await updateState((state) => createAuthChallenge(state, body));
+    sendJson(res, 201, publicAuthChallenge(result));
+    broadcast("auth.challenge.created", { method: result.method });
+    return;
+  }
+
+  if (req.method === "POST" && path === "/api/auth/verify") {
+    const result = await updateState((state) => verifyAuthChallenge(state, body));
+    sendJson(res, 201, result);
+    broadcast("auth.session.created", { account_id: result.account.id });
+    return;
+  }
+
+  accountId = await resolveAccountId(req);
 
   if (req.method === "GET" && path === "/api/session") {
     const state = await loadState();
+    if (req.headers["x-league-session-token"]) accountId = getAccountBySession(state, req.headers["x-league-session-token"].toString()).id;
     const account = getAccount(state, accountId);
     sendJson(res, 200, { account });
+    return;
+  }
+
+  if (req.method === "GET" && path === "/api/sessions") {
+    const state = await loadState();
+    sendJson(res, 200, listSessions(state, accountId));
+    return;
+  }
+
+  if (req.method === "POST" && path === "/api/sessions/revoke") {
+    const result = await mutate("auth.session.revoked", (state) => revokeSession(state, accountId, body));
+    sendJson(res, 201, result);
     return;
   }
 
@@ -97,7 +158,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/pet-assets/uploads") {
-    const result = await updateState((state) => {
+    const result = await mutate("asset.active", (state) => {
       getAccount(state, accountId);
       return createPetAsset(state, accountId, body);
     });
@@ -106,7 +167,7 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && path === "/api/pets") {
-    const result = await updateState((state) => {
+    const result = await mutate("pet.created", (state) => {
       getAccount(state, accountId);
       return createPet(state, accountId, body);
     });
@@ -127,6 +188,19 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "POST" && path === "/api/matchmaking/cancel") {
+    const result = await mutate("matchmaking.cancelled", (state) => cancelMatchmakingTicket(state, accountId, body));
+    sendJson(res, 201, result);
+    return;
+  }
+
+  const publicPetMatch = path.match(/^\/api\/public\/pets\/([^/]+)$/);
+  if (req.method === "GET" && publicPetMatch) {
+    const state = await loadState();
+    sendJson(res, 200, petProfile(state, publicPetMatch[1]));
+    return;
+  }
+
   const battleMatch = path.match(/^\/api\/battles\/([^/]+)(?:\/(.+))?$/);
   if (battleMatch) {
     const [, battleRoomId, subpath = ""] = battleMatch;
@@ -143,7 +217,14 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && path === "/api/events") {
     const state = await loadState();
     getAccount(state, accountId);
-    sendJson(res, 200, { events: state.events.slice(0, 80) });
+    sendJson(res, 200, { events: state.events.slice(0, 80).map(redactEvent) });
+    return;
+  }
+
+  if (req.method === "GET" && path === "/api/admin/audit") {
+    const state = await loadState();
+    getAccount(state, accountId);
+    sendJson(res, 200, adminAudit(state));
     return;
   }
 
@@ -170,6 +251,22 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
     return;
   }
 
+  if (req.method === "PUT" && subpath === "loadout") {
+    const result = await mutate("pet.loadout.updated", (state) => {
+      getAccount(state, accountId);
+      return updatePetLoadout(state, accountId, petId, body);
+    });
+    sendJson(res, 200, { pet: result });
+    return;
+  }
+
+  if (req.method === "GET" && subpath === "replays") {
+    const state = await loadState();
+    getAccount(state, accountId);
+    sendJson(res, 200, petReplays(state, accountId, petId));
+    return;
+  }
+
   if (req.method === "POST" && subpath === "training-reports/draft") {
     const state = await loadState();
     getAccount(state, accountId);
@@ -178,7 +275,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "training-reports") {
-    const result = await updateState((state) => {
+    const result = await mutate("training.report.submitted", (state) => {
       getAccount(state, accountId);
       return submitTrainingReport(state, accountId, petId, body);
     });
@@ -187,7 +284,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "battles/simulate") {
-    const result = await updateState((state) => {
+    const result = await mutate("battle.simulated", (state) => {
       getAccount(state, accountId);
       return simulateBattle(state, accountId, petId, body);
     });
@@ -196,7 +293,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "battles") {
-    const result = await updateState((state) => {
+    const result = await mutate("battle.room.started", (state) => {
       getAccount(state, accountId);
       return startTurnBattle(state, accountId, petId, body);
     });
@@ -205,7 +302,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "matchmaking/queue") {
-    const result = await updateState((state) => {
+    const result = await mutate("matchmaking.queue", (state) => {
       getAccount(state, accountId);
       return joinMatchmakingQueue(state, accountId, petId, body);
     });
@@ -214,7 +311,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "friend-invites") {
-    const result = await updateState((state) => {
+    const result = await mutate("friend_invite.created", (state) => {
       getAccount(state, accountId);
       return createFriendInvite(state, accountId, petId, body);
     });
@@ -223,7 +320,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   }
 
   if (req.method === "POST" && subpath === "friend-invites/accept") {
-    const result = await updateState((state) => {
+    const result = await mutate("friend_invite.accepted", (state) => {
       getAccount(state, accountId);
       return acceptFriendInvite(state, accountId, petId, body);
     });
@@ -236,7 +333,7 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
 
 async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body) {
   if (req.method === "GET" && subpath === "") {
-    const result = await updateState((state) => {
+    const result = await mutate("battle.room.viewed", (state) => {
       getAccount(state, accountId);
       return getTurnBattle(state, accountId, battleRoomId);
     });
@@ -245,7 +342,7 @@ async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body)
   }
 
   if (req.method === "POST" && subpath === "actions") {
-    const result = await updateState((state) => {
+    const result = await mutate("battle.action.submitted", (state) => {
       getAccount(state, accountId);
       return submitTurnBattleAction(state, accountId, battleRoomId, body);
     });
@@ -254,6 +351,60 @@ async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body)
   }
 
   sendJson(res, 404, { error: { code: "NOT_FOUND", message: "Battle API route not found." } });
+}
+
+async function resolveAccountId(req) {
+  const sessionToken = req.headers["x-league-session-token"]?.toString();
+  if (sessionToken) {
+    const state = await loadState();
+    return getAccountBySession(state, sessionToken).id;
+  }
+  if (!ALLOW_DEV_ACCOUNT_HEADER) {
+    const error = new Error("League session token is required.");
+    error.status = 401;
+    error.code = "SESSION_REQUIRED";
+    throw error;
+  }
+  return req.headers["x-league-account-id"]?.toString() || "acct_demo";
+}
+
+async function mutate(eventType, mutator) {
+  const result = await updateState(mutator);
+  broadcast(eventType, { changed: true });
+  return result;
+}
+
+async function handleLive(req, res) {
+  await resolveAccountId(req);
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+  });
+  const client = { res };
+  liveClients.add(client);
+  res.write(`event: ready\ndata: ${JSON.stringify({ connected_at: new Date().toISOString() })}\n\n`);
+  req.on("close", () => liveClients.delete(client));
+}
+
+function broadcast(type, payload) {
+  const event = `event: ${type}\ndata: ${JSON.stringify({ type, payload, created_at: new Date().toISOString() })}\n\n`;
+  for (const client of liveClients) {
+    client.res.write(event);
+  }
+}
+
+function redactEvent(event) {
+  const payload = { ...(event.payload ?? {}) };
+  if (payload.code) payload.code = "REDACTED";
+  if (payload.invite_code) payload.invite_code = "REDACTED";
+  return { ...event, payload };
+}
+
+function publicAuthChallenge(result) {
+  if (EXPOSE_AUTH_DEV_CODE) return result;
+  const { dev_code, ...safeResult } = result;
+  return safeResult;
 }
 
 async function serveStatic(req, res, url) {
@@ -278,7 +429,15 @@ async function serveStatic(req, res, url) {
 
 async function readJson(req) {
   const chunks = [];
+  let total = 0;
   for await (const chunk of req) {
+    total += chunk.length;
+    if (total > MAX_BODY_BYTES) {
+      const error = new Error("Request body is too large.");
+      error.status = 413;
+      error.code = "BODY_TOO_LARGE";
+      throw error;
+    }
     chunks.push(chunk);
   }
   const raw = Buffer.concat(chunks).toString("utf8");

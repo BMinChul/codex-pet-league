@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { elementModifier, OFFICIAL_SKILLS } from "./rules.js";
 
 export const TURN_SECONDS = 30;
@@ -24,6 +25,7 @@ export function createBattleRoomSnapshot(input) {
     turn_seconds: TURN_SECONDS,
     max_turns: MAX_TURNS,
     turn_index: 1,
+    turn_nonce: randomUUID(),
     turn_started_at: now,
     turn_deadline_at: deadlineFrom(now),
     sides: {
@@ -59,6 +61,7 @@ export function publicBattleRoom(room, viewerAccountId = null) {
     turn_seconds: room.turn_seconds,
     max_turns: room.max_turns,
     turn_index: room.turn_index,
+    turn_nonce: room.turn_nonce,
     turn_started_at: room.turn_started_at,
     turn_deadline_at: room.turn_deadline_at,
     sides: {
@@ -80,6 +83,7 @@ export function publicBattleRoom(room, viewerAccountId = null) {
 export function submitAction(room, sideKey, input = {}, now = new Date().toISOString()) {
   assertInProgress(room);
   assertDeadlineOpen(room, now);
+  assertFreshTurn(room, input);
 
   if (room.pending_actions[sideKey]) {
     return { submitted: false, duplicate: true, room };
@@ -90,7 +94,7 @@ export function submitAction(room, sideKey, input = {}, now = new Date().toISOSt
   room.pending_actions[sideKey] = {
     ...action,
     submitted_at: now,
-    source: input.source ?? "manual",
+    source: sanitizeActionSource(input.source),
   };
   room.updated_at = now;
   room.state_hash = hashRoomState(room);
@@ -357,6 +361,7 @@ function resolveTurn(room, now) {
   }
 
   room.turn_index += 1;
+  room.turn_nonce = randomUUID();
   room.turn_started_at = now;
   room.turn_deadline_at = deadlineFrom(now);
   room.updated_at = now;
@@ -537,6 +542,19 @@ function assertDeadlineOpen(room, now) {
   if (new Date(now) > new Date(room.turn_deadline_at)) {
     throw actionError("TURN_EXPIRED", "Turn timer has expired.");
   }
+}
+
+function assertFreshTurn(room, input) {
+  if (input.turn_index !== undefined && Number(input.turn_index) !== room.turn_index) {
+    throw actionError("TURN_INDEX_STALE", "Action was submitted for a stale turn.");
+  }
+  if (input.turn_nonce !== undefined && String(input.turn_nonce) !== room.turn_nonce) {
+    throw actionError("TURN_NONCE_INVALID", "Action turn nonce is invalid.");
+  }
+}
+
+function sanitizeActionSource(source) {
+  return ["manual", "bot", "timeout", "mcp", "cli"].includes(source) ? source : "manual";
 }
 
 function deadlineFrom(iso) {

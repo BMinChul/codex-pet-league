@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import {
   DEFAULT_SEASON,
   MATCHMAKING_POLICY,
@@ -26,6 +26,7 @@ import {
   submitAction,
   submitBotActionIfNeeded,
 } from "./battleEngine.js";
+import { appendRiskEvent, auditState, riskTrainingReport } from "./audit.js";
 
 export function getAccount(state, accountId = "acct_demo") {
   const account = state.accounts.find((entry) => entry.id === accountId);
@@ -41,6 +42,108 @@ export function leagueStatus(state) {
     matchmaking_policy: MATCHMAKING_POLICY,
     queue_summary: queueSummary(state),
   };
+}
+
+export function createAuthChallenge(state, input = {}) {
+  const method = ["passkey", "email_magic_link", "league_oauth"].includes(input.method)
+    ? input.method
+    : "email_magic_link";
+  const identifier = sanitizeIdentifier(input.identifier ?? "demo@codexpet.local");
+  const now = new Date();
+  const id = `challenge_${randomUUID()}`;
+  const code = randomCode(8);
+  const challenge = {
+    id,
+    method,
+    identifier,
+    code_hash: hashAuthCode(id, code),
+    status: "pending",
+    created_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),
+  };
+  state.authChallenges ??= [];
+  state.authChallenges.unshift(challenge);
+  state.authChallenges = state.authChallenges.slice(0, 200);
+  return {
+    challenge_id: challenge.id,
+    method,
+    identifier,
+    dev_code: code,
+    expires_at: challenge.expires_at,
+  };
+}
+
+export function verifyAuthChallenge(state, input = {}) {
+  const challenge = (state.authChallenges ?? []).find((entry) => entry.id === input.challenge_id);
+  if (!challenge || challenge.status !== "pending") {
+    throw httpError(404, "AUTH_CHALLENGE_NOT_FOUND", "Auth challenge is not pending.");
+  }
+  if (new Date(challenge.expires_at) <= new Date()) {
+    challenge.status = "expired";
+    throw httpError(409, "AUTH_CHALLENGE_EXPIRED", "Auth challenge expired.");
+  }
+  const submittedCode = String(input.code ?? "").trim();
+  const codeMatches = challenge.code_hash
+    ? challenge.code_hash === hashAuthCode(challenge.id, submittedCode)
+    : challenge.code === submittedCode;
+  if (!codeMatches) {
+    appendRiskEvent(state, {
+      type: "auth.challenge_failed",
+      severity: "medium",
+      score: 35,
+      metadata: { challenge_id: challenge.id, method: challenge.method },
+    });
+    throw httpError(401, "AUTH_CODE_INVALID", "Auth challenge code is invalid.");
+  }
+
+  const account = findOrCreateVerifiedAccount(state, challenge);
+  const session = {
+    id: `session_${randomUUID()}`,
+    account_id: account.id,
+    token: `league_${randomUUID().replaceAll("-", "")}`,
+    method: challenge.method,
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    revoked_at: null,
+  };
+  state.sessions ??= [];
+  state.sessions.unshift(session);
+  challenge.status = "used";
+  challenge.used_at = new Date().toISOString();
+  logEvent(state, "auth.session.created", account.id, { session_id: session.id, method: session.method });
+  return {
+    account,
+    session: publicSession(session),
+    session_token: session.token,
+  };
+}
+
+export function getAccountBySession(state, token) {
+  const session = (state.sessions ?? []).find(
+    (entry) => entry.token === token && !entry.revoked_at && new Date(entry.expires_at) > new Date(),
+  );
+  if (!session) throw httpError(401, "SESSION_INVALID", "A valid League session is required.");
+  return getAccount(state, session.account_id);
+}
+
+export function listSessions(state, accountId) {
+  getAccount(state, accountId);
+  return {
+    sessions: (state.sessions ?? [])
+      .filter((session) => session.account_id === accountId)
+      .map(publicSession),
+  };
+}
+
+export function revokeSession(state, accountId, input = {}) {
+  getAccount(state, accountId);
+  const session = (state.sessions ?? []).find(
+    (entry) => entry.account_id === accountId && (entry.id === input.session_id || entry.token === input.token),
+  );
+  if (!session) throw httpError(404, "SESSION_NOT_FOUND", "Session not found.");
+  session.revoked_at = new Date().toISOString();
+  logEvent(state, "auth.session.revoked", accountId, { session_id: session.id });
+  return { session: publicSession(session) };
 }
 
 export function createPetAsset(state, accountId, input = {}) {
@@ -110,6 +213,7 @@ export function createPet(state, accountId, input = {}) {
     stats,
     battle_class: battleClassForTotalStats(stats.total),
     skills: defaultLoadout(primaryElement, secondaryElement),
+    skill_aliases: {},
     rating: {
       season_id: season.id,
       lp: season.ranked_seed_lp,
@@ -127,6 +231,74 @@ export function createPet(state, accountId, input = {}) {
   state.pets.push(pet);
   logEvent(state, "pet.created", accountId, { pet_id: pet.id, asset_id: asset.id });
   return pet;
+}
+
+export function updatePetLoadout(state, accountId, petId, input = {}) {
+  const pet = ownedPet(state, accountId, petId);
+  assertPetAvailableForBattle(state, pet.id);
+  const skillIds = Array.isArray(input.skills) ? input.skills : pet.skills;
+  if (skillIds.length !== 4) {
+    throw httpError(400, "LOADOUT_REQUIRES_FOUR_SKILLS", "A battle loadout must contain exactly four skills.");
+  }
+  if (new Set(skillIds).size !== 4) {
+    throw httpError(400, "LOADOUT_DUPLICATE_SKILL", "A battle loadout cannot contain duplicate skills.");
+  }
+
+  const allowedElements = new Set([pet.primary_element, pet.secondary_element].filter(Boolean));
+  const officialById = new Map(OFFICIAL_SKILLS.map((skill) => [skill.id, skill]));
+  for (const skillId of skillIds) {
+    const skill = officialById.get(skillId);
+    if (!skill || !allowedElements.has(skill.element)) {
+      throw httpError(400, "LOADOUT_SKILL_INVALID", `Skill ${skillId} is not valid for this pet.`);
+    }
+  }
+
+  pet.skills = skillIds;
+  pet.skill_aliases = sanitizeSkillAliases(input.aliases ?? pet.skill_aliases ?? {});
+  pet.updated_at = new Date().toISOString();
+  logEvent(state, "pet.loadout.updated", accountId, { pet_id: pet.id, skills: pet.skills });
+  return publicPetView(state, pet);
+}
+
+export function petProfile(state, petId) {
+  const pet = state.pets.find((entry) => entry.id === petId && entry.status === "active");
+  if (!pet) throw httpError(404, "PET_NOT_FOUND", "Pet not found.");
+  const battles = (state.battles ?? []).filter((battle) => battle.pet_id === pet.id);
+  const recent = battles.slice(-10).reverse();
+  return {
+    pet: publicPetView(state, pet),
+    record: {
+      battles: battles.length,
+      wins: battles.filter((battle) => battle.result === "win").length,
+      losses: battles.filter((battle) => battle.result === "loss" || battle.result === "afk_loss").length,
+      draws: battles.filter((battle) => battle.result === "draw").length,
+    },
+    recent_battles: recent,
+  };
+}
+
+export function petReplays(state, accountId, petId) {
+  const pet = ownedPet(state, accountId, petId);
+  return {
+    replays: (state.battles ?? [])
+      .filter((battle) => battle.pet_id === pet.id && battle.replay_hash)
+      .slice(-20)
+      .reverse()
+      .map((battle) => ({
+        battle_id: battle.id,
+        room_id: battle.battle_room_id,
+        mode: battle.mode,
+        result: battle.result,
+        replay_hash: battle.replay_hash,
+        turn_count: battle.turn_count,
+        created_at: battle.created_at,
+        log: battle.replay_log_json,
+      })),
+  };
+}
+
+export function adminAudit(state) {
+  return auditState(state);
 }
 
 export function draftTrainingReport(state, accountId, petId, input = {}) {
@@ -175,6 +347,10 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     counters,
     isFirstDailyReport,
   });
+  const risk = riskTrainingReport({ signals: input.signals ?? {}, counters, classification });
+  const effectiveAward = risk.hold_for_review
+    ? { ...award, petXpApplied: 0, styleXpApplied: 0, capped: true }
+    : award;
   const now = new Date().toISOString();
   const report = {
     id: `report_${randomUUID()}`,
@@ -182,38 +358,54 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     pet_id: pet.id,
     client_report_id: clientReportId,
     summary_json: input.signals ?? {},
-    status: "approved",
+    status: risk.hold_for_review ? "review" : "approved",
     report_type: classification.reportType,
     element_signal: classification.elementSignal,
     quality_score: classification.qualityScore,
-    pet_xp_delta: award.petXpApplied,
-    style_xp_delta: award.styleXpApplied,
+    risk_score: risk.score,
+    risk_flags: risk.flags,
+    pet_xp_delta: effectiveAward.petXpApplied,
+    style_xp_delta: effectiveAward.styleXpApplied,
     created_at: now,
-    approved_at: now,
+    approved_at: risk.hold_for_review ? null : now,
   };
   state.trainingReports.push(report);
-  appendXpLedger(state, {
-    accountId,
-    petId: pet.id,
-    sourceType: "training_report",
-    sourceId: report.id,
-    petXpDelta: award.petXpApplied,
-    styleXpDelta: award.styleXpApplied,
-    capBuckets: ["pet_daily", "training_daily", "style_daily", "style_weekly"],
-    metadata: {
-      pet_eligible: award.petEligible,
-      report_type: classification.reportType,
-      quality_score: classification.qualityScore,
-    },
-  });
-  applyProgression(pet, award.petXpApplied, award.styleXpApplied);
-  logEvent(state, "training.approved", accountId, {
+  if (risk.score > 0) {
+    appendRiskEvent(state, {
+      accountId,
+      petId: pet.id,
+      type: risk.hold_for_review ? "training.report_held" : "training.report_risk",
+      severity: risk.hold_for_review ? "high" : "low",
+      score: risk.score,
+      metadata: { report_id: report.id, flags: risk.flags },
+    });
+  }
+  if (!risk.hold_for_review) {
+    appendXpLedger(state, {
+      accountId,
+      petId: pet.id,
+      sourceType: "training_report",
+      sourceId: report.id,
+      petXpDelta: effectiveAward.petXpApplied,
+      styleXpDelta: effectiveAward.styleXpApplied,
+      capBuckets: ["pet_daily", "training_daily", "style_daily", "style_weekly"],
+      metadata: {
+        pet_eligible: effectiveAward.petEligible,
+        report_type: classification.reportType,
+        quality_score: classification.qualityScore,
+        risk_score: risk.score,
+      },
+    });
+    applyProgression(pet, effectiveAward.petXpApplied, effectiveAward.styleXpApplied);
+  }
+  logEvent(state, risk.hold_for_review ? "training.review" : "training.approved", accountId, {
     pet_id: pet.id,
     report_id: report.id,
-    pet_xp_delta: award.petXpApplied,
-    style_xp_delta: award.styleXpApplied,
+    pet_xp_delta: effectiveAward.petXpApplied,
+    style_xp_delta: effectiveAward.styleXpApplied,
+    risk_score: risk.score,
   });
-  return { report, award, pet, counters: dailyCounters(state, accountId, pet.id) };
+  return { report, award: effectiveAward, pet, counters: dailyCounters(state, accountId, pet.id) };
 }
 
 export function simulateBattle(state, accountId, petId, input = {}) {
@@ -278,6 +470,16 @@ export function submitTurnBattleAction(state, accountId, battleRoomId, input = {
   const sideKey = sideKeyForAccount(room, accountId);
   if (!sideKey) throw httpError(403, "BATTLE_NOT_PARTICIPANT", "This account is not a participant in the battle.");
   const submission = submitAction(room, sideKey, input, now);
+  if (submission.duplicate) {
+    appendRiskEvent(state, {
+      accountId,
+      petId: room.sides[sideKey].pet_id,
+      type: "battle.duplicate_action",
+      severity: "low",
+      score: 10,
+      metadata: { battle_room_id: room.id, turn_index: room.turn_index },
+    });
+  }
   submitBotActionIfNeeded(room, now);
   resolveTurnIfReady(room, now);
   settleFinishedTurnBattle(state, room);
@@ -329,6 +531,47 @@ export function matchmakingStatus(state, accountId, petId = null) {
     .filter((room) => room.status === "in_progress" && sideKeyForAccount(room, accountId))
     .map((room) => publicBattleRoom(room, accountId));
   return { season, policy: MATCHMAKING_POLICY, tickets, active_battles: activeBattles };
+}
+
+export function cancelMatchmakingTicket(state, accountId, input = {}) {
+  getAccount(state, accountId);
+  const ticket = (state.matchTickets ?? []).find(
+    (entry) => entry.id === input.ticket_id && entry.account_id === accountId && entry.status === "waiting",
+  );
+  if (!ticket) throw httpError(404, "MATCH_TICKET_NOT_FOUND", "Waiting match ticket not found.");
+  ticket.status = "cancelled";
+  ticket.cancel_reason = "user_cancelled";
+  ticket.cancelled_at = new Date().toISOString();
+  logEvent(state, "matchmaking.cancelled", accountId, { ticket_id: ticket.id, pet_id: ticket.pet_id });
+  return { ticket: publicTicket(ticket) };
+}
+
+export function processMatchmakingQueues(state) {
+  advanceAllBattleRooms(state);
+  const matches = [];
+  const waiting = (state.matchTickets ?? [])
+    .filter((ticket) => ticket.status === "waiting")
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  for (const ticket of waiting) {
+    if (ticket.status !== "waiting") continue;
+    if (petHasActiveBattle(state, ticket.pet_id)) {
+      ticket.status = "cancelled";
+      ticket.cancel_reason = "pet_active_battle";
+      ticket.cancelled_at = new Date().toISOString();
+      continue;
+    }
+    const matched = matchWaitingTicket(state, ticket);
+    if (matched) {
+      matches.push({
+        battle_room_id: matched.room.id,
+        ticket_id: ticket.id,
+        opponent_ticket_id: matched.opponentTicket.id,
+      });
+    }
+  }
+
+  return { matches, queue_summary: queueSummary(state) };
 }
 
 export function createFriendInvite(state, accountId, petId, input = {}) {
@@ -466,7 +709,13 @@ export function publicPetView(state, pet) {
   return {
     ...pet,
     asset: petAsset(state, pet),
-    skills: pet.skills.map((skillId) => OFFICIAL_SKILLS.find((skill) => skill.id === skillId)).filter(Boolean),
+    skills: pet.skills
+      .map((skillId) => OFFICIAL_SKILLS.find((skill) => skill.id === skillId))
+      .filter(Boolean)
+      .map((skill) => ({
+        ...skill,
+        alias: pet.skill_aliases?.[skill.id] ?? null,
+      })),
   };
 }
 
@@ -498,6 +747,15 @@ export function httpError(status, code, message) {
 }
 
 function appendXpLedger(state, input) {
+  const duplicate = state.xpLedger.find(
+    (entry) =>
+      entry.account_id === input.accountId &&
+      entry.pet_id === input.petId &&
+      entry.source_type === input.sourceType &&
+      entry.source_id === input.sourceId,
+  );
+  if (duplicate) return duplicate;
+  const previous = state.xpLedger.at(-1);
   state.xpLedger.push({
     id: `xp_${randomUUID()}`,
     account_id: input.accountId,
@@ -508,8 +766,37 @@ function appendXpLedger(state, input) {
     style_xp_delta: input.styleXpDelta,
     cap_buckets_json: input.capBuckets,
     metadata: input.metadata ?? {},
+    previous_hash: previous?.hash ?? null,
     applied_at: new Date().toISOString(),
   });
+  const entry = state.xpLedger.at(-1);
+  entry.hash = createHash("sha256").update(JSON.stringify({ ...entry, hash: undefined })).digest("hex");
+  return entry;
+}
+
+function appendLpLedger(state, input) {
+  const duplicate = state.lpLedger.find(
+    (entry) => entry.account_id === input.accountId && entry.pet_id === input.petId && entry.battle_room_id === input.battleRoomId,
+  );
+  if (duplicate) return duplicate;
+  const previous = state.lpLedger.at(-1);
+  const entry = {
+    id: `lp_${randomUUID()}`,
+    account_id: input.accountId,
+    pet_id: input.petId,
+    season_id: input.seasonId,
+    battle_room_id: input.battleRoomId ?? null,
+    source_type: "ranked_battle",
+    lp_delta: input.lpDelta,
+    lp_before: input.lpBefore,
+    lp_after: input.lpAfter,
+    opponent_lp: input.opponentLp,
+    previous_hash: previous?.hash ?? null,
+    applied_at: input.appliedAt,
+  };
+  entry.hash = createHash("sha256").update(JSON.stringify(entry)).digest("hex");
+  state.lpLedger.push(entry);
+  return entry;
 }
 
 function settleBattleResult(state, accountId, pet, input) {
@@ -519,7 +806,22 @@ function settleBattleResult(state, accountId, pet, input) {
   const opponent = input.opponent ?? defaultOpponentFor(pet, opponentLp);
   const counters = dailyCounters(state, accountId, pet.id);
   const official = input.official !== false;
-  const award = official ? calculateBattleAward({ mode, result, counters }) : { rawPetXp: 0, petXpApplied: 0, capped: false };
+  let award = official ? calculateBattleAward({ mode, result, counters }) : { rawPetXp: 0, petXpApplied: 0, capped: false };
+  if (official && mode === "friend") {
+    const pairCount = friendPairDailyCount(state, accountId, pet.id, opponent.pet_id);
+    const meaningfulTurns = Number(input.turnCount ?? 0) >= 2;
+    if (!meaningfulTurns || pairCount >= 3) {
+      award = { ...award, petXpApplied: 0, capped: true };
+      appendRiskEvent(state, {
+        accountId,
+        petId: pet.id,
+        type: "friend.reward_suppressed",
+        severity: pairCount >= 3 ? "medium" : "low",
+        score: pairCount >= 3 ? 35 : 10,
+        metadata: { pair_pet_id: opponent.pet_id, pair_count: pairCount, turn_count: input.turnCount ?? 0 },
+      });
+    }
+  }
   const now = input.now ?? new Date().toISOString();
   let lp = null;
   const season = activeSeason(state);
@@ -544,17 +846,16 @@ function settleBattleResult(state, accountId, pet, input) {
     if (normalizedResult === "draw") pet.rating.draws += 1;
     pet.rating.placements_remaining = Math.max(0, pet.rating.placements_remaining - 1);
     lp = { before, after: pet.rating.lp, delta, opponent_lp: opponentLp, placement: pet.rating.placements_remaining };
-    state.lpLedger.push({
-      id: `lp_${randomUUID()}`,
-      account_id: accountId,
-      pet_id: pet.id,
-      season_id: season.id,
-      source_type: "ranked_battle",
-      lp_delta: delta,
-      lp_before: before,
-      lp_after: pet.rating.lp,
-      opponent_lp: opponentLp,
-      applied_at: now,
+    appendLpLedger(state, {
+      accountId,
+      petId: pet.id,
+      seasonId: season.id,
+      battleRoomId: input.battleRoomId,
+      lpDelta: delta,
+      lpBefore: before,
+      lpAfter: pet.rating.lp,
+      opponentLp,
+      appliedAt: now,
     });
   }
 
@@ -611,6 +912,12 @@ function advanceBattleRoom(state, room) {
   submitBotActionIfNeeded(room, now);
   resolveTurnIfReady(room, now);
   settleFinishedTurnBattle(state, room);
+}
+
+function advanceAllBattleRooms(state) {
+  for (const room of state.battleRooms ?? []) {
+    if (room.status === "in_progress") advanceBattleRoom(state, room);
+  }
 }
 
 function settleFinishedTurnBattle(state, room) {
@@ -814,6 +1121,7 @@ function opponentFromPet(state, accountId, pet) {
 }
 
 function assertPetAvailableForBattle(state, petId) {
+  advanceAllBattleRooms(state);
   const activeRoom = petHasActiveBattle(state, petId);
   if (activeRoom) {
     throw httpError(409, "PET_ALREADY_IN_BATTLE", "This pet already has an active battle room.");
@@ -902,12 +1210,25 @@ function queueSummary(state) {
   };
 }
 
+function friendPairDailyCount(state, accountId, petId, opponentPetId) {
+  if (!opponentPetId) return 0;
+  const dayStart = startOfUtcDay(new Date());
+  return (state.battles ?? []).filter(
+    (battle) =>
+      battle.account_id === accountId &&
+      battle.pet_id === petId &&
+      battle.mode === "friend" &&
+      battle.opponent?.pet_id === opponentPetId &&
+      new Date(battle.created_at) >= dayStart,
+  ).length;
+}
+
 function createInviteCode(state) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   for (let attempt = 0; attempt < 20; attempt += 1) {
     let code = "";
     for (let i = 0; i < 6; i += 1) {
-      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+      code += alphabet[randomInt(alphabet.length)];
     }
     if (!(state.friendInvites ?? []).some((invite) => invite.code === code && invite.status === "open")) return code;
   }
@@ -1012,11 +1333,71 @@ function defaultManifest() {
 }
 
 function sanitizeName(name) {
-  return String(name).trim().slice(0, 32) || "Codex Pet";
+  return String(name).trim().replace(/[<>]/g, "").slice(0, 32) || "Codex Pet";
+}
+
+function sanitizeIdentifier(identifier) {
+  return String(identifier).trim().toLowerCase().slice(0, 128) || "demo@codexpet.local";
+}
+
+function sanitizeSkillAliases(aliases) {
+  const sanitized = {};
+  for (const [skillId, alias] of Object.entries(aliases ?? {})) {
+    if (!OFFICIAL_SKILLS.some((skill) => skill.id === skillId)) continue;
+    const clean = String(alias ?? "").trim().replace(/[<>]/g, "").slice(0, 24);
+    if (clean) sanitized[skillId] = clean;
+  }
+  return sanitized;
+}
+
+function findOrCreateVerifiedAccount(state, challenge) {
+  const existing = state.accounts.find(
+    (account) => account.identifier === challenge.identifier || account.email === challenge.identifier,
+  );
+  if (existing) {
+    existing.verified = true;
+    existing.authMethods = Array.from(new Set([...(existing.authMethods ?? []), challenge.method]));
+    existing.identifier = existing.identifier ?? challenge.identifier;
+    return existing;
+  }
+
+  const account = {
+    id: `acct_${randomUUID()}`,
+    displayName: challenge.identifier.split("@")[0] || "League Player",
+    identifier: challenge.identifier,
+    email: challenge.method === "email_magic_link" ? challenge.identifier : null,
+    verified: true,
+    authMethods: [challenge.method],
+    createdAt: new Date().toISOString(),
+  };
+  state.accounts.push(account);
+  return account;
+}
+
+function publicSession(session) {
+  return {
+    id: session.id,
+    account_id: session.account_id,
+    method: session.method,
+    created_at: session.created_at,
+    expires_at: session.expires_at,
+    revoked_at: session.revoked_at,
+  };
+}
+
+function randomCode(length) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < length; i += 1) code += alphabet[randomInt(alphabet.length)];
+  return code;
 }
 
 function hashJson(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function hashAuthCode(challengeId, code) {
+  return createHash("sha256").update(`${challengeId}:${code}`).digest("hex");
 }
 
 function hashBuffer(buffer) {

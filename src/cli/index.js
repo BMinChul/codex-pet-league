@@ -6,6 +6,7 @@ import { buildSignalsFromWorkspace } from "./signals.js";
 
 const DEFAULT_BASE_URL = process.env.CODEX_PET_LEAGUE_URL ?? "http://localhost:4317";
 const DEFAULT_ACCOUNT_ID = process.env.CODEX_PET_ACCOUNT_ID ?? "acct_demo";
+const DEFAULT_SESSION_TOKEN = process.env.CODEX_PET_SESSION_TOKEN ?? process.env.LEAGUE_SESSION_TOKEN ?? "";
 
 const [, , ...argv] = process.argv;
 
@@ -23,9 +24,49 @@ async function main(args) {
     return;
   }
 
-  const client = createApiClient(parsed.flags.url ?? DEFAULT_BASE_URL, parsed.flags.account ?? DEFAULT_ACCOUNT_ID);
+  const client = createApiClient(parsed.flags.url ?? DEFAULT_BASE_URL, {
+    accountId: parsed.flags.account ?? DEFAULT_ACCOUNT_ID,
+    sessionToken: parsed.flags.sessionToken ?? DEFAULT_SESSION_TOKEN,
+  });
+
+  if (area === "auth" && action === "challenge") {
+    const result = await client.post("/api/auth/challenge", {
+      method: parsed.flags.method ?? "email_magic_link",
+      identifier: parsed.flags.identifier ?? parsed.flags.email ?? "local@example.test",
+    });
+    printObject(result);
+    return;
+  }
+
+  if (area === "auth" && action === "verify") {
+    if (!parsed.flags.challenge) throw new Error("Pass --challenge challenge_id");
+    if (!parsed.flags.code) throw new Error("Pass --code verification_code");
+    const result = await client.post("/api/auth/verify", {
+      challenge_id: parsed.flags.challenge,
+      code: String(parsed.flags.code),
+    });
+    printObject({
+      account: result.account,
+      session_token: result.session_token,
+      export_hint: "Set CODEX_PET_SESSION_TOKEN to this value for official League requests.",
+    });
+    return;
+  }
 
   if (area === "session") {
+    if (action === "list") {
+      const sessions = await client.get("/api/sessions");
+      printObject(sessions);
+      return;
+    }
+    if (action === "revoke") {
+      const result = await client.post("/api/sessions/revoke", {
+        token: parsed.flags.token ?? parsed.flags.sessionToken,
+        session_id: parsed.flags.session,
+      });
+      printObject(result);
+      return;
+    }
     const session = await client.get("/api/session");
     printObject(session.account);
     return;
@@ -57,6 +98,35 @@ async function main(args) {
 
   if (area === "pet" && action === "create") {
     await createPet(client, parsed.flags);
+    return;
+  }
+
+  if (area === "pet" && action === "profile") {
+    const pet = await resolvePet(client, parsed.flags.pet);
+    const result = await client.get(`/api/public/pets/${pet.id}`);
+    printObject(result);
+    return;
+  }
+
+  if (area === "pet" && action === "loadout") {
+    const pet = await resolvePet(client, parsed.flags.pet);
+    const skills = String(parsed.flags.skills ?? "")
+      .split(",")
+      .map((skill) => skill.trim())
+      .filter(Boolean);
+    const aliases = parseAliases(parsed.flags.aliases ?? "");
+    const result = await client.put(`/api/pets/${pet.id}/loadout`, {
+      skills: skills.length ? skills : pet.skills.map((skill) => skill.id),
+      aliases,
+    });
+    printObject(result.pet);
+    return;
+  }
+
+  if (area === "pet" && action === "replays") {
+    const pet = await resolvePet(client, parsed.flags.pet);
+    const result = await client.get(`/api/pets/${pet.id}/replays`);
+    printObject(result);
     return;
   }
 
@@ -144,6 +214,19 @@ async function main(args) {
     return;
   }
 
+  if (area === "queue" && action === "cancel") {
+    if (!parsed.flags.ticket) throw new Error("Pass --ticket ticket_id");
+    const result = await client.post("/api/matchmaking/cancel", { ticket_id: parsed.flags.ticket });
+    printObject(result);
+    return;
+  }
+
+  if (area === "audit") {
+    const result = await client.get("/api/admin/audit");
+    printObject(result);
+    return;
+  }
+
   if (area === "invite" && action === "create") {
     const pet = await resolvePet(client, parsed.flags.pet);
     const result = await client.post(`/api/pets/${pet.id}/friend-invites`, {});
@@ -217,25 +300,31 @@ async function resolvePet(client, petId) {
   return result.pets[0];
 }
 
-function createApiClient(baseUrl, accountId) {
+function createApiClient(baseUrl, auth) {
   const root = baseUrl.replace(/\/$/, "");
   return {
     get(path) {
-      return request(root, accountId, "GET", path);
+      return request(root, auth, "GET", path);
     },
     post(path, body) {
-      return request(root, accountId, "POST", path, body);
+      return request(root, auth, "POST", path, body);
+    },
+    put(path, body) {
+      return request(root, auth, "PUT", path, body);
     },
   };
 }
 
-async function request(root, accountId, method, path, body) {
+async function request(root, auth, method, path, body) {
+  const headers = { "content-type": "application/json" };
+  if (auth.sessionToken) {
+    headers["x-league-session-token"] = auth.sessionToken;
+  } else {
+    headers["x-league-account-id"] = auth.accountId;
+  }
   const response = await fetch(`${root}${path}`, {
     method,
-    headers: {
-      "content-type": "application/json",
-      "x-league-account-id": accountId,
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const payload = await response.json();
@@ -328,11 +417,11 @@ function printLeaderboard(rows) {
 }
 
 function printTurnBattle(battle) {
-  const player = battle.sides.player;
-  const opponent = battle.sides.opponent;
+  const ownSide = battle.viewer_side === "opponent" ? battle.sides.opponent : battle.sides.player;
+  const otherSide = battle.viewer_side === "opponent" ? battle.sides.player : battle.sides.opponent;
   console.log(`${battle.id} · ${battle.mode} · ${battle.status} · turn ${battle.turn_index}`);
-  console.log(`You: ${player.hp}/${player.max_hp} HP, energy ${player.energy}, AFK ${player.timeout_count}/3`);
-  console.log(`${opponent.name}: ${opponent.hp}/${opponent.max_hp} HP, energy ${opponent.energy}`);
+  console.log(`You: ${ownSide.hp}/${ownSide.max_hp} HP, energy ${ownSide.energy}, AFK ${ownSide.timeout_count}/3`);
+  console.log(`${otherSide.name}: ${otherSide.hp}/${otherSide.max_hp} HP, energy ${otherSide.energy}`);
   if (battle.status === "in_progress") {
     console.log(`Deadline: ${new Date(battle.turn_deadline_at).toLocaleTimeString()}`);
     console.log("Action: codexpet battle action --battle <id> --kind strike");
@@ -340,6 +429,15 @@ function printTurnBattle(battle) {
     console.log(`Result: ${battle.result.result} · replay ${battle.replay_hash}`);
   }
   if (battle.log.at(-1)) printObject({ latest_turn: battle.log.at(-1) });
+}
+
+function parseAliases(value) {
+  const aliases = {};
+  for (const pair of String(value ?? "").split(",")) {
+    const [skillId, alias] = pair.split("=", 2);
+    if (skillId && alias) aliases[skillId.trim()] = alias.trim();
+  }
+  return aliases;
 }
 
 function printMatchmaking(result) {
@@ -381,10 +479,17 @@ function printHelp() {
 
 Usage:
   codexpet session
+  codexpet session list
+  codexpet session revoke --session session_id|--token league_session_token
+  codexpet auth challenge --method email_magic_link --identifier you@example.com
+  codexpet auth verify --challenge auth_challenge_id --code 123456
   codexpet league
   codexpet rules
   codexpet pets
   codexpet pet create --name Pebble --primary Forge --secondary Trace [--atlas path.png]
+  codexpet pet profile [--pet pet_id]
+  codexpet pet loadout --skills skill1,skill2,skill3,skill4 [--aliases skill_id=Alias]
+  codexpet pet replays [--pet pet_id]
   codexpet xp status [--pet pet_id]
   codexpet report draft [--pet pet_id] [--implementation] [--verification] [--tests-run 3]
   codexpet report submit [--pet pet_id] [--milestone] [--files large]
@@ -394,12 +499,15 @@ Usage:
   codexpet battle get --battle battle_room_id
   codexpet queue join [--pet pet_id] [--mode ranked|casual]
   codexpet queue status [--pet pet_id]
+  codexpet queue cancel --ticket ticket_id
   codexpet invite create [--pet pet_id]
   codexpet invite accept --code ABC123 [--pet pet_id]
+  codexpet audit
   codexpet leaderboard
 
 Environment:
   CODEX_PET_LEAGUE_URL=http://localhost:4317
+  CODEX_PET_SESSION_TOKEN=league_session_token
   CODEX_PET_ACCOUNT_ID=acct_demo
 `);
 }

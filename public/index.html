@@ -57,6 +57,7 @@
             <span id="rankPill">Rank -</span>
           </div>
         </header>
+        <div id="appStatus" class="app-status" role="status" aria-live="polite">Connecting...</div>
 
         <section class="grid">
           <article class="panel pet-panel">
@@ -109,8 +110,8 @@
             <label>
               Mode
               <select id="battleMode" class="field">
+                <option value="casual" selected>Casual</option>
                 <option value="ranked">Ranked</option>
-                <option value="casual">Casual</option>
                 <option value="friend">Friend Duel</option>
                 <option value="training">Training Battle</option>
               </select>
@@ -123,6 +124,7 @@
               <button id="startBattleButton" class="secondary-button">Start Bot Battle</button>
               <button id="joinQueueButton" class="primary-button">Random Match</button>
             </div>
+            <button id="queueStatusButton" class="secondary-button full-button">Queue Status</button>
             <div class="invite-row">
               <button id="createInviteButton" class="secondary-button">Create Invite</button>
               <input id="inviteCodeInput" class="field" maxlength="8" placeholder="Invite code" />

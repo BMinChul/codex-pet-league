@@ -6,8 +6,36 @@ const { randomUUID } = require("node:crypto");
 
 const baseUrl = (process.env.CODEX_PET_LEAGUE_URL || "http://localhost:4317").replace(/\/$/, "");
 const accountId = process.env.CODEX_PET_ACCOUNT_ID || "acct_demo";
+const sessionToken = process.env.CODEX_PET_SESSION_TOKEN || process.env.LEAGUE_SESSION_TOKEN || "";
 
 const tools = [
+  {
+    name: "auth_challenge",
+    title: "Create League Auth Challenge",
+    description: "Starts a League account binding challenge for passkey, email magic link, or OAuth-shaped login.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        method: { type: "string", enum: ["passkey", "email_magic_link", "league_oauth"] },
+        identifier: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "auth_verify",
+    title: "Verify League Auth Challenge",
+    description: "Verifies a League auth challenge and returns a session token for official requests.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        challenge_id: { type: "string" },
+        code: { type: "string" },
+      },
+      required: ["challenge_id", "code"],
+      additionalProperties: false,
+    },
+  },
   {
     name: "pet_status",
     title: "Pet Status",
@@ -42,6 +70,40 @@ const tools = [
     inputSchema: {
       type: "object",
       properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "pet_profile",
+    title: "Pet Profile",
+    description: "Shows a public pet profile with recent battles.",
+    inputSchema: {
+      type: "object",
+      properties: { pet_id: { type: "string" } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "pet_loadout_update",
+    title: "Update Pet Loadout",
+    description: "Updates the four official skills and cosmetic skill aliases for a pet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+        skills: { type: "array", items: { type: "string" }, minItems: 4, maxItems: 4 },
+        aliases: { type: "object" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "pet_replays",
+    title: "Pet Replays",
+    description: "Lists recent replay logs for the selected pet.",
+    inputSchema: {
+      type: "object",
+      properties: { pet_id: { type: "string" } },
       additionalProperties: false,
     },
   },
@@ -155,6 +217,27 @@ const tools = [
     },
   },
   {
+    name: "matchmaking_cancel",
+    title: "Cancel Matchmaking",
+    description: "Cancels a waiting matchmaking ticket.",
+    inputSchema: {
+      type: "object",
+      properties: { ticket_id: { type: "string" } },
+      required: ["ticket_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "admin_audit",
+    title: "Admin Audit",
+    description: "Runs local integrity and anti-cheat audit checks.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
     name: "friend_invite_create",
     title: "Create Friend Invite",
     description: "Creates a 10-minute Friend Duel invite code for the selected pet.",
@@ -192,8 +275,15 @@ const tools = [
   },
 ];
 
+let framing = "newline";
+
 function send(message) {
-  process.stdout.write(`${JSON.stringify(message)}\n`);
+  const json = JSON.stringify(message);
+  if (framing === "content-length") {
+    process.stdout.write(`Content-Length: ${Buffer.byteLength(json, "utf8")}\r\n\r\n${json}`);
+    return;
+  }
+  process.stdout.write(`${json}\n`);
 }
 
 function result(id, value) {
@@ -243,6 +333,22 @@ async function handleRequest(message) {
 }
 
 async function callTool(name, args) {
+  if (name === "auth_challenge") {
+    return apiPost("/api/auth/challenge", {
+      method: args.method ?? "email_magic_link",
+      identifier: args.identifier ?? "local@example.test",
+    });
+  }
+
+  if (name === "auth_verify") {
+    if (!args.challenge_id) throw new Error("challenge_id is required.");
+    if (!args.code) throw new Error("code is required.");
+    return apiPost("/api/auth/verify", {
+      challenge_id: args.challenge_id,
+      code: String(args.code),
+    });
+  }
+
   if (name === "pet_status") {
     const pet = await resolvePet(args.pet_id);
     return apiGet(`/api/pets/${pet.id}/xp-status`);
@@ -267,6 +373,24 @@ async function callTool(name, args) {
 
   if (name === "league_status") {
     return apiGet("/api/league");
+  }
+
+  if (name === "pet_profile") {
+    const pet = await resolvePet(args.pet_id);
+    return apiGet(`/api/public/pets/${pet.id}`);
+  }
+
+  if (name === "pet_loadout_update") {
+    const pet = await resolvePet(args.pet_id);
+    return apiPut(`/api/pets/${pet.id}/loadout`, {
+      skills: args.skills ?? pet.skills.map((skill) => skill.id),
+      aliases: args.aliases ?? {},
+    });
+  }
+
+  if (name === "pet_replays") {
+    const pet = await resolvePet(args.pet_id);
+    return apiGet(`/api/pets/${pet.id}/replays`);
   }
 
   if (name === "training_report_draft") {
@@ -326,6 +450,15 @@ async function callTool(name, args) {
     return apiGet(`/api/matchmaking/status${suffix}`);
   }
 
+  if (name === "matchmaking_cancel") {
+    if (!args.ticket_id) throw new Error("ticket_id is required.");
+    return apiPost("/api/matchmaking/cancel", { ticket_id: args.ticket_id });
+  }
+
+  if (name === "admin_audit") {
+    return apiGet("/api/admin/audit");
+  }
+
   if (name === "friend_invite_create") {
     const pet = await resolvePet(args.pet_id);
     return apiPost(`/api/pets/${pet.id}/friend-invites`, {});
@@ -363,13 +496,20 @@ async function apiPost(route, body) {
   return request("POST", route, body);
 }
 
+async function apiPut(route, body) {
+  return request("PUT", route, body);
+}
+
 async function request(method, route, body) {
+  const headers = { "content-type": "application/json" };
+  if (sessionToken) {
+    headers["x-league-session-token"] = sessionToken;
+  } else {
+    headers["x-league-account-id"] = accountId;
+  }
   const response = await fetch(`${baseUrl}${route}`, {
     method,
-    headers: {
-      "content-type": "application/json",
-      "x-league-account-id": accountId,
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const payload = await response.json();
@@ -397,15 +537,36 @@ let buffer = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
   buffer += chunk;
-  let newlineIndex;
-  while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
+  parseIncoming();
+});
+
+function parseIncoming() {
+  while (buffer.length > 0) {
+    const headerMatch = buffer.match(/^Content-Length:\s*(\d+)\r?\n\r?\n/i);
+    if (headerMatch) {
+      framing = "content-length";
+      const headerLength = headerMatch[0].length;
+      const contentLength = Number(headerMatch[1]);
+      if (buffer.length < headerLength + contentLength) return;
+      const raw = buffer.slice(headerLength, headerLength + contentLength);
+      buffer = buffer.slice(headerLength + contentLength);
+      handleRawMessage(raw);
+      continue;
+    }
+
+    const newlineIndex = buffer.indexOf("\n");
+    if (newlineIndex < 0) return;
     const line = buffer.slice(0, newlineIndex).trim();
     buffer = buffer.slice(newlineIndex + 1);
     if (!line) continue;
-    try {
-      handleRequest(JSON.parse(line));
-    } catch (err) {
-      send({ jsonrpc: "2.0", error: { code: -32700, message: String(err?.message ?? err) } });
-    }
+    handleRawMessage(line);
   }
-});
+}
+
+function handleRawMessage(raw) {
+  try {
+    handleRequest(JSON.parse(raw));
+  } catch (err) {
+    send({ jsonrpc: "2.0", error: { code: -32700, message: String(err?.message ?? err) } });
+  }
+}

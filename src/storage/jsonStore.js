@@ -1,9 +1,11 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_SEASON } from "../domain/rules.js";
 
-export const STATE_PATH = new URL("../../data/league-state.json", import.meta.url);
+export const STATE_PATH = process.env.CODEX_PET_STATE_PATH
+  ? pathToFileURL(resolve(process.env.CODEX_PET_STATE_PATH))
+  : new URL("../../data/league-state.json", import.meta.url);
 const STATE_FILE_PATH = fileURLToPath(STATE_PATH);
 let writeQueue = Promise.resolve();
 
@@ -19,7 +21,9 @@ export async function loadState() {
 
 export async function saveState(state) {
   await mkdir(dirname(STATE_FILE_PATH), { recursive: true });
-  await writeFile(STATE_FILE_PATH, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  const tempPath = `${STATE_FILE_PATH}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  await rename(tempPath, STATE_FILE_PATH);
 }
 
 export async function updateState(mutator) {
@@ -63,6 +67,9 @@ export function createDefaultState() {
     battleRooms: [],
     matchTickets: [],
     friendInvites: [],
+    sessions: [],
+    authChallenges: [],
+    riskEvents: [],
     events: [],
   };
 }
@@ -88,6 +95,9 @@ function migrateState(state) {
     battleRooms: state.battleRooms ?? [],
     matchTickets: state.matchTickets ?? [],
     friendInvites: state.friendInvites ?? [],
+    sessions: state.sessions ?? [],
+    authChallenges: state.authChallenges ?? [],
+    riskEvents: state.riskEvents ?? [],
     events: state.events ?? [],
   };
 }
