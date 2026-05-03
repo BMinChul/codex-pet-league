@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  acceptFriendInvite,
   adminAudit,
   adminConsole,
+  cancelMatchmakingTicket,
   createAuthChallenge,
   createPet,
   createPetAsset,
+  draftTrainingReport,
   getTurnBattle,
   getAccountBySession,
   requireAdmin,
@@ -114,6 +117,40 @@ test("untrusted high-value Training Reports are held without XP", () => {
   assert.ok(trusted.report.pet_xp_delta > 0);
 });
 
+test("Training Reports require a fresh server draft for untrusted pet XP", () => {
+  const { state, pet } = createPetFixture();
+  const signals = {
+    verificationActivity: true,
+    testsRun: 1,
+    filesChangedBucket: "small",
+  };
+  const direct = submitTrainingReport(state, "acct_demo", pet.id, {
+    client_report_id: "missing-draft",
+    signals,
+  });
+  assert.equal(direct.report.status, "review");
+  assert.equal(direct.report.risk_flags.includes("training_draft_missing"), true);
+
+  const draft = draftTrainingReport(state, "acct_demo", pet.id, { signals });
+  const approved = submitTrainingReport(state, "acct_demo", pet.id, {
+    client_report_id: "valid-draft",
+    draft_id: draft.id,
+    draft_nonce: draft.nonce,
+    signals,
+  });
+  assert.equal(approved.report.status, "approved");
+  assert.ok(approved.report.pet_xp_delta > 0);
+
+  const reused = submitTrainingReport(state, "acct_demo", pet.id, {
+    client_report_id: "reused-draft",
+    draft_id: draft.id,
+    draft_nonce: draft.nonce,
+    signals,
+  });
+  assert.equal(reused.report.status, "review");
+  assert.equal(reused.report.risk_flags.includes("training_draft_already_used"), true);
+});
+
 test("expired active battles are advanced before availability checks", () => {
   const { state, pet } = createPetFixture();
   const started = startTurnBattle(state, "acct_demo", pet.id, { mode: "casual" });
@@ -172,6 +209,27 @@ test("stale matchmaking tickets are cancelled before matching", () => {
   const result = joinMatchmakingQueue(state, "acct_rival", rivalPet.id, { mode: "ranked" });
   assert.equal(result.status, "waiting");
   assert.equal(state.matchTickets.find((ticket) => ticket.id === waiting.ticket.id).status, "cancelled");
+});
+
+test("queue dodge and invite brute force guards create lockouts", () => {
+  const { state, pet } = createPetFixture();
+  for (let i = 0; i < 5; i += 1) {
+    const queued = joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" });
+    cancelMatchmakingTicket(state, "acct_demo", { ticket_id: queued.ticket.id });
+  }
+  assert.throws(() => joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" }), /Too many queue cancels/);
+
+  const rivalAsset = createPetAsset(state, "acct_rival", {});
+  const rivalPet = createPet(state, "acct_rival", {
+    name: "Invite Guess Pet",
+    pet_asset_id: rivalAsset.id,
+    primary_element: "Logic",
+    secondary_element: "Pulse",
+  });
+  for (let i = 0; i < 5; i += 1) {
+    assert.throws(() => acceptFriendInvite(state, "acct_rival", rivalPet.id, { code: `BAD00${i}` }), /Friend invite code/);
+  }
+  assert.throws(() => acceptFriendInvite(state, "acct_rival", rivalPet.id, { code: "BAD999" }), /Too many failed invite/);
 });
 
 test("admin actions require admin role", () => {

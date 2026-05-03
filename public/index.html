@@ -193,7 +193,17 @@
           </article>
 
           <article class="panel wide">
-            <h2>Leaderboard</h2>
+            <div class="panel-header">
+              <h2>Leaderboard</h2>
+              <div class="button-row">
+                <select id="leaderboardTierFilter" class="field compact-field">
+                  <option value="all">All Tiers</option>
+                </select>
+                <select id="leaderboardClassFilter" class="field compact-field">
+                  <option value="all">All Classes</option>
+                </select>
+              </div>
+            </div>
             <table>
               <thead>
                 <tr>
@@ -202,6 +212,7 @@
                   <th>Class</th>
                   <th>Rank</th>
                   <th>LP</th>
+                  <th>Publish</th>
                   <th>Record</th>
                 </tr>
               </thead>
@@ -221,6 +232,8 @@
                 <select id="adminCaseFilter" class="field compact-field">
                   <option value="all">All Cases</option>
                   <option value="training_report">Training</option>
+                  <option value="linked_accounts">Linked</option>
+                  <option value="competitive_integrity">Competitive</option>
                   <option value="account_integrity">Accounts</option>
                   <option value="asset_moderation">Assets</option>
                   <option value="abuse_alert">Alerts</option>

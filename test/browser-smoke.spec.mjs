@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 test.describe.configure({ mode: "serial" });
-test.setTimeout(90_000);
+test.setTimeout(140_000);
 
 test("browser league flow covers auth, pet, training, battle, admin review, and responsive layout", async ({ page }) => {
   const app = await startTempServer();
@@ -93,6 +93,81 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
   }
 });
 
+test("two browser accounts complete friend PvP and avoid linked-network ranked matching", async ({ browser }) => {
+  const app = await startTempServer();
+  const contextA = await browser.newContext();
+  const contextB = await browser.newContext();
+  const pageA = await contextA.newPage();
+  const pageB = await contextB.newPage();
+  const networkFailures = [];
+  captureNetworkFailures(pageA, "A", networkFailures);
+  captureNetworkFailures(pageB, "B", networkFailures);
+
+  try {
+    await Promise.all([pageA.setViewportSize({ width: 1280, height: 900 }), pageB.setViewportSize({ width: 1280, height: 900 })]);
+    await Promise.all([signIn(pageA, app.baseUrl, "demo@codexpet.local"), signIn(pageB, app.baseUrl, "rival@codexpet.local")]);
+    await Promise.all([registerDemoPet(pageA), registerDemoPet(pageB)]);
+
+    await pageA.click("#createInviteButton");
+    await expect(pageA.locator("#matchmakingCards")).toContainText("Invite");
+    const inviteCode = await pageA.locator("#inviteCodeInput").inputValue();
+    await pageB.fill("#inviteCodeInput", inviteCode);
+    await pageB.click("#acceptInviteButton");
+    await expect(pageB.locator("#battleOutput")).toContainText("friend");
+    await pageA.click("#queueStatusButton");
+    await expect(pageA.locator("#battleOutput")).toContainText("friend");
+
+    await pageA.locator('[data-action="strike"]').click();
+    await pageB.locator('[data-action="strike"]').click();
+    await expect(pageA.locator("#battleTimeline")).toContainText("Turn 1");
+    await expect(pageB.locator("#battleTimeline")).toContainText("Turn 1");
+    await withServerDiagnostics(app, () => finishPvpBattle(pageA, pageB), () => networkFailures.join("\n"));
+    await Promise.all([pageA.click("#refreshButton"), pageB.click("#refreshButton")]);
+    await expect(pageA.locator("#replayList")).toContainText("friend");
+    await expect(pageB.locator("#replayList")).toContainText("friend");
+    await expect(pageA.locator("#profileSummary")).toContainText("Battles");
+
+    const before = await petRating(pageA);
+    await Promise.all([pageA.selectOption("#battleMode", "ranked"), pageB.selectOption("#battleMode", "ranked")]);
+    await pageA.click("#joinQueueButton");
+    await expect(pageA.locator("#matchmakingCards")).toContainText("Queue");
+    await pageB.click("#joinQueueButton");
+    await expect(pageB.locator("#matchmakingCards")).toContainText("Queue");
+    await pageA.click("#queueStatusButton");
+    await expect(pageA.locator("#matchmakingCards")).toContainText("Queue");
+    await Promise.all([pageA.click("#refreshButton"), pageB.click("#refreshButton")]);
+    const after = await petRating(pageA);
+    expect(after.lp).toBe(before.lp);
+
+    await pageA.click("#adminRefreshButton");
+    await expect(pageA.locator("#adminReviewCases")).toContainText("linked_accounts");
+    await expect(pageA.locator("#adminReviewCases")).toContainText("shared_recent_network");
+    await expect(pageA.locator("#adminHistory")).toContainText("matchmaking.integrity_candidate_skipped");
+  } finally {
+    await contextA.close();
+    await contextB.close();
+    await app.close();
+  }
+});
+
+test("browser AFK timeout advances a turn after the 30 second deadline", async ({ page }) => {
+  const app = await startTempServer();
+  try {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await signIn(page, app.baseUrl, "demo@codexpet.local");
+    await registerDemoPet(page);
+    await page.selectOption("#battleMode", "casual");
+    await page.click("#startBattleButton");
+    await expect(page.locator("#battleOutput")).toContainText("in_progress");
+    await page.waitForTimeout(31_500);
+    await page.click("#refreshButton");
+    await expect(page.locator("#battleTimeline")).toContainText("Turn 1");
+    await expect(page.locator("#battleState")).toContainText("AFK 1/3");
+  } finally {
+    await app.close();
+  }
+});
+
 async function createHeldTrainingReportFromPage(page) {
   return page.evaluate(async () => {
     const petsResponse = await fetch("/api/pets");
@@ -121,6 +196,23 @@ async function createHeldTrainingReportFromPage(page) {
     }
     return reportPayload.report.id;
   });
+}
+
+async function signIn(page, baseUrl, identifier) {
+  await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#appStatus")).toContainText("Sign in", { timeout: 10_000 });
+  await page.selectOption("#authMethodInput", "email_magic_link");
+  await page.fill("#authIdentifierInput", identifier);
+  await page.click("#authChallengeButton");
+  await expect(page.locator("#authCodeInput")).not.toHaveValue("");
+  await page.click("#authVerifyButton");
+  await expect(page.locator("#sessionLabel")).toContainText("verified");
+}
+
+async function registerDemoPet(page) {
+  await page.click("#seedPetButton");
+  await expect(page.locator("#petTitle")).toContainText("Pebble");
+  await expect(page.locator("#battleSkillSelect option")).toHaveCount(4);
 }
 
 async function finishActiveBattleFromPage(page) {
@@ -152,6 +244,75 @@ async function finishActiveBattleFromPage(page) {
     }
     if (battle.status !== "finished") throw new Error(`battle did not finish: ${JSON.stringify(battle)}`);
     return battle.id;
+  });
+}
+
+async function finishPvpBattle(pageA, pageB) {
+  const battleId = await activeBattleId(pageA);
+  let battle = await fetchBattle(pageA, battleId);
+  for (let index = 0; index < 30 && battle.status === "in_progress"; index += 1) {
+    const turn = { turn_index: battle.turn_index, turn_nonce: battle.turn_nonce };
+    await submitBattleActionFromPage(pageA, battleId, turn);
+    await submitBattleActionFromPage(pageB, battleId, turn);
+    battle = await fetchBattle(pageA, battleId);
+  }
+  expect(battle.status).toBe("finished");
+  return battle;
+}
+
+async function activeBattleId(page) {
+  return page.evaluate(() => JSON.parse(document.querySelector("#battleOutput").textContent).id);
+}
+
+async function fetchBattle(page, battleId) {
+  return page.evaluate(async (id) => {
+    let response;
+    try {
+      response = await fetch(`/api/battles/${encodeURIComponent(id)}`);
+    } catch (error) {
+      throw new Error(`battle fetch network failed at ${location.href}: ${error.message}`);
+    }
+    const payload = await response.json();
+    if (!response.ok) throw new Error(`battle fetch failed: ${JSON.stringify(payload)}`);
+    return payload.battle;
+  }, battleId);
+}
+
+async function submitBattleActionFromPage(page, battleId, turn) {
+  return page.evaluate(
+    async ({ id, turn_index, turn_nonce }) => {
+      let response;
+      try {
+        response = await fetch(`/api/battles/${encodeURIComponent(id)}/actions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            request_id: crypto.randomUUID(),
+            kind: "strike",
+            turn_index,
+            turn_nonce,
+          }),
+        });
+      } catch (error) {
+        throw new Error(`battle action network failed at ${location.href}: ${error.message}`);
+      }
+      const payload = await response.json();
+      if (!response.ok && !["TURN_ACTION_DUPLICATE", "TURN_STALE"].includes(payload.error?.code)) {
+        throw new Error(`battle action failed: ${JSON.stringify(payload)}`);
+      }
+      return payload.battle;
+    },
+    { id: battleId, ...turn },
+  );
+}
+
+async function petRating(page) {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/pets");
+    const payload = await response.json();
+    if (!response.ok) throw new Error(`pets fetch failed: ${JSON.stringify(payload)}`);
+    const pet = payload.pets?.[0];
+    return { lp: pet?.rating?.lp ?? null, label: pet?.rating?.label ?? null };
   });
 }
 
@@ -225,10 +386,38 @@ async function startTempServer() {
 
   return {
     baseUrl,
+    diagnostics() {
+      return `server stdout:\n${Buffer.concat(stdout)}\nserver stderr:\n${Buffer.concat(stderr)}`;
+    },
+    async health() {
+      try {
+        const response = await fetch(baseUrl);
+        return `${response.status} ${response.statusText}`;
+      } catch (error) {
+        return `failed: ${error.message}`;
+      }
+    },
     async close() {
       await closeServer(child, closed, tempRoot);
     },
   };
+}
+
+function captureNetworkFailures(page, label, failures) {
+  page.on("requestfailed", (request) => {
+    failures.push(`${label} ${request.method()} ${request.url()} ${request.failure()?.errorText ?? "unknown"}`);
+    if (failures.length > 20) failures.shift();
+  });
+}
+
+async function withServerDiagnostics(app, fn, extraDiagnostics = () => "") {
+  try {
+    return await fn();
+  } catch (error) {
+    const health = await app.health();
+    const extra = extraDiagnostics();
+    throw new Error(`${error.message}\nserver health: ${health}${extra ? `\nrequest failures:\n${extra}` : ""}\n${app.diagnostics()}`);
+  }
 }
 
 function availablePort() {

@@ -37,11 +37,14 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       const blocked = await requestRejected(baseUrl, "/api/session", { expectedStatus: 401 });
       assert(blocked, "strict auth mode did not reject unauthenticated /api/session");
 
-      const sessionA = await newLeagueSession(baseUrl, "demo@codexpet.local", "email_magic_link");
-      const sessionB = await newLeagueSession(baseUrl, "smoke-b@example.test", "league_oauth");
-      const cookieSession = await newLeagueSessionWithCookie(baseUrl, "cookie@example.test", "email_magic_link");
-      const headersA = { "x-league-session-token": sessionA.session_token };
-      const headersB = { "x-league-session-token": sessionB.session_token };
+      const clientA = { "x-forwarded-for": "198.51.100.10", "x-league-device-id": "runtime-smoke-device-alpha" };
+      const clientB = { "x-forwarded-for": "198.51.100.20", "x-league-device-id": "runtime-smoke-device-beta" };
+      const clientCookie = { "x-forwarded-for": "198.51.100.30", "x-league-device-id": "runtime-smoke-device-cookie" };
+      const sessionA = await newLeagueSession(baseUrl, "demo@codexpet.local", "email_magic_link", clientA);
+      const sessionB = await newLeagueSession(baseUrl, "smoke-b@example.test", "league_oauth", clientB);
+      const cookieSession = await newLeagueSessionWithCookie(baseUrl, "cookie@example.test", "email_magic_link", clientCookie);
+      const headersA = { "x-league-session-token": sessionA.session_token, ...clientA };
+      const headersB = { "x-league-session-token": sessionB.session_token, ...clientB };
 
       const account = await getJson(baseUrl, "/api/session", headersA);
       assert(account.account?.id === sessionA.account.id, "session endpoint returned the wrong account");
@@ -185,18 +188,19 @@ async function waitForServer(url) {
   throw new Error(`server did not become ready at ${url}`);
 }
 
-async function newLeagueSession(baseUrl, identifier, method) {
-  const challenge = await postJson(baseUrl, "/api/auth/challenge", { method, identifier });
+async function newLeagueSession(baseUrl, identifier, method, headers = {}) {
+  const challenge = await postJson(baseUrl, "/api/auth/challenge", { method, identifier }, headers);
   return postJson(baseUrl, "/api/auth/verify", {
     challenge_id: challenge.challenge_id,
     code: challenge.dev_code,
-  });
+  }, headers);
 }
 
-async function newLeagueSessionWithCookie(baseUrl, identifier, method) {
-  const challenge = await postJson(baseUrl, "/api/auth/challenge", { method, identifier });
+async function newLeagueSessionWithCookie(baseUrl, identifier, method, headers = {}) {
+  const challenge = await postJson(baseUrl, "/api/auth/challenge", { method, identifier }, headers);
   const response = await requestJsonWithHeaders(baseUrl, "/api/auth/verify", {
     method: "POST",
+    headers,
     body: {
       challenge_id: challenge.challenge_id,
       code: challenge.dev_code,

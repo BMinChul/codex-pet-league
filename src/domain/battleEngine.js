@@ -196,7 +196,14 @@ export function hashReplayFinal(room) {
 }
 
 export function maxHpForStats(stats) {
-  return Math.round(140 + stats.guard * 2.3 + stats.recovery * 1.7);
+  return Math.round(
+    150 +
+      stats.guard * 1.2 +
+      stats.recovery * 1 +
+      stats.speed * 0.45 +
+      stats.focus * 0.4 +
+      stats.insight * 0.35,
+  );
 }
 
 function createSideSnapshot({ side, accountId, pet, assetHash }) {
@@ -213,6 +220,7 @@ function createSideSnapshot({ side, accountId, pet, assetHash }) {
     secondary_element: pet.secondary_element,
     stats: { ...pet.stats },
     skills: pet.skills,
+    skill_aliases: { ...(pet.skill_aliases ?? {}) },
     asset_hash: assetHash,
     max_hp: maxHp,
     hp: maxHp,
@@ -238,6 +246,7 @@ function createOpponentSnapshot(opponent) {
     secondary_element: opponent.secondary_element,
     stats: { ...opponent.stats },
     skills: opponent.skills,
+    skill_aliases: { ...(opponent.skill_aliases ?? {}) },
     asset_hash: opponent.asset_hash ?? null,
     max_hp: maxHp,
     hp: maxHp,
@@ -261,6 +270,7 @@ function publicSide(side, viewerAccountId) {
     secondary_element: side.secondary_element,
     stats: side.stats,
     skills: side.skills,
+    skill_aliases: side.skill_aliases ?? {},
     max_hp: side.max_hp,
     hp: side.hp,
     energy: side.energy,
@@ -294,6 +304,7 @@ function normalizeAction(input, side) {
     kind,
     skill_id: skill.id,
     skill_name: skill.officialName,
+    skill_alias: side.skill_aliases?.[skill.id] ?? null,
     skill_role: skill.role,
     energy_cost: cost,
   };
@@ -396,7 +407,7 @@ function effectForAction(attacker, defender, action) {
   }
   if (action.kind === "focus") return result;
   if (action.kind === "strike") {
-    result.damage = Math.round(14 + attacker.stats.power * 0.9);
+    result.damage = Math.round(10 + attacker.stats.power * 0.45 + attacker.stats.speed * 0.22 + attacker.stats.focus * 0.12);
     return withElementAndFocus(result, attacker, defender);
   }
 
@@ -404,14 +415,14 @@ function effectForAction(attacker, defender, action) {
   if (!skill) return result;
 
   if (skill.role === "offense") {
-    result.damage = Math.round(18 + attacker.stats.power * 1.05 + attacker.stats.focus * 0.25);
+    result.damage = Math.round(14 + attacker.stats.power * 0.46 + attacker.stats.focus * 0.42 + attacker.stats.insight * 0.2);
   } else if (skill.role === "defense") {
     result.selfHeal = Math.round(10 + attacker.stats.recovery * 0.55);
   } else if (skill.role === "status") {
-    result.damage = Math.round(10 + attacker.stats.insight * 0.55);
+    result.damage = Math.round(15 + attacker.stats.insight * 0.82 + attacker.stats.focus * 0.14);
     result.appliesVulnerable = true;
   } else if (skill.role === "tempo") {
-    result.damage = Math.round(12 + attacker.stats.speed * 0.65);
+    result.damage = Math.round(13 + attacker.stats.speed * 0.62 + attacker.stats.focus * 0.2);
   } else if (skill.role === "finisher") {
     const lowHpBonus = defender.hp / defender.max_hp <= 0.35 ? 1.25 : 1;
     result.damage = Math.round((22 + attacker.stats.power * 0.7 + attacker.stats.insight * 0.7) * lowHpBonus);
@@ -426,7 +437,7 @@ function withElementAndFocus(effect, attacker, defender) {
     { primaryElement: defender.primary_element, secondaryElement: defender.secondary_element },
   );
   const focusBonus = attacker.focus_stack > 0 ? Math.min(0.24, attacker.focus_stack * 0.12) : 0;
-  const vulnerableBonus = defender.vulnerable_turns > 0 ? 0.08 : 0;
+  const vulnerableBonus = defender.vulnerable_turns > 0 ? 0.12 : 0;
   return {
     ...effect,
     damage: Math.max(0, Math.round(effect.damage * (1 + modifier + focusBonus + vulnerableBonus))),
@@ -469,7 +480,9 @@ function guardReduction(side, action) {
 function damageAfterDefense(damage, reduction, defender) {
   const reduced = damage * (1 - reduction);
   const floor = damage > 0 ? 1 : 0;
-  const armor = Math.round(defender.stats.guard * 0.08);
+  const armor = Math.round(
+    defender.stats.guard * 0.05 + defender.stats.recovery * 0.03 + defender.stats.speed * 0.025 + defender.stats.insight * 0.015,
+  );
   return Math.max(floor, Math.round(reduced) - armor);
 }
 
@@ -520,6 +533,7 @@ function summarizeAction(action) {
     kind: action.kind,
     skill_id: action.skill_id ?? null,
     skill_name: action.skill_name ?? null,
+    skill_alias: action.skill_alias ?? null,
     source: action.source ?? "manual",
   };
 }

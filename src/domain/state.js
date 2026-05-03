@@ -1,4 +1,4 @@
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomInt, randomUUID } from "node:crypto";
 import {
   DEFAULT_SEASON,
   MATCHMAKING_POLICY,
@@ -30,6 +30,15 @@ import { accountIntegrityStatus, appendRiskEvent, auditState, riskTrainingReport
 
 const MAX_APPEARANCE_BYTES = 4096;
 const MAX_ATLAS_BYTES = 6 * 1024 * 1024;
+const RANKED_REMATCH_COOLDOWN_MS = 15 * 60 * 1000;
+const RANKED_PAIR_DAILY_SOFT_LIMIT = 3;
+const COMPETITIVE_REVIEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const TRAINING_DRAFT_TTL_MS = 15 * 60 * 1000;
+const INVITE_ACCEPT_ATTEMPT_LIMIT = 5;
+const INVITE_ACCEPT_ATTEMPT_WINDOW_MS = 60 * 60 * 1000;
+const QUEUE_CANCEL_WINDOW_MS = 10 * 60 * 1000;
+const QUEUE_CANCEL_LIMIT = 5;
+const FRIEND_PAIR_DAILY_MATCH_LIMIT = 5;
 
 export function getAccount(state, accountId = "acct_demo") {
   const account = state.accounts.find((entry) => entry.id === accountId);
@@ -52,6 +61,7 @@ export function leagueStatus(state) {
   return {
     active_season: season,
     matchmaking_policy: MATCHMAKING_POLICY,
+    integrity_policy: publicIntegrityPolicy(),
     queue_summary: queueSummary(state),
     live_ops: publicOpsStatus(state),
   };
@@ -61,6 +71,7 @@ export function createAuthChallenge(state, input = {}) {
   const method = ["passkey", "email_magic_link", "league_oauth"].includes(input.method)
     ? input.method
     : "email_magic_link";
+  assertAuthMethodConfigured(method);
   const identifier = sanitizeIdentifier(input.identifier ?? "demo@codexpet.local");
   const now = new Date();
   const id = `challenge_${randomUUID()}`;
@@ -115,6 +126,9 @@ export function verifyAuthChallenge(state, input = {}) {
     account_id: account.id,
     token: `league_${randomUUID().replaceAll("-", "")}`,
     method: challenge.method,
+    client_ip_hash: sanitizeContextHash(input.client_context?.client_ip_hash),
+    device_hash: sanitizeContextHash(input.client_context?.device_hash),
+    user_agent_hash: sanitizeContextHash(input.client_context?.user_agent_hash),
     created_at: new Date().toISOString(),
     expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     revoked_at: null,
@@ -123,7 +137,11 @@ export function verifyAuthChallenge(state, input = {}) {
   state.sessions.unshift(session);
   challenge.status = "used";
   challenge.used_at = new Date().toISOString();
-  logEvent(state, "auth.session.created", account.id, { session_id: session.id, method: session.method });
+  logEvent(state, "auth.session.created", account.id, {
+    session_id: session.id,
+    method: session.method,
+    client_context: sessionContextLevel(session),
+  });
   return {
     account,
     session: publicSession(session),
@@ -314,7 +332,12 @@ export function petReplays(state, accountId, petId) {
         room_id: battle.battle_room_id,
         mode: battle.mode,
         result: battle.result,
+        pet_xp_delta: battle.pet_xp_delta,
+        lp: battle.lp,
+        rollback: battle.rollback ?? null,
+        integrity_flags: battle.integrity_flags ?? [],
         replay_hash: battle.replay_hash,
+        result_signature: battle.result_signature ?? null,
         turn_count: battle.turn_count,
         created_at: battle.created_at,
         log: battle.replay_log_json,
@@ -328,10 +351,14 @@ export function adminAudit(state) {
 
 export function adminConsole(state) {
   const audit = auditState(state);
+  const linkedAccountCases = linkedAccountReviewCases(state);
+  const competitiveIntegrityCases = rankedCompetitiveIntegrityCases(state);
   return {
     audit,
     ops: publicOpsStatus(state),
-    review_cases: reviewCases(state),
+    review_cases: reviewCases(state, linkedAccountCases, competitiveIntegrityCases),
+    linked_account_cases: linkedAccountCases,
+    competitive_integrity_cases: competitiveIntegrityCases,
     held_training_reports: (state.trainingReports ?? [])
       .filter((report) => report.status === "review")
       .slice(-50)
@@ -343,7 +370,12 @@ export function adminConsole(state) {
     recent_moderation_events: (state.events ?? []).filter((event) => event.type === "asset.moderated").slice(0, 20),
     suspicious_accounts: (state.accounts ?? [])
       .map((account) => accountIntegrityStatus(state, account.id))
-      .filter((status) => status.level !== "clear" || status.automatic_restrictions.ranked_locked),
+      .filter(
+        (status) =>
+          status.level !== "clear" ||
+          status.automatic_restrictions.ranked_locked ||
+          status.automatic_restrictions.ranked_lp_suppressed,
+      ),
     seasons: state.seasons ?? [],
     season_rewards: (state.seasonRewards ?? []).slice(-50).reverse(),
     auth_provider: authProviderStatus(),
@@ -356,6 +388,7 @@ export function runServerAuthorityJob(state, input = {}) {
   const startedAt = new Date().toISOString();
   const matches = processMatchmakingQueues(state).matches.length;
   const reconciled = reconcileBattleSettlements(state);
+  const competitiveEvents = generateCompetitiveIntegrityRiskEvents(state, now);
   const alerts = generateAbuseAlerts(state, now);
   const audit = auditState(state);
   const job = {
@@ -364,6 +397,7 @@ export function runServerAuthorityJob(state, input = {}) {
     status: audit.ok ? "ok" : "review",
     matches_processed: matches,
     settlements_reconciled: reconciled,
+    competitive_events_created: competitiveEvents.length,
     abuse_alerts_created: alerts.length,
     high_findings: audit.findings.filter((finding) => finding.severity === "high" || finding.severity === "critical").length,
     started_at: startedAt,
@@ -376,6 +410,7 @@ export function runServerAuthorityJob(state, input = {}) {
     job_id: job.id,
     status: job.status,
     settlements_reconciled: reconciled,
+    competitive_events_created: competitiveEvents.length,
     abuse_alerts_created: alerts.length,
   });
   return { job, audit, abuse_alerts: alerts, ops: publicOpsStatus(state) };
@@ -383,6 +418,7 @@ export function runServerAuthorityJob(state, input = {}) {
 
 export function draftTrainingReport(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
+  pruneTrainingDrafts(state);
   const counters = dailyCounters(state, accountId, pet.id);
   const signals = input.signals ?? {};
   const baseClassification = classifyTrainingReport(signals);
@@ -401,9 +437,14 @@ export function draftTrainingReport(state, accountId, petId, input = {}) {
     trust: input.server_trust ?? { trusted: false, reason: "draft_untrusted" },
   });
 
-  return {
+  const now = new Date();
+  const draft = {
     id: `draft_${randomUUID()}`,
+    nonce: randomCode(10),
+    account_id: accountId,
     pet_id: pet.id,
+    summary_hash: riskContext.summaryHash,
+    workspace_hash: workspaceFingerprint(input.workspace ?? input.workspace_context ?? signals.workspace ?? {}),
     report_type: classification.reportType,
     element_signal: classification.elementSignal,
     quality_score: classification.qualityScore,
@@ -414,12 +455,20 @@ export function draftTrainingReport(state, accountId, petId, input = {}) {
       hold_for_review: risk.hold_for_review,
     },
     counters,
+    status: "open",
+    created_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + TRAINING_DRAFT_TTL_MS).toISOString(),
     status_text: statusText(counters),
   };
+  state.trainingReportDrafts ??= [];
+  state.trainingReportDrafts.unshift(draft);
+  state.trainingReportDrafts = state.trainingReportDrafts.slice(0, 500);
+  return publicTrainingDraft(draft);
 }
 
 export function submitTrainingReport(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
+  pruneTrainingDrafts(state);
   const clientReportId = input.client_report_id ?? `client_${randomUUID()}`;
   const duplicate = state.trainingReports.find(
     (entry) => entry.account_id === accountId && entry.client_report_id === clientReportId,
@@ -438,6 +487,7 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
   const baseClassification = classifyTrainingReport(signals);
   const riskContext = trainingRiskContext(state, accountId, pet.id, signals, baseClassification.reportType);
   const classification = { ...baseClassification, ...riskContext };
+  const draftCheck = verifyTrainingDraft(state, accountId, pet.id, input, riskContext.summaryHash);
   const isFirstDailyReport = counters.trainingReportsUsed === 0;
   const award = calculateTrainingAward({
     reportType: classification.reportType,
@@ -447,7 +497,7 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
   const risk = riskTrainingReport({
     signals,
     counters,
-    classification,
+    classification: { ...classification, draftCheck },
     trust: input.server_trust ?? { trusted: false, reason: "not_verified" },
   });
   const effectiveAward = risk.hold_for_review
@@ -461,6 +511,9 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     client_report_id: clientReportId,
     summary_json: signals,
     summary_hash: riskContext.summaryHash,
+    draft_id: draftCheck.draft_id,
+    draft_status: draftCheck.status,
+    workspace_hash: draftCheck.workspace_hash,
     status: risk.hold_for_review ? "review" : "approved",
     report_type: classification.reportType,
     element_signal: classification.elementSignal,
@@ -476,6 +529,11 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     approved_at: risk.hold_for_review ? null : now,
   };
   state.trainingReports.push(report);
+  if (draftCheck.draft) {
+    draftCheck.draft.status = "used";
+    draftCheck.draft.used_at = now;
+    draftCheck.draft.report_id = report.id;
+  }
   if (risk.score > 0) {
     appendRiskEvent(state, {
       accountId,
@@ -580,9 +638,20 @@ export function updateAccountEnforcement(state, adminAccountId, input = {}) {
     const days = Math.max(1, Math.min(30, Number(input.days ?? 1)));
     account.enforcement.ranked_locked_until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
     account.enforcement.reason = sanitizeReviewNote(input.reason ?? "manual_review");
+  } else if (action === "ranked_lp_suppress") {
+    const days = Math.max(1, Math.min(30, Number(input.days ?? 7)));
+    account.enforcement.ranked_lp_suppressed_until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    account.enforcement.reason = sanitizeReviewNote(input.reason ?? "manual_ranked_lp_suppression");
   } else if (action === "ranked_unlock") {
     account.enforcement.ranked_locked_until = null;
+    account.enforcement.ranked_lp_suppressed_until = null;
     account.enforcement.reason = sanitizeReviewNote(input.reason ?? "manual_unlock");
+  } else if (action === "clear") {
+    account.enforcement.ranked_locked_until = null;
+    account.enforcement.ranked_lp_suppressed_until = null;
+    account.enforcement.watchlisted_at = null;
+    account.enforcement.linked_review_cleared_at = now;
+    account.enforcement.reason = sanitizeReviewNote(input.reason ?? "false_positive_or_resolved");
   } else {
     account.enforcement.watchlisted_at = now;
     account.enforcement.reason = sanitizeReviewNote(input.reason ?? "manual_watch");
@@ -592,9 +661,57 @@ export function updateAccountEnforcement(state, adminAccountId, input = {}) {
   logEvent(state, "enforcement.updated", account.id, {
     action,
     ranked_locked_until: account.enforcement.ranked_locked_until ?? null,
+    ranked_lp_suppressed_until: account.enforcement.ranked_lp_suppressed_until ?? null,
     updated_by: adminAccountId,
   });
   return { account, integrity: accountIntegrityStatus(state, account.id) };
+}
+
+export function rollbackRankedBattle(state, adminAccountId, input = {}) {
+  requireAdmin(state, adminAccountId);
+  const roomId = input.battle_room_id ?? input.room_id;
+  if (!roomId) throw httpError(400, "BATTLE_ROOM_REQUIRED", "battle_room_id is required.");
+  const reason = sanitizeReviewNote(input.reason ?? "competitive_integrity_rollback");
+  const entries = (state.lpLedger ?? []).filter(
+    (entry) => entry.battle_room_id === roomId && entry.source_type === "ranked_battle" && !lpEntryRolledBack(state, entry.id),
+  );
+  if (entries.length === 0) throw httpError(404, "ROLLBACK_TARGET_NOT_FOUND", "No active ranked LP entries were found for this room.");
+  const rollbacks = [];
+  for (const entry of entries) {
+    const pet = state.pets.find((item) => item.id === entry.pet_id && item.owner_account_id === entry.account_id);
+    if (!pet) continue;
+    const before = Number(pet.rating?.lp ?? 0);
+    const delta = -Number(entry.lp_delta ?? 0);
+    pet.rating.lp = Math.max(0, before + delta);
+    const tier = tierForLp(pet.rating.lp);
+    pet.rating.tier = tier.tier;
+    pet.rating.division = tier.division;
+    pet.rating.label = tier.label;
+    pet.updated_at = new Date().toISOString();
+    rollbacks.push(
+      appendLpRollbackLedger(state, {
+        originalEntry: entry,
+        accountId: entry.account_id,
+        petId: entry.pet_id,
+        seasonId: entry.season_id,
+        battleRoomId: roomId,
+        lpDelta: delta,
+        lpBefore: before,
+        lpAfter: pet.rating.lp,
+        opponentLp: entry.opponent_lp,
+        adminAccountId,
+        reason,
+      }),
+    );
+  }
+  for (const battle of state.battles ?? []) {
+    if (battle.battle_room_id !== roomId || battle.mode !== "ranked") continue;
+    battle.integrity_flags ??= [];
+    if (!battle.integrity_flags.includes("ranked_lp_rolled_back")) battle.integrity_flags.push("ranked_lp_rolled_back");
+    battle.rollback = { status: "rolled_back", reason, rolled_back_by: adminAccountId, rolled_back_at: new Date().toISOString() };
+  }
+  logEvent(state, "ranked.lp.rollback", adminAccountId, { battle_room_id: roomId, entries: rollbacks.length, reason });
+  return { battle_room_id: roomId, rollbacks };
 }
 
 export function reportPetAsset(state, accountId, petId, input = {}) {
@@ -759,6 +876,7 @@ export function submitTurnBattleAction(state, accountId, battleRoomId, input = {
 export function joinMatchmakingQueue(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
   const mode = ["ranked", "casual"].includes(input.mode) ? input.mode : "ranked";
+  assertQueueJoinAllowed(state, accountId, pet.id, mode);
   const season = activeSeason(state);
   if (mode === "ranked") {
     assertRankedAllowed(state, accountId);
@@ -819,6 +937,7 @@ export function cancelMatchmakingTicket(state, accountId, input = {}) {
   ticket.status = "cancelled";
   ticket.cancel_reason = "user_cancelled";
   ticket.cancelled_at = new Date().toISOString();
+  recordQueueCancel(state, accountId, ticket.pet_id, ticket.mode);
   logEvent(state, "matchmaking.cancelled", accountId, { ticket_id: ticket.id, pet_id: ticket.pet_id });
   return { ticket: publicTicket(ticket) };
 }
@@ -893,8 +1012,12 @@ export function acceptFriendInvite(state, accountId, petId, input = {}) {
   expireOldInvites(state);
 
   const code = normalizeInviteCode(input.code);
+  assertInviteAcceptAllowed(state, accountId);
   const invite = state.friendInvites.find((entry) => entry.code === code && entry.status === "open");
-  if (!invite) throw httpError(404, "INVITE_NOT_FOUND", "Friend invite code is not open.");
+  if (!invite) {
+    recordFailedInviteAttempt(state, accountId, code);
+    throw httpError(404, "INVITE_NOT_FOUND", "Friend invite code is not open.");
+  }
   if (invite.host_account_id === accountId) {
     throw httpError(409, "INVITE_SELF_MATCH_BLOCKED", "A League account cannot accept its own invite.");
   }
@@ -903,6 +1026,17 @@ export function acceptFriendInvite(state, accountId, petId, input = {}) {
   assertPetAvailableForBattle(state, hostPet.id);
   if (hostPet.battle_class !== guestPet.battle_class) {
     throw httpError(409, "BATTLE_CLASS_MISMATCH", "Friend Duel requires both pets to be in the same Battle Class.");
+  }
+  if (friendPairRoomDailyCount(state, invite.host_account_id, accountId) >= FRIEND_PAIR_DAILY_MATCH_LIMIT) {
+    appendRiskEvent(state, {
+      accountId,
+      petId: guestPet.id,
+      type: "friend.pair_daily_match_limit",
+      severity: "medium",
+      score: 30,
+      metadata: { host_account_id: invite.host_account_id, guest_account_id: accountId },
+    });
+    throw httpError(429, "FRIEND_PAIR_DAILY_LIMIT", "This friend pair has reached today's duel limit.");
   }
 
   const room = createPvpBattleRoom(state, {
@@ -958,21 +1092,26 @@ export function leaderboard(state) {
   return [...state.pets]
     .filter((pet) => pet.status === "active")
     .sort((a, b) => b.rating.lp - a.rating.lp)
-    .map((pet, index) => ({
-      rank: index + 1,
-      pet_id: pet.id,
-      name: pet.name,
-      owner_account_id: pet.owner_account_id,
-      battle_class: pet.battle_class,
-      primary_element: pet.primary_element,
-      secondary_element: pet.secondary_element,
-      level: pet.level,
-      lp: pet.rating.lp,
-      tier_label: pet.rating.label,
-      wins: pet.rating.wins,
-      losses: pet.rating.losses,
-      draws: pet.rating.draws,
-    }));
+    .map((pet, index) => {
+      const integrity = accountIntegrityStatus(state, pet.owner_account_id);
+      const delayed = integrity.level !== "clear" || integrity.automatic_restrictions.ranked_lp_suppressed;
+      return {
+        rank: index + 1,
+        pet_id: pet.id,
+        name: pet.name,
+        owner_account_id: pet.owner_account_id,
+        battle_class: pet.battle_class,
+        primary_element: pet.primary_element,
+        secondary_element: pet.secondary_element,
+        level: pet.level,
+        lp: pet.rating.lp,
+        tier_label: pet.rating.label,
+        publish_state: delayed ? "delayed_review" : "published",
+        wins: pet.rating.wins,
+        losses: pet.rating.losses,
+        draws: pet.rating.draws,
+      };
+    });
 }
 
 export function ownedPet(state, accountId, petId) {
@@ -1092,6 +1231,36 @@ function appendLpLedger(state, input) {
   return entry;
 }
 
+function appendLpRollbackLedger(state, input) {
+  const duplicate = state.lpLedger.find((entry) => entry.source_type === "ranked_rollback" && entry.rollback_of === input.originalEntry.id);
+  if (duplicate) return duplicate;
+  const previous = state.lpLedger.at(-1);
+  const entry = {
+    id: `lp_${randomUUID()}`,
+    account_id: input.accountId,
+    pet_id: input.petId,
+    season_id: input.seasonId,
+    battle_room_id: input.battleRoomId ?? null,
+    source_type: "ranked_rollback",
+    rollback_of: input.originalEntry.id,
+    rollback_reason: input.reason,
+    rollback_by: input.adminAccountId,
+    lp_delta: input.lpDelta,
+    lp_before: input.lpBefore,
+    lp_after: input.lpAfter,
+    opponent_lp: input.opponentLp,
+    previous_hash: previous?.hash ?? null,
+    applied_at: new Date().toISOString(),
+  };
+  entry.hash = createHash("sha256").update(JSON.stringify(entry)).digest("hex");
+  state.lpLedger.push(entry);
+  return entry;
+}
+
+function lpEntryRolledBack(state, lpEntryId) {
+  return (state.lpLedger ?? []).some((entry) => entry.source_type === "ranked_rollback" && entry.rollback_of === lpEntryId);
+}
+
 function settleBattleResult(state, accountId, pet, input) {
   const mode = input.mode;
   const result = input.result;
@@ -1099,7 +1268,27 @@ function settleBattleResult(state, accountId, pet, input) {
   const opponent = input.opponent ?? defaultOpponentFor(pet, opponentLp);
   const counters = dailyCounters(state, accountId, pet.id);
   const official = input.official !== false;
+  const accountLink = opponent.account_id ? accountLinkContext(state, accountId, opponent.account_id) : { linked: false };
+  const manualLpSuppression = accountRankedLpSuppression(state, accountId);
+  const integrityFlags = [];
   let award = official ? calculateBattleAward({ mode, result, counters }) : { rawPetXp: 0, petXpApplied: 0, capped: false };
+  if (official && accountLink.linked && ["casual", "friend", "ranked"].includes(mode)) {
+    award = { ...award, petXpApplied: 0, capped: true };
+    integrityFlags.push("shared_context_reward_suppressed");
+    appendRiskEvent(state, {
+      accountId,
+      petId: pet.id,
+      type: "pvp.shared_context_reward_suppressed",
+      severity: accountLink.confidence === "device" ? "high" : "medium",
+      score: accountLink.confidence === "device" ? 70 : 35,
+      metadata: {
+        opponent_account_id: opponent.account_id,
+        opponent_pet_id: opponent.pet_id,
+        link_reason: accountLink.reason,
+        mode,
+      },
+    });
+  }
   if (official && mode === "friend") {
     const pairCount = friendPairDailyCount(state, accountId, pet.id, opponent.pet_id);
     const meaningfulTurns = Number(input.turnCount ?? 0) >= 2;
@@ -1120,7 +1309,36 @@ function settleBattleResult(state, accountId, pet, input) {
   const season = activeSeason(state);
   if (mode === "ranked") ensureActiveSeasonRating(pet, season);
 
-  if (official && mode === "ranked" && input.source === "random_matchmaking") {
+  if (official && mode === "ranked" && input.source === "random_matchmaking" && (accountLink.linked || manualLpSuppression.suppressed)) {
+    const suppressionReason = accountLink.linked ? accountLink.reason : "manual_ranked_lp_suppression";
+    const suppressionSource = accountLink.linked ? "shared_context" : "manual_enforcement";
+    integrityFlags.push(accountLink.linked ? "shared_context_ranked_lp_suppressed" : "manual_ranked_lp_suppressed");
+    lp = {
+      before: pet.rating.lp,
+      after: pet.rating.lp,
+      delta: 0,
+      opponent_lp: opponentLp,
+      placement: pet.rating.placements_remaining,
+      suppressed: true,
+      reason: suppressionReason,
+      suppression_source: suppressionSource,
+    };
+    if (accountLink.linked) {
+      appendRiskEvent(state, {
+        accountId,
+        petId: pet.id,
+        type: "ranked.shared_context_lp_suppressed",
+        severity: accountLink.confidence === "device" ? "high" : "medium",
+        score: accountLink.confidence === "device" ? 90 : 45,
+        metadata: {
+          opponent_account_id: opponent.account_id,
+          opponent_pet_id: opponent.pet_id,
+          link_reason: accountLink.reason,
+          battle_room_id: input.battleRoomId ?? null,
+        },
+      });
+    }
+  } else if (official && mode === "ranked" && input.source === "random_matchmaking") {
     const normalizedResult = result === "complete" ? "draw" : result;
     const delta = lpDelta({
       result: normalizedResult,
@@ -1162,12 +1380,21 @@ function settleBattleResult(state, accountId, pet, input) {
     opponent,
     pet_xp_delta: award.petXpApplied,
     lp,
+    integrity_flags: [...integrityFlags],
     stats_snapshot_json: input.statsSnapshot ?? pet.stats,
     battle_class_at_start: input.battleClass ?? pet.battle_class,
     asset_hash_at_start: input.assetHash ?? petAsset(state, pet).canonical_hash,
     battle_source: input.source ?? "server_turn",
     battle_room_id: input.battleRoomId ?? null,
     replay_hash: input.replayHash ?? null,
+    result_signature: signServerRecord("battle_result", {
+      account_id: accountId,
+      pet_id: pet.id,
+      battle_room_id: input.battleRoomId ?? null,
+      result,
+      replay_hash: input.replayHash ?? null,
+      lp,
+    }),
     turn_count: input.turnCount ?? null,
     replay_log_json: input.replayLog ?? null,
     created_at: now,
@@ -1182,7 +1409,13 @@ function settleBattleResult(state, accountId, pet, input) {
       petXpDelta: award.petXpApplied,
       styleXpDelta: 0,
       capBuckets: mode === "friend" ? ["pet_daily", "battle_daily", "friend_daily"] : ["pet_daily", "battle_daily"],
-      metadata: { mode, result, source: battle.battle_source, battle_room_id: input.battleRoomId ?? null },
+      metadata: {
+        mode,
+        result,
+        source: battle.battle_source,
+        battle_room_id: input.battleRoomId ?? null,
+        integrity_flags: [...integrityFlags],
+      },
     });
     applyProgression(pet, award.petXpApplied, 0);
   }
@@ -1216,6 +1449,11 @@ function advanceAllBattleRooms(state) {
 function settleFinishedTurnBattle(state, room) {
   if (room.status !== "finished") return [];
   room.settlement_battle_ids ??= {};
+  room.replay_signature ??= signServerRecord("battle_replay", {
+    room_id: room.id,
+    replay_hash: room.replay_hash,
+    result: room.result,
+  });
   const settlements = [];
   for (const sideKey of ["player", "opponent"]) {
     const side = room.sides[sideKey];
@@ -1232,6 +1470,7 @@ function settleFinishedTurnBattle(state, room) {
         primary_element: opponentSide.primary_element,
         secondary_element: opponentSide.secondary_element,
         kind: opponentSide.kind,
+        account_id: opponentSide.account_id ?? null,
         pet_id: opponentSide.pet_id ?? null,
       },
       statsSnapshot: side.stats,
@@ -1285,6 +1524,12 @@ function matchWaitingTicket(state, ticket) {
     .filter((entry) => entry.battle_class === ticket.battle_class)
     .filter((entry) => ticket.mode !== "ranked" || entry.season_id === ticket.season_id)
     .filter((entry) => Math.abs(entry.lp - ticket.lp) <= effectiveMatchWindow(ticket, entry, now))
+    .filter((entry) => {
+      const block = rankedMatchIntegrityBlock(state, ticket, entry, now);
+      if (!block) return true;
+      appendMatchmakingSkipRiskEvent(state, ticket, entry, block);
+      return false;
+    })
     .filter((entry) => !petHasActiveBattle(state, entry.pet_id))
     .sort((a, b) => Math.abs(a.lp - ticket.lp) - Math.abs(b.lp - ticket.lp) || a.created_at.localeCompare(b.created_at))[0];
 
@@ -1316,6 +1561,77 @@ function matchWaitingTicket(state, ticket) {
   cancelOpenInvitesForPet(state, playerPet.id, "matched");
   cancelOpenInvitesForPet(state, opponentPet.id, "matched");
   return { room, opponentTicket: candidate };
+}
+
+function rankedMatchIntegrityBlock(state, ticket, candidate, now) {
+  if (ticket.mode !== "ranked") return null;
+  const accountLink = accountLinkContext(state, ticket.account_id, candidate.account_id);
+  if (accountLink.linked) {
+    return {
+      reason: accountLink.reason,
+      confidence: accountLink.confidence,
+      severity: accountLink.confidence === "device" ? "high" : "medium",
+      score: accountLink.confidence === "device" ? 90 : 45,
+    };
+  }
+  const recent = rankedPairBattleSummary(state, ticket.account_id, candidate.account_id, now);
+  if (recent.cooldown_count > 0) {
+    return { reason: "recent_ranked_rematch_cooldown", confidence: "match_history", severity: "low", score: 20 };
+  }
+  if (recent.daily_count >= RANKED_PAIR_DAILY_SOFT_LIMIT) {
+    return { reason: "ranked_pair_daily_soft_limit", confidence: "match_history", severity: "medium", score: 35 };
+  }
+  return null;
+}
+
+function rankedPairBattleSummary(state, accountA, accountB, now = new Date()) {
+  const dayStart = startOfUtcDay(now);
+  const cooldownCutoff = new Date(now.getTime() - RANKED_REMATCH_COOLDOWN_MS);
+  const battles = (state.battles ?? []).filter(
+    (battle) =>
+      battle.mode === "ranked" &&
+      battle.battle_source === "random_matchmaking" &&
+      battleInvolvesAccounts(battle, accountA, accountB),
+  );
+  const uniqueDailyRooms = new Set(
+    battles.filter((battle) => new Date(battle.created_at) >= dayStart).map((battle) => battle.battle_room_id ?? battle.id),
+  );
+  const uniqueCooldownRooms = new Set(
+    battles.filter((battle) => new Date(battle.created_at) >= cooldownCutoff).map((battle) => battle.battle_room_id ?? battle.id),
+  );
+  return {
+    daily_count: uniqueDailyRooms.size,
+    cooldown_count: uniqueCooldownRooms.size,
+  };
+}
+
+function battleInvolvesAccounts(battle, accountA, accountB) {
+  return (
+    (battle.account_id === accountA && battle.opponent?.account_id === accountB) ||
+    (battle.account_id === accountB && battle.opponent?.account_id === accountA)
+  );
+}
+
+function appendMatchmakingSkipRiskEvent(state, ticket, candidate, block) {
+  const accountIds = [ticket.account_id, candidate.account_id].sort();
+  const dedupeKey = `match_skip:${accountIds.join("|")}:${block.reason}:${new Date().toISOString().slice(0, 13)}`;
+  appendRiskEventOnce(state, {
+    accountId: ticket.account_id,
+    petId: ticket.pet_id,
+    type: "matchmaking.integrity_candidate_skipped",
+    severity: block.severity,
+    score: block.score,
+    metadata: {
+      dedupe_key: dedupeKey,
+      opponent_account_id: candidate.account_id,
+      opponent_pet_id: candidate.pet_id,
+      link_reason: block.reason,
+      confidence: block.confidence,
+      mode: ticket.mode,
+      ticket_id: ticket.id,
+      candidate_ticket_id: candidate.id,
+    },
+  });
 }
 
 function ticketStillCurrent(state, ticket) {
@@ -1447,6 +1763,7 @@ function opponentFromPet(state, accountId, pet) {
     secondary_element: pet.secondary_element,
     stats: pet.stats,
     skills: pet.skills,
+    skill_aliases: pet.skill_aliases ?? {},
     asset_hash: petAsset(state, pet).canonical_hash,
   };
 }
@@ -1606,7 +1923,7 @@ function queueSummary(state) {
 function publicOpsStatus(state) {
   const latest = (state.opsJobs ?? [])[0] ?? null;
   const openAlerts = activeAbuseAlerts(state).length;
-  const openReviews = (state.trainingReports ?? []).filter((report) => report.status === "review").length;
+  const openReviews = reviewCases(state).length;
   return {
     latest_job: latest,
     open_review_cases: openReviews,
@@ -1616,7 +1933,21 @@ function publicOpsStatus(state) {
   };
 }
 
-function reviewCases(state) {
+function publicIntegrityPolicy() {
+  return {
+    ranked_rematch_cooldown_seconds: Math.floor(RANKED_REMATCH_COOLDOWN_MS / 1000),
+    ranked_pair_daily_soft_limit: RANKED_PAIR_DAILY_SOFT_LIMIT,
+    friend_pair_daily_match_limit: FRIEND_PAIR_DAILY_MATCH_LIMIT,
+    queue_cancel_limit_per_window: QUEUE_CANCEL_LIMIT,
+    queue_cancel_window_seconds: Math.floor(QUEUE_CANCEL_WINDOW_MS / 1000),
+    invite_failed_accept_limit: INVITE_ACCEPT_ATTEMPT_LIMIT,
+    linked_ranked_random_matching: "avoid",
+    linked_ranked_lp_policy: "suppress_if_matched_or_manual_review",
+    enforcement: "manual_review_before_penalty",
+  };
+}
+
+function reviewCases(state, linked = linkedAccountReviewCases(state), competitive = rankedCompetitiveIntegrityCases(state)) {
   const training = (state.trainingReports ?? [])
     .filter((report) => report.status === "review")
     .map((report) => ({
@@ -1660,7 +1991,244 @@ function reviewCases(state) {
     reason: asset.moderation_reason ?? "asset_report",
     created_at: asset.created_at,
   }));
-  return [...training, ...accounts, ...assets].slice(0, 100);
+  return [...linked, ...competitive, ...training, ...accounts, ...assets].slice(0, 100);
+}
+
+function linkedAccountReviewCases(state) {
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const accountsById = new Map((state.accounts ?? []).map((account) => [account.id, account]));
+  const pairs = new Map();
+  for (const event of state.riskEvents ?? []) {
+    if (
+      ![
+        "pvp.shared_context_reward_suppressed",
+        "ranked.shared_context_lp_suppressed",
+        "matchmaking.integrity_candidate_skipped",
+      ].includes(event.type)
+    ) {
+      continue;
+    }
+    if (new Date(event.created_at).getTime() < cutoff) continue;
+    const opponentAccountId = event.metadata?.opponent_account_id;
+    if (!event.account_id || !opponentAccountId || event.account_id === opponentAccountId) continue;
+    const accountIds = [event.account_id, opponentAccountId].sort();
+    const key = accountIds.join("|");
+    const entry = pairs.get(key) ?? {
+      account_ids: accountIds,
+      event_count: 0,
+      risk_score: 0,
+      reward_suppressed_count: 0,
+      ranked_lp_suppressed_count: 0,
+      shared_device: false,
+      shared_network: false,
+      event_types: new Set(),
+      pet_ids: new Set(),
+      recent_events: [],
+      latest_at: event.created_at,
+    };
+    entry.event_count += 1;
+    entry.risk_score += Number(event.score ?? 0);
+    entry.event_types.add(event.type);
+    if (event.pet_id) entry.pet_ids.add(event.pet_id);
+    if (event.metadata?.opponent_pet_id) entry.pet_ids.add(event.metadata.opponent_pet_id);
+    if (event.type === "pvp.shared_context_reward_suppressed") entry.reward_suppressed_count += 1;
+    if (event.type === "ranked.shared_context_lp_suppressed" || event.type === "matchmaking.integrity_candidate_skipped") {
+      entry.ranked_lp_suppressed_count += 1;
+    }
+    if (event.metadata?.link_reason === "shared_recent_device") entry.shared_device = true;
+    if (event.metadata?.link_reason === "shared_recent_network") entry.shared_network = true;
+    if (new Date(event.created_at) > new Date(entry.latest_at)) entry.latest_at = event.created_at;
+    entry.recent_events.push({
+      id: event.id,
+      type: event.type,
+      severity: event.severity,
+      score: event.score,
+      created_at: event.created_at,
+      link_reason: event.metadata?.link_reason ?? "shared_context",
+      battle_room_id: event.metadata?.battle_room_id ?? null,
+    });
+    pairs.set(key, entry);
+  }
+
+  return [...pairs.values()]
+    .filter((entry) => !linkedReviewCleared(state, entry.account_ids, entry.latest_at))
+    .sort((a, b) => b.risk_score - a.risk_score || b.latest_at.localeCompare(a.latest_at))
+    .map((entry) => {
+      const status = accountPairCaseStatus(state, entry.account_ids, entry.latest_at);
+      const context = entry.shared_device ? "device" : "network";
+      const evidenceLevel = entry.shared_device ? "strong" : entry.ranked_lp_suppressed_count >= 2 ? "moderate" : "weak";
+      const priority = evidenceLevel === "strong" || entry.ranked_lp_suppressed_count >= 2 || entry.risk_score >= 120 ? "high" : "normal";
+      return {
+        id: `case_linked_${createHash("sha256").update(entry.account_ids.join("|")).digest("hex").slice(0, 12)}`,
+        kind: "linked_accounts",
+        priority,
+        account_id: entry.account_ids[0],
+        account_ids: entry.account_ids,
+        accounts: entry.account_ids.map((accountId) => ({
+          id: accountId,
+          display_name: accountsById.get(accountId)?.displayName ?? accountId,
+          enforcement: accountsById.get(accountId)?.enforcement ?? {},
+        })),
+        subject_id: entry.account_ids.join("<->"),
+        status,
+        reason: `${context} context · ${entry.event_count} linked PvP events`,
+        created_at: entry.latest_at,
+        evidence: {
+          level: evidenceLevel,
+          context,
+          shared_device: entry.shared_device,
+          shared_network: entry.shared_network,
+          event_count: entry.event_count,
+          reward_suppressed_count: entry.reward_suppressed_count,
+          ranked_lp_suppressed_count: entry.ranked_lp_suppressed_count,
+          risk_score: entry.risk_score,
+          event_types: [...entry.event_types],
+          pet_ids: [...entry.pet_ids],
+          recent_events: entry.recent_events.slice(0, 6),
+        },
+        recommended_actions: linkedAccountRecommendedActions({ ...entry, evidenceLevel }),
+      };
+    });
+}
+
+function rankedCompetitiveIntegrityCases(state) {
+  const summaries = rankedPairSummaries(state, new Date(Date.now() - COMPETITIVE_REVIEW_WINDOW_MS));
+  return summaries
+    .map((summary) => rankedCompetitiveIntegrityCase(state, summary))
+    .filter(Boolean)
+    .filter((entry) => !linkedReviewCleared(state, entry.account_ids, entry.created_at))
+    .sort((a, b) => b.evidence.risk_score - a.evidence.risk_score || b.created_at.localeCompare(a.created_at))
+    .slice(0, 50);
+}
+
+function rankedCompetitiveIntegrityCase(state, summary) {
+  if (summary.match_count < RANKED_PAIR_DAILY_SOFT_LIMIT && summary.risk_score < 60) return null;
+  const status = accountPairCaseStatus(state, summary.account_ids, summary.latest_at);
+  const evidenceLevel = summary.risk_score >= 130 || summary.dominant_win_share >= 0.8 ? "strong" : summary.risk_score >= 80 ? "moderate" : "weak";
+  const priority = evidenceLevel === "strong" || summary.afk_losses >= 2 || summary.short_losses >= 3 ? "high" : "normal";
+  return {
+    id: `case_competitive_${createHash("sha256").update(summary.account_ids.join("|")).digest("hex").slice(0, 12)}`,
+    kind: "competitive_integrity",
+    priority,
+    account_id: summary.account_ids[0],
+    account_ids: summary.account_ids,
+    subject_id: summary.account_ids.join("<->"),
+    status,
+    reason: `${summary.match_count} ranked pair matches · ${summary.dominant_win_share} dominant win share`,
+    created_at: summary.latest_at,
+    evidence: {
+      level: evidenceLevel,
+      context: "ranked_history",
+      risk_score: summary.risk_score,
+      event_count: summary.match_count,
+      ranked_pair_matches: summary.match_count,
+      afk_losses: summary.afk_losses,
+      short_losses: summary.short_losses,
+      dominant_winner_account_id: summary.dominant_winner_account_id,
+      dominant_win_share: summary.dominant_win_share,
+      lp_transfer_estimate: summary.lp_transfer_estimate,
+      recent_events: summary.recent_rooms.slice(0, 6),
+    },
+    recommended_actions: competitiveRecommendedActions(summary, evidenceLevel),
+  };
+}
+
+function rankedPairSummaries(state, since) {
+  const pairs = new Map();
+  const seenRooms = new Set();
+  for (const battle of state.battles ?? []) {
+    if (battle.mode !== "ranked" || battle.battle_source !== "random_matchmaking") continue;
+    if (!battle.opponent?.account_id || new Date(battle.created_at) < since) continue;
+    const accountIds = [battle.account_id, battle.opponent.account_id].sort();
+    const key = accountIds.join("|");
+    const roomKey = battle.battle_room_id ?? battle.id;
+    const summary = pairs.get(key) ?? {
+      account_ids: accountIds,
+      match_count: 0,
+      afk_losses: 0,
+      short_losses: 0,
+      wins_by_account: new Map(),
+      lp_transfer_estimate: 0,
+      risk_score: 0,
+      latest_at: battle.created_at,
+      recent_rooms: [],
+    };
+
+    if (battle.result === "afk_loss") summary.afk_losses += 1;
+    if ((battle.result === "loss" || battle.result === "afk_loss") && Number(battle.turn_count ?? 0) <= 3) summary.short_losses += 1;
+    if (battle.result === "win") {
+      summary.wins_by_account.set(battle.account_id, (summary.wins_by_account.get(battle.account_id) ?? 0) + 1);
+      summary.lp_transfer_estimate += Math.max(0, Number(battle.lp?.delta ?? 0));
+    }
+    if (new Date(battle.created_at) > new Date(summary.latest_at)) summary.latest_at = battle.created_at;
+    if (!seenRooms.has(roomKey)) {
+      summary.match_count += 1;
+      summary.recent_rooms.push({
+        room_id: battle.battle_room_id ?? null,
+        result: battle.result,
+        turn_count: battle.turn_count,
+        created_at: battle.created_at,
+      });
+      seenRooms.add(roomKey);
+    }
+    pairs.set(key, summary);
+  }
+
+  return [...pairs.values()].map((summary) => {
+    const [winnerAccountId, winnerCount = 0] =
+      [...summary.wins_by_account.entries()].sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+    const dominantWinShare = summary.match_count > 0 ? Math.round((winnerCount / summary.match_count) * 100) / 100 : 0;
+    summary.dominant_winner_account_id = winnerAccountId;
+    summary.dominant_win_share = dominantWinShare;
+    summary.risk_score =
+      summary.match_count * 10 +
+      summary.afk_losses * 30 +
+      summary.short_losses * 20 +
+      (summary.match_count >= 5 ? 35 : 0) +
+      (summary.match_count >= 4 && dominantWinShare >= 0.75 ? 60 : 0);
+    summary.recent_rooms.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return summary;
+  });
+}
+
+function accountPairCaseStatus(state, accountIds, latestAt) {
+  if (linkedReviewCleared(state, accountIds, latestAt)) return "cleared";
+  const accounts = accountIds.map((accountId) => (state.accounts ?? []).find((entry) => entry.id === accountId));
+  if (accounts.some((account) => account?.enforcement?.ranked_locked_until && new Date(account.enforcement.ranked_locked_until) > new Date())) {
+    return "locked";
+  }
+  if (
+    accounts.some(
+      (account) =>
+        account?.enforcement?.ranked_lp_suppressed_until &&
+        new Date(account.enforcement.ranked_lp_suppressed_until) > new Date(),
+    )
+  ) {
+    return "suppressed";
+  }
+  if (accounts.some((account) => account?.enforcement?.watchlisted_at)) return "watching";
+  return "open";
+}
+
+function competitiveRecommendedActions(summary, evidenceLevel) {
+  const actions = ["watch", "ranked_lp_suppress", "clear_if_false_positive"];
+  if (evidenceLevel === "strong" || summary.afk_losses >= 2) actions.splice(2, 0, "ranked_lock_after_review");
+  return actions;
+}
+
+function linkedReviewCleared(state, accountIds, latestAt) {
+  return accountIds.every((accountId) => {
+    const account = (state.accounts ?? []).find((entry) => entry.id === accountId);
+    const clearedAt = account?.enforcement?.linked_review_cleared_at;
+    return clearedAt && new Date(clearedAt) > new Date(latestAt);
+  });
+}
+
+function linkedAccountRecommendedActions(entry) {
+  const actions = ["watch", "clear_if_false_positive"];
+  if (entry.evidenceLevel !== "weak" || entry.ranked_lp_suppressed_count > 0) actions.splice(1, 0, "ranked_lp_suppress");
+  if (entry.evidenceLevel === "strong" && entry.ranked_lp_suppressed_count >= 2) actions.splice(actions.length - 1, 0, "ranked_lock_after_review");
+  return actions;
 }
 
 function moderationQueue(state) {
@@ -1737,21 +2305,84 @@ function generateAbuseAlerts(state, nowIso) {
   return created;
 }
 
+function generateCompetitiveIntegrityRiskEvents(state, nowIso) {
+  const created = [];
+  const day = nowIso.slice(0, 10);
+  for (const caseItem of rankedCompetitiveIntegrityCases(state)) {
+    if (caseItem.evidence.level === "weak" && caseItem.evidence.ranked_pair_matches < 5) continue;
+    for (const accountId of caseItem.account_ids) {
+      const dedupeKey = `competitive:${caseItem.id}:${accountId}:${day}`;
+      const event = appendRiskEventOnce(state, {
+        accountId,
+        type: "ranked.win_trading_review",
+        severity: caseItem.evidence.level === "strong" ? "high" : "medium",
+        score: Math.min(90, Math.max(35, Math.round(caseItem.evidence.risk_score / 2))),
+        metadata: {
+          dedupe_key: dedupeKey,
+          case_id: caseItem.id,
+          account_ids: caseItem.account_ids,
+          opponent_account_id: caseItem.account_ids.find((entry) => entry !== accountId) ?? null,
+          evidence: caseItem.evidence,
+        },
+      });
+      if (event) created.push(event);
+    }
+  }
+  return created;
+}
+
+function appendRiskEventOnce(state, input) {
+  const dedupeKey = input.metadata?.dedupe_key;
+  if (dedupeKey) {
+    const existing = (state.riskEvents ?? []).find((event) => event.type === input.type && event.metadata?.dedupe_key === dedupeKey);
+    if (existing) return null;
+  }
+  return appendRiskEvent(state, input);
+}
+
 function authProviderStatus() {
   const provider = process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev";
   return {
     provider,
-    passkey: provider !== "local_dev" || process.env.CODEX_PET_PASSKEY_PROVIDER === "true" ? "configured" : "dev_stub",
-    email_magic_link: process.env.CODEX_PET_EMAIL_PROVIDER ? "configured" : "dev_stub",
-    oauth: process.env.CODEX_PET_OAUTH_ISSUER ? "configured" : "dev_stub",
+    passkey:
+      provider === "local_dev" && process.env.CODEX_PET_PASSKEY_PROVIDER !== "true"
+        ? "dev_stub"
+        : process.env.CODEX_PET_PASSKEY_PROVIDER === "true"
+          ? "configured"
+          : "missing",
+    email_magic_link:
+      provider === "local_dev" && !process.env.CODEX_PET_EMAIL_PROVIDER
+        ? "dev_stub"
+        : process.env.CODEX_PET_EMAIL_PROVIDER
+          ? "configured"
+          : "missing",
+    oauth:
+      provider === "local_dev" && !process.env.CODEX_PET_OAUTH_ISSUER
+        ? "dev_stub"
+        : process.env.CODEX_PET_OAUTH_ISSUER
+          ? "configured"
+          : "missing",
     dev_codes_exposed: process.env.CODEX_PET_AUTH_DEV_CODE === "true",
   };
+}
+
+function assertAuthMethodConfigured(method) {
+  const provider = process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev";
+  if (provider === "local_dev") return;
+  const configured = {
+    passkey: process.env.CODEX_PET_PASSKEY_PROVIDER === "true",
+    email_magic_link: Boolean(process.env.CODEX_PET_EMAIL_PROVIDER),
+    league_oauth: Boolean(process.env.CODEX_PET_OAUTH_ISSUER),
+  };
+  if (configured[method]) return;
+  throw httpError(503, "AUTH_PROVIDER_NOT_CONFIGURED", `${method} auth is not configured for this League server.`);
 }
 
 function bridgeAttestationStatus() {
   return {
     hmac_bridge_secret: process.env.CODEX_PET_BRIDGE_SECRET ? "configured" : "missing",
     codex_app_attestation_secret: process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET ? "configured" : "missing",
+    replay_signing_secret: process.env.CODEX_PET_REPLAY_SIGNING_SECRET ? "configured" : "local_dev",
     official_openai_identity: "unconfirmed",
   };
 }
@@ -1773,6 +2404,138 @@ function friendPairDailyCount(state, accountId, petId, opponentPetId) {
       battle.opponent?.pet_id === opponentPetId &&
       new Date(battle.created_at) >= dayStart,
   ).length;
+}
+
+function friendPairRoomDailyCount(state, accountA, accountB) {
+  const dayStart = startOfUtcDay(new Date());
+  const pair = [accountA, accountB].sort().join("|");
+  return (state.battleRooms ?? []).filter((room) => {
+    if (room.mode !== "friend" || room.source !== "friend_invite") return false;
+    if (new Date(room.created_at) < dayStart) return false;
+    return [...(room.participant_account_ids ?? [])].sort().join("|") === pair;
+  }).length;
+}
+
+function assertInviteAcceptAllowed(state, accountId) {
+  pruneInviteAttempts(state);
+  const recent = (state.inviteAttempts ?? []).filter((attempt) => attempt.account_id === accountId);
+  if (recent.length < INVITE_ACCEPT_ATTEMPT_LIMIT) return;
+  appendRiskEventOnce(state, {
+    accountId,
+    type: "friend_invite.accept_lockout",
+    severity: "medium",
+    score: 30,
+    metadata: {
+      dedupe_key: `invite_lockout:${accountId}:${new Date().toISOString().slice(0, 13)}`,
+      attempts: recent.length,
+    },
+  });
+  const error = httpError(429, "INVITE_ACCEPT_LOCKED", "Too many failed invite code attempts. Try again later.");
+  error.retry_after_seconds = Math.ceil(INVITE_ACCEPT_ATTEMPT_WINDOW_MS / 1000);
+  throw error;
+}
+
+function recordFailedInviteAttempt(state, accountId, code) {
+  pruneInviteAttempts(state);
+  state.inviteAttempts ??= [];
+  state.inviteAttempts.push({
+    account_id: accountId,
+    code_hash: createHash("sha256").update(code || "empty").digest("hex"),
+    created_at: new Date().toISOString(),
+  });
+  appendRiskEvent(state, {
+    accountId,
+    type: "friend_invite.accept_failed",
+    severity: "low",
+    score: 5,
+    metadata: { attempt_count: state.inviteAttempts.filter((attempt) => attempt.account_id === accountId).length },
+  });
+}
+
+function pruneInviteAttempts(state) {
+  const cutoff = Date.now() - INVITE_ACCEPT_ATTEMPT_WINDOW_MS;
+  state.inviteAttempts = (state.inviteAttempts ?? []).filter((attempt) => new Date(attempt.created_at).getTime() >= cutoff).slice(-1000);
+}
+
+function assertQueueJoinAllowed(state, accountId, petId, mode) {
+  pruneQueueAbuseEvents(state);
+  const recentCancels = (state.queueAbuseEvents ?? []).filter(
+    (event) => event.account_id === accountId && event.pet_id === petId && event.mode === mode && event.type === "cancel",
+  );
+  if (recentCancels.length < QUEUE_CANCEL_LIMIT) return;
+  appendRiskEventOnce(state, {
+    accountId,
+    petId,
+    type: "matchmaking.queue_dodge_lockout",
+    severity: "medium",
+    score: 35,
+    metadata: {
+      dedupe_key: `queue_dodge:${accountId}:${petId}:${mode}:${new Date().toISOString().slice(0, 13)}`,
+      cancel_count: recentCancels.length,
+      mode,
+    },
+  });
+  const error = httpError(429, "QUEUE_DODGE_COOLDOWN", "Too many queue cancels. Try matchmaking again later.");
+  error.retry_after_seconds = Math.ceil(QUEUE_CANCEL_WINDOW_MS / 1000);
+  throw error;
+}
+
+function recordQueueCancel(state, accountId, petId, mode) {
+  pruneQueueAbuseEvents(state);
+  state.queueAbuseEvents ??= [];
+  state.queueAbuseEvents.push({
+    type: "cancel",
+    account_id: accountId,
+    pet_id: petId,
+    mode,
+    created_at: new Date().toISOString(),
+  });
+}
+
+function pruneQueueAbuseEvents(state) {
+  const cutoff = Date.now() - QUEUE_CANCEL_WINDOW_MS;
+  state.queueAbuseEvents = (state.queueAbuseEvents ?? []).filter((event) => new Date(event.created_at).getTime() >= cutoff).slice(-1000);
+}
+
+function accountLinkContext(state, accountA, accountB) {
+  if (!accountA || !accountB || accountA === accountB) return { linked: false };
+  const sessionsA = recentSessionsForAccount(state, accountA);
+  const sessionsB = recentSessionsForAccount(state, accountB);
+  const deviceA = new Set(sessionsA.map((session) => session.device_hash).filter(Boolean));
+  const ipA = new Set(sessionsA.map((session) => session.client_ip_hash).filter(Boolean));
+  const sameDevice = sessionsB.find((session) => session.device_hash && deviceA.has(session.device_hash));
+  if (sameDevice) {
+    return { linked: true, confidence: "device", reason: "shared_recent_device" };
+  }
+  const sameIp = sessionsB.find((session) => session.client_ip_hash && ipA.has(session.client_ip_hash));
+  if (sameIp) {
+    return { linked: true, confidence: "network", reason: "shared_recent_network" };
+  }
+  return { linked: false };
+}
+
+function accountRankedLpSuppression(state, accountId) {
+  const account = (state.accounts ?? []).find((entry) => entry.id === accountId);
+  const until = account?.enforcement?.ranked_lp_suppressed_until;
+  if (until && new Date(until) > new Date()) {
+    return {
+      suppressed: true,
+      until,
+      reason: account.enforcement?.reason ?? "manual_ranked_lp_suppression",
+    };
+  }
+  return { suppressed: false };
+}
+
+function recentSessionsForAccount(state, accountId) {
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return (state.sessions ?? []).filter(
+    (session) =>
+      session.account_id === accountId &&
+      !session.revoked_at &&
+      new Date(session.expires_at).getTime() > Date.now() &&
+      new Date(session.created_at).getTime() >= cutoff,
+  );
 }
 
 function createInviteCode(state) {
@@ -1904,6 +2667,62 @@ function trainingRiskContext(state, accountId, petId, signals, reportType) {
   };
 }
 
+function verifyTrainingDraft(state, accountId, petId, input, summaryHash) {
+  const draftId = String(input.draft_id ?? "").trim();
+  const nonce = String(input.draft_nonce ?? "").trim();
+  if (!draftId || !nonce) {
+    return { status: "missing", draft_id: null, workspace_hash: workspaceFingerprint(input.workspace ?? input.workspace_context ?? {}) };
+  }
+  const draft = (state.trainingReportDrafts ?? []).find((entry) => entry.id === draftId && entry.account_id === accountId && entry.pet_id === petId);
+  if (!draft) return { status: "not_found", draft_id: draftId, workspace_hash: null };
+  if (draft.status !== "open") return { status: "already_used", draft_id: draft.id, draft, workspace_hash: draft.workspace_hash ?? null };
+  if (new Date(draft.expires_at) <= new Date()) {
+    draft.status = "expired";
+    return { status: "expired", draft_id: draft.id, draft, workspace_hash: draft.workspace_hash ?? null };
+  }
+  if (draft.nonce !== nonce) return { status: "nonce_invalid", draft_id: draft.id, draft, workspace_hash: draft.workspace_hash ?? null };
+  if (draft.summary_hash !== summaryHash) return { status: "summary_mismatch", draft_id: draft.id, draft, workspace_hash: draft.workspace_hash ?? null };
+  return { status: "valid", draft_id: draft.id, draft, workspace_hash: draft.workspace_hash ?? null };
+}
+
+function pruneTrainingDrafts(state) {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  state.trainingReportDrafts = (state.trainingReportDrafts ?? []).filter((draft) => new Date(draft.created_at) >= cutoff).slice(0, 500);
+  for (const draft of state.trainingReportDrafts) {
+    if (draft.status === "open" && new Date(draft.expires_at) <= new Date()) draft.status = "expired";
+  }
+}
+
+function publicTrainingDraft(draft) {
+  return {
+    id: draft.id,
+    nonce: draft.nonce,
+    pet_id: draft.pet_id,
+    summary_hash: draft.summary_hash,
+    workspace_hash: draft.workspace_hash,
+    report_type: draft.report_type,
+    element_signal: draft.element_signal,
+    quality_score: draft.quality_score,
+    award_preview: draft.award_preview,
+    risk_preview: draft.risk_preview,
+    counters: draft.counters,
+    status: draft.status,
+    created_at: draft.created_at,
+    expires_at: draft.expires_at,
+    status_text: draft.status_text,
+  };
+}
+
+function workspaceFingerprint(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const clean = {};
+  for (const key of ["workspace_id", "repo_hash", "branch_hash", "commit_hash", "session_id"]) {
+    const text = String(value[key] ?? "").trim().slice(0, 128);
+    if (text) clean[key] = text;
+  }
+  return Object.keys(clean).length > 0 ? hashJson(clean) : null;
+}
+
 function sanitizeAppearance(appearance) {
   if (!appearance || typeof appearance !== "object" || Array.isArray(appearance)) return {};
   const json = JSON.stringify(appearance);
@@ -1952,6 +2771,11 @@ function sanitizeIdentifier(identifier) {
   return String(identifier).trim().toLowerCase().slice(0, 128) || "demo@codexpet.local";
 }
 
+function sanitizeContextHash(value) {
+  const clean = String(value ?? "").trim().toLowerCase();
+  return /^[a-f0-9]{64}$/.test(clean) ? clean : null;
+}
+
 function sanitizeSkillAliases(aliases) {
   const sanitized = {};
   for (const [skillId, alias] of Object.entries(aliases ?? {})) {
@@ -1992,10 +2816,17 @@ function publicSession(session) {
     id: session.id,
     account_id: session.account_id,
     method: session.method,
+    client_context: sessionContextLevel(session),
     created_at: session.created_at,
     expires_at: session.expires_at,
     revoked_at: session.revoked_at,
   };
+}
+
+function sessionContextLevel(session) {
+  if (session.device_hash) return "device";
+  if (session.client_ip_hash) return "network";
+  return "none";
 }
 
 function randomCode(length) {
@@ -2007,6 +2838,12 @@ function randomCode(length) {
 
 function hashJson(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function signServerRecord(kind, payload) {
+  const secret = process.env.CODEX_PET_REPLAY_SIGNING_SECRET ?? "local-dev-replay-signing-key";
+  const body = JSON.stringify({ kind, payload });
+  return `hmac-sha256:${createHmac("sha256", secret).update(body).digest("hex")}`;
 }
 
 function hashAuthCode(challengeId, code) {

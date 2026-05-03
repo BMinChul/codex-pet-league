@@ -25,6 +25,7 @@ export const RATE_LIMIT_POLICIES = {
   "admin.training.review": { limit: 60, windowMs: HOUR, score: 10 },
   "admin.enforcement": { limit: 40, windowMs: HOUR, score: 15 },
   "admin.asset.moderation": { limit: 60, windowMs: HOUR, score: 10 },
+  "admin.ranked.rollback": { limit: 20, windowMs: HOUR, score: 15 },
   "admin.season.action": { limit: 10, windowMs: DAY, score: 20 },
 };
 
@@ -43,6 +44,7 @@ export const IDEMPOTENCY_REQUIRED_ROUTES = new Set([
   "admin.training.review",
   "admin.enforcement",
   "admin.asset.moderation",
+  "admin.ranked.rollback",
   "admin.season.action",
 ]);
 

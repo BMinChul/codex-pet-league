@@ -33,6 +33,7 @@ import {
   requireAdmin,
   reportPetAsset,
   revokeSession,
+  rollbackRankedBattle,
   runServerAuthorityJob,
   reviewTrainingReport,
   simulateBattle,
@@ -132,7 +133,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && path === "/api/auth/verify") {
     const result = await updateState((state) => {
       applyRequestGuard(state, req, "auth.verify", null, body);
-      return verifyAuthChallenge(state, body);
+      return verifyAuthChallenge(state, { ...body, client_context: requestClientContext(req) });
     });
     sendJson(res, 201, result, { "set-cookie": sessionCookie(result.session_token, result.session.expires_at) });
     broadcast("auth.session.created", { account_id: result.account.id });
@@ -338,6 +339,16 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const adminBattleRollbackMatch = path.match(/^\/api\/admin\/battles\/([^/]+)\/rollback$/);
+  if (req.method === "POST" && adminBattleRollbackMatch) {
+    const result = await mutate("admin.ranked.rollback", (state) => {
+      applyRequestGuard(state, req, "admin.ranked.rollback", accountId, body);
+      return rollbackRankedBattle(state, accountId, { ...body, battle_room_id: adminBattleRollbackMatch[1] });
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
   if (req.method === "POST" && path === "/api/admin/seasons/action") {
     const result = await mutate("admin.season.action", (state) => {
       applyRequestGuard(state, req, "admin.season.action", accountId, body);
@@ -518,6 +529,14 @@ function applyRequestGuard(state, req, routeKey, accountId, body) {
   });
 }
 
+function requestClientContext(req) {
+  return {
+    client_ip_hash: clientIpHash(req),
+    device_hash: clientDeviceHash(req),
+    user_agent_hash: clientUserAgentHash(req),
+  };
+}
+
 function requestId(req, body) {
   return req.headers["idempotency-key"]?.toString() || body?.request_id || body?.idempotency_key || "";
 }
@@ -534,9 +553,21 @@ function clientIpHash(req) {
   return createHash("sha256").update(raw).digest("hex");
 }
 
+function clientDeviceHash(req) {
+  const raw = req.headers["x-league-device-id"]?.toString().trim() ?? "";
+  if (!/^[A-Za-z0-9._:-]{12,128}$/.test(raw)) return null;
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+function clientUserAgentHash(req) {
+  const raw = req.headers["user-agent"]?.toString().slice(0, 512) ?? "";
+  return raw ? createHash("sha256").update(raw).digest("hex") : null;
+}
+
 async function handleLive(req, res) {
   const accountId = await resolveAccountId(req);
   res.writeHead(200, {
+    ...securityHeaders(),
     "content-type": "text/event-stream; charset=utf-8",
     "cache-control": "no-cache",
     connection: "keep-alive",
@@ -620,9 +651,9 @@ function authProviderStatus() {
   const provider = process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev";
   return {
     provider,
-    passkey: process.env.CODEX_PET_PASSKEY_PROVIDER ? "configured" : "dev_stub",
-    email_magic_link: process.env.CODEX_PET_EMAIL_PROVIDER ? "configured" : "dev_stub",
-    oauth: process.env.CODEX_PET_OAUTH_ISSUER ? "configured" : "dev_stub",
+    passkey: provider === "local_dev" && !process.env.CODEX_PET_PASSKEY_PROVIDER ? "dev_stub" : process.env.CODEX_PET_PASSKEY_PROVIDER === "true" ? "configured" : "missing",
+    email_magic_link: provider === "local_dev" && !process.env.CODEX_PET_EMAIL_PROVIDER ? "dev_stub" : process.env.CODEX_PET_EMAIL_PROVIDER ? "configured" : "missing",
+    oauth: provider === "local_dev" && !process.env.CODEX_PET_OAUTH_ISSUER ? "dev_stub" : process.env.CODEX_PET_OAUTH_ISSUER ? "configured" : "missing",
     dev_codes_exposed: EXPOSE_AUTH_DEV_CODE,
   };
 }
@@ -631,6 +662,7 @@ function bridgeStatus() {
   return {
     hmac_bridge_secret: BRIDGE_SECRET ? "configured" : "missing",
     codex_app_attestation_secret: BRIDGE_ATTESTATION_SECRET ? "configured" : "missing",
+    replay_signing_secret: process.env.CODEX_PET_REPLAY_SIGNING_SECRET ? "configured" : "local_dev",
     official_openai_identity: "unconfirmed",
   };
 }
@@ -652,11 +684,11 @@ async function serveStatic(req, res, url) {
 
   try {
     const content = await readFile(filePath);
-    res.writeHead(200, { "content-type": contentType(filePath) });
+    res.writeHead(200, { ...securityHeaders(), "content-type": contentType(filePath) });
     res.end(content);
   } catch {
     const index = await readFile(join(PUBLIC_DIR, "index.html"));
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.writeHead(200, { ...securityHeaders(), "content-type": "text/html; charset=utf-8" });
     res.end(index);
   }
 }
@@ -687,8 +719,18 @@ async function readJson(req) {
 }
 
 function sendJson(res, status, payload, headers = {}) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers });
+  res.writeHead(status, { ...securityHeaders(), "content-type": "application/json; charset=utf-8", ...headers });
   res.end(JSON.stringify(payload, null, 2));
+}
+
+function securityHeaders() {
+  return {
+    "content-security-policy":
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "same-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  };
 }
 
 function contentType(path) {

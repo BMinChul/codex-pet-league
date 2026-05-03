@@ -402,6 +402,15 @@ select:disabled {
   background: #eef2f6;
 }
 
+.subtle-line {
+  background: #f9fbfd;
+}
+
+.result-line {
+  border: 1px solid rgba(20, 128, 94, 0.24);
+  background: #eef8f3;
+}
+
 .meter-stack {
   display: grid;
   gap: 10px;

@@ -1,5 +1,6 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { XP_CAPS } from "./rules.js";
+import { resultForSide } from "./battleEngine.js";
 
 export function hashLedgerEntry(entry) {
   return createHash("sha256").update(JSON.stringify(entry)).digest("hex");
@@ -76,6 +77,7 @@ export function auditState(state) {
 
   verifyMatchmakingIntegrity(state, { accountIds, activePetIds, petById }, findings);
   verifyReviewAndReportIntegrity(state, { accountIds, petById }, findings);
+  verifyBattleSettlementIntegrity(state, findings);
 
   return {
     ok: findings.filter((item) => item.severity === "critical" || item.severity === "high").length === 0,
@@ -165,6 +167,81 @@ function verifyReviewAndReportIntegrity(state, context, findings) {
   }
 }
 
+function verifyBattleSettlementIntegrity(state, findings) {
+  const battlesById = new Map((state.battles ?? []).map((battle) => [battle.id, battle]));
+  const roomsById = new Map((state.battleRooms ?? []).map((room) => [room.id, room]));
+
+  for (const room of state.battleRooms ?? []) {
+    if (room.status !== "finished") continue;
+    for (const sideKey of ["player", "opponent"]) {
+      const side = room.sides?.[sideKey];
+      if (side?.kind !== "player" || !side.account_id || !side.pet_id) continue;
+      const battleId = room.settlement_battle_ids?.[sideKey];
+      if (!battleId) {
+        findings.push(finding("battle_settlement_missing", "medium", `Room ${room.id} is missing settlement for ${sideKey}.`));
+        continue;
+      }
+      const battle = battlesById.get(battleId);
+      if (!battle) {
+        findings.push(finding("battle_settlement_orphan", "high", `Room ${room.id} references missing settlement ${battleId}.`));
+        continue;
+      }
+      const expectedResult = resultForSide(room, sideKey);
+      if (battle.result !== expectedResult) {
+        findings.push(finding("battle_settlement_result_mismatch", "high", `Settlement ${battle.id} result does not match room ${room.id}.`));
+      }
+      if (battle.replay_hash !== room.replay_hash) {
+        findings.push(finding("battle_settlement_replay_mismatch", "critical", `Settlement ${battle.id} replay hash does not match room ${room.id}.`));
+      }
+      verifyRecordSignature(
+        "battle_result",
+        battle.result_signature,
+        {
+          account_id: battle.account_id,
+          pet_id: battle.pet_id,
+          battle_room_id: battle.battle_room_id ?? null,
+          result: battle.result,
+          replay_hash: battle.replay_hash ?? null,
+          lp: battle.lp,
+        },
+        "battle_result_signature_invalid",
+        `Settlement ${battle.id} result signature is invalid.`,
+        findings,
+      );
+      if (Number(battle.turn_count ?? 0) !== Number((room.log ?? []).length)) {
+        findings.push(finding("battle_settlement_turn_mismatch", "medium", `Settlement ${battle.id} turn count does not match room ${room.id}.`));
+      }
+    }
+    verifyRecordSignature(
+      "battle_replay",
+      room.replay_signature,
+      { room_id: room.id, replay_hash: room.replay_hash, result: room.result },
+      "battle_replay_signature_invalid",
+      `Room ${room.id} replay signature is invalid.`,
+      findings,
+    );
+  }
+
+  for (const battle of state.battles ?? []) {
+    if (!battle.battle_room_id) continue;
+    const room = roomsById.get(battle.battle_room_id);
+    if (!room) continue;
+    if (battle.replay_hash && room.replay_hash && battle.replay_hash !== room.replay_hash) {
+      findings.push(finding("battle_replay_cross_reference_mismatch", "critical", `Battle ${battle.id} replay hash differs from room ${room.id}.`));
+    }
+  }
+}
+
+function verifyRecordSignature(kind, signature, payload, code, message, findings) {
+  if (!signature) {
+    findings.push(finding(code.replace("_invalid", "_missing"), "medium", message.replace("invalid", "missing")));
+    return;
+  }
+  const secret = process.env.CODEX_PET_REPLAY_SIGNING_SECRET ?? "local-dev-replay-signing-key";
+  const expected = `hmac-sha256:${createHmac("sha256", secret).update(JSON.stringify({ kind, payload })).digest("hex")}`;
+  if (signature !== expected) findings.push(finding(code, "critical", message));
+}
+
 export function appendRiskEvent(state, input) {
   state.riskEvents ??= [];
   const event = {
@@ -194,14 +271,17 @@ export function accountIntegrityStatus(state, accountId) {
   const highEvents = recent.filter((event) => event.severity === "high" || event.severity === "critical").length;
   const rankedLockedUntil = account?.enforcement?.ranked_locked_until ?? null;
   const rankedLocked = Boolean(rankedLockedUntil && new Date(rankedLockedUntil) > new Date());
+  const rankedLpSuppressedUntil = account?.enforcement?.ranked_lp_suppressed_until ?? null;
+  const rankedLpSuppressed = Boolean(rankedLpSuppressedUntil && new Date(rankedLpSuppressedUntil) > new Date());
   let level = "clear";
   if (score >= 250 && highEvents >= 2) level = "review";
-  else if (score >= 120 || highEvents >= 1) level = "watch";
+  else if (score >= 120 || highEvents >= 1 || rankedLpSuppressed) level = "watch";
 
   const recommendedActions = [];
   if (level === "watch") recommendedActions.push("review_recent_events");
   if (level === "review") recommendedActions.push("manual_review_before_penalty");
   if (rankedLocked) recommendedActions.push("ranked_locked_by_manual_or_tamper_flag");
+  if (rankedLpSuppressed) recommendedActions.push("ranked_lp_suppressed_by_manual_review");
 
   return {
     account_id: accountId,
@@ -213,6 +293,8 @@ export function accountIntegrityStatus(state, accountId) {
     automatic_restrictions: {
       ranked_locked: rankedLocked,
       ranked_locked_until: rankedLockedUntil,
+      ranked_lp_suppressed: rankedLpSuppressed,
+      ranked_lp_suppressed_until: rankedLpSuppressedUntil,
     },
   };
 }
@@ -226,6 +308,11 @@ export function riskTrainingReport({ signals, counters, classification, trust = 
   if (!trust.trusted && highValue) {
     score += 70;
     flags.push("untrusted_high_value_report");
+  }
+  const draftStatus = classification.draftCheck?.status ?? "missing";
+  if (!trust.trusted && draftStatus !== "valid") {
+    score += draftStatus === "summary_mismatch" || draftStatus === "nonce_invalid" ? 85 : 75;
+    flags.push(`training_draft_${draftStatus}`);
   }
 
   if (testsRun > 20) {

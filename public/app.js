@@ -1,5 +1,6 @@
 const EMPTY_LABEL = "-";
 const STAT_KEYS = ["power", "guard", "speed", "focus", "recovery", "insight"];
+const DEVICE_STORAGE_KEY = "codexPetLeagueDeviceId";
 
 const state = {
   ready: false,
@@ -21,8 +22,12 @@ const state = {
   activePetId: null,
   activeBattleId: null,
   activeBattle: null,
+  lastTrainingDraft: null,
   notices: [],
 };
+
+let silentRefreshPromise = null;
+let silentRefreshQueued = false;
 
 const els = queryElements({
   appStatus: "#appStatus",
@@ -73,6 +78,8 @@ const els = queryElements({
   battleOutput: "#battleOutput",
   replayRefreshButton: "#replayRefreshButton",
   replayList: "#replayList",
+  leaderboardTierFilter: "#leaderboardTierFilter",
+  leaderboardClassFilter: "#leaderboardClassFilter",
   leaderboardBody: "#leaderboardBody",
   eventLog: "#eventLog",
   adminRefreshButton: "#adminRefreshButton",
@@ -87,6 +94,7 @@ const els = queryElements({
 });
 
 boot();
+setInterval(updateBattleTimerText, 1000);
 
 async function boot() {
   bindEvents();
@@ -118,7 +126,6 @@ function connectLiveEvents() {
   const stream = new EventSource("/api/live");
   state.liveStream = stream;
   stream.addEventListener("battle.action.submitted", () => refreshSilently());
-  stream.addEventListener("battle.room.viewed", () => refreshSilently());
   stream.addEventListener("matchmaking.background_matched", () => safeLiveAction(loadMatchmakingStatus));
   stream.addEventListener("matchmaking.queue", () => safeLiveAction(loadMatchmakingStatus));
   stream.addEventListener("heartbeat", () => {
@@ -136,14 +143,25 @@ async function safeLiveAction(action) {
 }
 
 async function refreshSilently() {
+  if (silentRefreshPromise) {
+    silentRefreshQueued = true;
+    return silentRefreshPromise;
+  }
+  silentRefreshPromise = runSilentRefresh();
+  return silentRefreshPromise;
+}
+
+async function runSilentRefresh() {
   try {
-    if (state.activeBattleId) {
-      const result = await api(`/api/battles/${encodeURIComponent(state.activeBattleId)}`);
-      state.activeBattle = result.battle;
-    }
-    await refresh();
+    do {
+      silentRefreshQueued = false;
+      await refresh();
+    } while (silentRefreshQueued);
   } catch {
     // The next manual refresh will recover from transient live-update failures.
+  } finally {
+    silentRefreshPromise = null;
+    silentRefreshQueued = false;
   }
 }
 
@@ -168,6 +186,8 @@ function bindEvents() {
   els.createInviteButton?.addEventListener("click", () => runAction(createFriendInvite));
   els.acceptInviteButton?.addEventListener("click", () => runAction(acceptFriendInvite));
   els.replayRefreshButton?.addEventListener("click", () => runAction(loadActivePetDetails, "Replays refreshed."));
+  els.leaderboardTierFilter?.addEventListener("change", () => renderLeaderboard(state.leaderboard));
+  els.leaderboardClassFilter?.addEventListener("change", () => renderLeaderboard(state.leaderboard));
   els.adminCaseFilter?.addEventListener("change", renderAdminConsole);
   els.adminRefreshButton?.addEventListener("click", () => runAction(loadAdminConsole, "Admin console refreshed."));
   els.adminRunOpsButton?.addEventListener("click", () => runAction(runAdminOpsJob, "Ops job completed."));
@@ -199,6 +219,7 @@ async function refresh() {
     state.activePetId = state.pets[0]?.id ?? null;
   }
   await loadActivePetDetails();
+  await loadActiveBattle();
   renderApp();
 }
 
@@ -227,6 +248,12 @@ async function loadActivePetDetails() {
   if (status) state.xpStatusByPetId.set(pet.id, status);
   if (profile) state.profileByPetId.set(pet.id, profile);
   if (replays) state.replaysByPetId.set(pet.id, asArray(replays.replays));
+}
+
+async function loadActiveBattle() {
+  if (!state.activeBattleId) return;
+  const result = await loadOptional(`/api/battles/${encodeURIComponent(state.activeBattleId)}`, "Battle could not be refreshed.");
+  if (result?.battle) state.activeBattle = result.battle;
 }
 
 async function loadMatchmakingStatus() {
@@ -399,7 +426,11 @@ function renderXpStatus() {
     appendText(row, "span", `${current}/${formatCap(cap)}`);
     els.xpStatus?.append(row);
   }
-  setText(els.resetText, `Daily reset: ${formatDateTime(status.reset_at)}`);
+  const remaining = status.remaining ?? {};
+  setText(
+    els.resetText,
+    `Available today: pet ${remaining.pet ?? 0}, training ${remaining.training ?? 0}, battle ${remaining.battle ?? 0}, style ${remaining.style ?? 0}. Reset: ${formatDateTime(status.reset_at)}`,
+  );
 }
 
 async function createPet({ demo }) {
@@ -483,15 +514,27 @@ async function draftTrainingReport() {
     method: "POST",
     body: { signals: collectSignals() },
   });
+  state.lastTrainingDraft = draft.draft ?? draft;
   setJson(els.trainingPreview, draft.draft ?? draft);
 }
 
 async function submitTrainingReport() {
   const pet = requireActivePet();
+  let draft = state.lastTrainingDraft;
+  if (!draft || draft.pet_id !== pet.id || new Date(draft.expires_at) <= new Date()) {
+    const drafted = await api(`/api/pets/${encodeURIComponent(pet.id)}/training-reports/draft`, {
+      method: "POST",
+      body: { signals: collectSignals() },
+    });
+    draft = drafted.draft ?? drafted;
+    state.lastTrainingDraft = draft;
+  }
   const result = await api(`/api/pets/${encodeURIComponent(pet.id)}/training-reports`, {
     method: "POST",
     body: {
       client_report_id: randomId(),
+      draft_id: draft.id,
+      draft_nonce: draft.nonce,
       signals: collectSignals(),
     },
   });
@@ -540,11 +583,31 @@ async function reviewTrainingReport(reportId, decision) {
 async function updateEnforcement(accountId, action) {
   const result = await api(`/api/admin/accounts/${encodeURIComponent(accountId)}/enforcement`, {
     method: "POST",
-    body: { action, days: 1, reason: action },
+    body: { action, days: enforcementDays(action), reason: action },
   });
   state.adminConsole = await api("/api/admin/console");
   state.adminOutput = result;
   renderAdminConsole();
+}
+
+async function updateLinkedEnforcement(accountIds, action) {
+  const results = [];
+  for (const accountId of asArray(accountIds)) {
+    results.push(
+      await api(`/api/admin/accounts/${encodeURIComponent(accountId)}/enforcement`, {
+        method: "POST",
+        body: { action, days: enforcementDays(action), reason: action },
+      }),
+    );
+  }
+  state.adminConsole = await api("/api/admin/console");
+  state.adminOutput = { action, accounts: results.map((result) => result.account?.id ?? result.account?.displayName ?? "account") };
+  renderAdminConsole();
+}
+
+function enforcementDays(action) {
+  if (action === "ranked_lp_suppress") return 7;
+  return 1;
 }
 
 async function moderateAsset(assetId, action) {
@@ -554,6 +617,18 @@ async function moderateAsset(assetId, action) {
   });
   state.adminConsole = await api("/api/admin/console");
   state.adminOutput = result;
+  renderAdminConsole();
+}
+
+async function rollbackRankedRoom(roomId) {
+  const result = await api(`/api/admin/battles/${encodeURIComponent(roomId)}/rollback`, {
+    method: "POST",
+    body: { reason: "competitive_integrity_review" },
+  });
+  state.adminConsole = await api("/api/admin/console");
+  state.adminOutput = result;
+  const board = await api("/api/leaderboard");
+  state.leaderboard = asArray(board.leaderboard);
   renderAdminConsole();
 }
 
@@ -663,8 +738,22 @@ function renderBattle(battle) {
   const turnLine = document.createElement("div");
   turnLine.className = "turn-line";
   appendText(turnLine, "strong", `Turn ${battle.turn_index ?? 0}`);
-  appendText(turnLine, "span", battle.status === "in_progress" ? `${secondsLeft ?? "?"}s left` : battle.result?.result ?? battle.status);
+  const timer = appendText(turnLine, "span", battle.status === "in_progress" ? `${secondsLeft ?? "?"}s left` : battle.result?.result ?? battle.status);
+  timer.dataset.battleTimer = "true";
   els.battleState?.append(turnLine);
+  if (battle.status === "in_progress") {
+    const pendingLine = document.createElement("div");
+    pendingLine.className = "turn-line subtle-line";
+    appendText(pendingLine, "strong", "Actions");
+    appendText(pendingLine, "span", `Player ${battle.pending?.player ? "submitted" : "waiting"} · Opponent ${battle.pending?.opponent ? "submitted" : "waiting"}`);
+    els.battleState?.append(pendingLine);
+  } else if (battle.result) {
+    const resultLine = document.createElement("div");
+    resultLine.className = "turn-line result-line";
+    appendText(resultLine, "strong", String(battle.result.result ?? battle.status));
+    appendText(resultLine, "span", `${battle.result.reason ?? "complete"} · ${shortHash(battle.replay_hash)}`);
+    els.battleState?.append(resultLine);
+  }
   renderBattleTimeline(battle, els.battleTimeline);
 
   setJson(els.battleOutput, {
@@ -677,6 +766,14 @@ function renderBattle(battle) {
     latest_turn: asArray(battle.log).at(-1) ?? null,
     replay_hash: battle.replay_hash,
   });
+}
+
+function updateBattleTimerText() {
+  const timer = document.querySelector("[data-battle-timer]");
+  if (!timer || state.activeBattle?.status !== "in_progress") return;
+  const deadline = state.activeBattle.turn_deadline_at;
+  const secondsLeft = deadline ? Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / 1000)) : null;
+  timer.textContent = `${secondsLeft ?? "?"}s left`;
 }
 
 function battleSide(label, side) {
@@ -770,9 +867,10 @@ function renderReplays() {
     item.className = "timeline-item replay-item";
     const header = document.createElement("div");
     appendText(header, "strong", `${replay.mode ?? "battle"} · ${replay.result ?? EMPTY_LABEL}`);
-    appendText(header, "span", `${replay.turn_count ?? 0} turns`);
+    appendText(header, "span", replay.lp ? `${replay.lp.delta ?? 0} LP · ${replay.turn_count ?? 0} turns` : `${replay.pet_xp_delta ?? 0} XP · ${replay.turn_count ?? 0} turns`);
     item.append(header);
     appendText(item, "div", `${shortId(replay.room_id ?? replay.battle_id)} · ${shortHash(replay.replay_hash)} · ${formatDateTime(replay.created_at)}`, "timeline-meta");
+    if (asArray(replay.integrity_flags).length) appendText(item, "div", `Integrity ${asArray(replay.integrity_flags).join(", ")}`, "timeline-meta");
     const latest = asArray(replay.log).at(-1);
     if (latest) item.append(turnLogItem(latest));
     els.replayList?.append(item);
@@ -781,11 +879,18 @@ function renderReplays() {
 
 function renderLeaderboard(rows) {
   clear(els.leaderboardBody);
-  const list = asArray(rows);
+  fillLeaderboardFilters(rows);
+  const tierFilter = els.leaderboardTierFilter?.value ?? "all";
+  const classFilter = els.leaderboardClassFilter?.value ?? "all";
+  const list = asArray(rows).filter(
+    (row) =>
+      (tierFilter === "all" || row.tier_label?.startsWith(tierFilter) || row.tier_label === tierFilter) &&
+      (classFilter === "all" || row.battle_class === classFilter),
+  );
   if (!list.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 6;
+    td.colSpan = 7;
     td.className = "empty-cell";
     td.textContent = "No ranked pets yet.";
     tr.append(td);
@@ -801,12 +906,22 @@ function renderLeaderboard(rows) {
       row.battle_class,
       row.tier_label,
       row.lp,
+      row.publish_state ?? "published",
       `${row.wins ?? 0}/${row.losses ?? 0}/${row.draws ?? 0}`,
     ]) {
       appendText(tr, "td", safeText(value));
     }
     els.leaderboardBody?.append(tr);
   }
+}
+
+function fillLeaderboardFilters(rows) {
+  const tierValue = els.leaderboardTierFilter?.value ?? "all";
+  const classValue = els.leaderboardClassFilter?.value ?? "all";
+  const tiers = [...new Set(asArray(rows).map((row) => String(row.tier_label ?? "").split(" ")[0]).filter(Boolean))].sort();
+  const classes = [...new Set(asArray(rows).map((row) => row.battle_class).filter(Boolean))].sort();
+  replaceOptions(els.leaderboardTierFilter, [{ value: "all", label: "All Tiers" }, ...tiers.map((tier) => ({ value: tier, label: tier }))], tierValue);
+  replaceOptions(els.leaderboardClassFilter, [{ value: "all", label: "All Classes" }, ...classes.map((entry) => ({ value: entry, label: entry }))], classValue);
 }
 
 function renderEvents(events) {
@@ -841,6 +956,8 @@ function renderAdminConsole() {
     ["Review Cases", consoleState.review_cases?.length ?? 0],
     ["Held Reports", consoleState.held_training_reports?.length ?? 0],
     ["Abuse Alerts", consoleState.abuse_alerts?.length ?? 0],
+    ["Linked", consoleState.linked_account_cases?.length ?? 0],
+    ["Competitive", consoleState.competitive_integrity_cases?.length ?? 0],
     ["Moderation", consoleState.moderation_queue?.length ?? 0],
     ["Audit Findings", consoleState.audit?.findings?.length ?? 0],
     ["Suspicious", consoleState.suspicious_accounts?.length ?? 0],
@@ -877,6 +994,17 @@ function renderAdminConsole() {
     appendText(text, "div", `Account ${item.account_id ?? EMPTY_LABEL} · ${formatDateTime(item.created_at)}`, "timeline-meta");
     if (item.risk_score !== undefined) appendText(text, "div", `Risk ${item.risk_score} · ${asArray(item.risk_flags).join(", ")}`, "timeline-meta");
     if (item.integrity) appendText(text, "div", `24h risk ${item.integrity.risk_score_24h} · ${item.integrity.risk_events_24h} events`, "timeline-meta");
+    if (item.evidence) {
+      appendText(
+        text,
+        "div",
+        `Evidence ${item.evidence.level} · ${item.evidence.context} · risk ${item.evidence.risk_score} · ranked ${item.evidence.ranked_lp_suppressed_count}`,
+        "timeline-meta",
+      );
+      appendText(text, "div", `Accounts ${asArray(item.account_ids).join(" <-> ")}`, "timeline-meta");
+      appendText(text, "div", `Reasons ${asArray(item.evidence.recent_events).map((event) => event.link_reason).join(", ")}`, "timeline-meta");
+      appendText(text, "div", `${asArray(item.recommended_actions).join(", ")}`, "timeline-meta");
+    }
     if (item.open_report_count !== undefined) appendText(text, "div", `${item.open_report_count} open reports · ${item.visibility}`, "timeline-meta");
     row.append(text);
     if (item.kind === "training_report") {
@@ -891,17 +1019,26 @@ function renderAdminConsole() {
       reject.addEventListener("click", () => runAction(() => reviewTrainingReport(item.subject_id, "reject")));
       actions.append(approve, reject);
       row.append(actions);
+    } else if (item.kind === "linked_accounts" || item.kind === "competitive_integrity") {
+      const actions = document.createElement("div");
+      actions.append(
+        adminActionButton("Watch", () => updateLinkedEnforcement(item.account_ids, "watch")),
+        adminActionButton("Suppress", () => updateLinkedEnforcement(item.account_ids, "ranked_lp_suppress")),
+        adminActionButton("Lock", () => updateLinkedEnforcement(item.account_ids, "ranked_lock")),
+        adminActionButton("Clear", () => updateLinkedEnforcement(item.account_ids, "clear")),
+      );
+      const rollbackRoomId = item.kind === "competitive_integrity" ? asArray(item.evidence?.recent_events).find((event) => event.room_id)?.room_id : null;
+      if (rollbackRoomId) actions.append(adminActionButton("Rollback", () => rollbackRankedRoom(rollbackRoomId)));
+      row.append(actions);
     } else if (item.kind === "account_integrity") {
       const actions = document.createElement("div");
-      const lock = document.createElement("button");
-      lock.className = "secondary-button";
-      lock.textContent = "Lock";
-      lock.addEventListener("click", () => runAction(() => updateEnforcement(item.account_id, "ranked_lock")));
-      const unlock = document.createElement("button");
-      unlock.className = "secondary-button";
-      unlock.textContent = "Unlock";
-      unlock.addEventListener("click", () => runAction(() => updateEnforcement(item.account_id, "ranked_unlock")));
-      actions.append(lock, unlock);
+      actions.append(
+        adminActionButton("Watch", () => updateEnforcement(item.account_id, "watch")),
+        adminActionButton("Suppress", () => updateEnforcement(item.account_id, "ranked_lp_suppress")),
+        adminActionButton("Lock", () => updateEnforcement(item.account_id, "ranked_lock")),
+        adminActionButton("Unlock", () => updateEnforcement(item.account_id, "ranked_unlock")),
+        adminActionButton("Clear", () => updateEnforcement(item.account_id, "clear")),
+      );
       row.append(actions);
     } else if (item.kind === "asset_moderation") {
       const actions = document.createElement("div");
@@ -927,6 +1064,14 @@ function renderAdminConsole() {
     auth_provider: consoleState.auth_provider,
     bridge_attestation: consoleState.bridge_attestation,
   });
+}
+
+function adminActionButton(label, action) {
+  const button = document.createElement("button");
+  button.className = "secondary-button";
+  button.textContent = label;
+  button.addEventListener("click", () => runAction(action));
+  return button;
 }
 
 function renderAdminAudit(consoleState) {
@@ -1110,7 +1255,7 @@ async function api(path, options = {}) {
   if (body && method !== "GET" && !body.request_id) body.request_id = randomId();
   const response = await fetch(path, {
     method,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-league-device-id": leagueDeviceId() },
     credentials: "same-origin",
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -1199,7 +1344,7 @@ function actionLabel(action) {
   if (!action) return "pending";
   if (action.kind === "skill") {
     const equipped = asArray(activePet()?.skills).find((skill) => skill.id === action.skill_id);
-    return skillLabel(equipped ?? { id: action.skill_id, skill_name: action.skill_name });
+    return skillLabel(equipped ?? { id: action.skill_id, skill_name: action.skill_name, alias: action.skill_alias });
   }
   return action.kind ?? "action";
 }
@@ -1348,4 +1493,16 @@ function randomId() {
   const bytes = new Uint32Array(2);
   globalThis.crypto?.getRandomValues?.(bytes);
   return `client_${Date.now()}_${bytes[0].toString(16)}${bytes[1].toString(16)}`;
+}
+
+function leagueDeviceId() {
+  try {
+    const existing = localStorage.getItem(DEVICE_STORAGE_KEY);
+    if (existing) return existing;
+    const next = `device_${randomId()}`;
+    localStorage.setItem(DEVICE_STORAGE_KEY, next);
+    return next;
+  } catch {
+    return `device_${randomId()}`;
+  }
 }

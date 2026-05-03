@@ -4,6 +4,7 @@ const checks = [
   ["CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER", process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER ?? "false"],
   ["CODEX_PET_BRIDGE_SECRET", process.env.CODEX_PET_BRIDGE_SECRET ? "configured" : "missing"],
   ["CODEX_PET_BRIDGE_ATTESTATION_SECRET", process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET ? "configured" : "missing"],
+  ["CODEX_PET_REPLAY_SIGNING_SECRET", process.env.CODEX_PET_REPLAY_SIGNING_SECRET ? "configured" : "local_dev"],
   ["CODEX_PET_STATE_PATH", process.env.CODEX_PET_STATE_PATH ?? "data/league-state.json"],
 ];
 

@@ -406,9 +406,13 @@ async function callTool(name, args) {
 
   if (name === "training_report_submit") {
     const pet = await resolvePet(args.pet_id);
+    const signals = args.signals ?? defaultSignals();
+    const draft = await apiPost(`/api/pets/${pet.id}/training-reports/draft`, { signals });
     return apiPost(`/api/pets/${pet.id}/training-reports`, {
       client_report_id: args.idempotency_key ?? randomUUID(),
-      signals: args.signals ?? defaultSignals(),
+      draft_id: draft.draft.id,
+      draft_nonce: draft.draft.nonce,
+      signals,
     });
   }
 

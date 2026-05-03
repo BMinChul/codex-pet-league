@@ -15,6 +15,7 @@
     "test:runtime": "node scripts/runtime-smoke.mjs",
     "test:abuse": "node scripts/abuse-smoke.mjs",
     "test:browser": "playwright test test/browser-smoke.spec.mjs --browser=chromium --workers=1 --output=runs/playwright",
+    "balance:sim": "node scripts/balance-sim.mjs",
     "verify:loop": "node scripts/verify-loop.mjs",
     "ops:check": "node scripts/ops-check.mjs"
   },

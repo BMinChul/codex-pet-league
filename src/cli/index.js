@@ -150,8 +150,11 @@ async function main(args) {
   if (area === "report" && action === "submit") {
     const pet = await resolvePet(client, parsed.flags.pet);
     const signals = buildSignalsFromWorkspace({ flags: signalFlags(parsed.flags) });
+    const draft = await client.post(`/api/pets/${pet.id}/training-reports/draft`, { signals });
     const result = await client.post(`/api/pets/${pet.id}/training-reports`, {
       client_report_id: parsed.flags.idempotencyKey ?? randomUUID(),
+      draft_id: draft.draft.id,
+      draft_nonce: draft.draft.nonce,
       signals,
     });
     printTrainingSubmit(result);
