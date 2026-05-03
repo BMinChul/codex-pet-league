@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomInt } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -169,8 +170,9 @@ function lineRpcClient(child) {
 
 async function startTempServer() {
   const tempRoot = await mkdtemp(join(tmpdir(), "codexpet-mcp-"));
-  const port = randomInt(49_001, 54_000);
-  const baseUrl = `http://localhost:${port}`;
+  const port = await reservePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const logs = [];
   const child = spawn(process.execPath, ["src/server/index.js"], {
     cwd: process.cwd(),
     env: {
@@ -183,7 +185,17 @@ async function startTempServer() {
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
-  await waitForServer(baseUrl);
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => logs.push(`stdout: ${chunk.trim()}`));
+  child.stderr.on("data", (chunk) => logs.push(`stderr: ${chunk.trim()}`));
+  try {
+    await waitForServer(baseUrl, child, logs);
+  } catch (error) {
+    child.kill();
+    await rm(tempRoot, { recursive: true, force: true });
+    throw error;
+  }
   return {
     baseUrl,
     async close() {
@@ -191,6 +203,34 @@ async function startTempServer() {
       await rm(tempRoot, { recursive: true, force: true });
     },
   };
+}
+
+async function reservePort() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await freePort();
+    } catch {
+      // Retry with a fresh OS-assigned port.
+    }
+  }
+  return randomInt(49_001, 54_000);
+}
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      server.close(() => {
+        if (address && typeof address === "object") {
+          resolve(address.port);
+        } else {
+          reject(new Error("Could not reserve a TCP port."));
+        }
+      });
+    });
+  });
 }
 
 async function createSession(baseUrl, identifier) {
@@ -212,9 +252,12 @@ async function postJson(baseUrl, path, body) {
   return payload;
 }
 
-async function waitForServer(baseUrl) {
+async function waitForServer(baseUrl, child, logs) {
   const started = Date.now();
-  while (Date.now() - started < 5000) {
+  while (Date.now() - started < 15000) {
+    if (child.exitCode !== null) {
+      throw new Error(`Temp League server exited with code ${child.exitCode}.\n${logs.join("\n")}`);
+    }
     try {
       const response = await fetch(`${baseUrl}/api/rules`);
       if (response.ok) return;
@@ -223,7 +266,7 @@ async function waitForServer(baseUrl) {
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error("Temp League server did not start.");
+  throw new Error(`Temp League server did not start at ${baseUrl}.\n${logs.join("\n")}`);
 }
 
 async function waitFor(predicate, timeoutMs) {
