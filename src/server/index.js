@@ -12,6 +12,7 @@ import {
 } from "../domain/rules.js";
 import {
   adminAudit,
+  adminConsole,
   cancelMatchmakingTicket,
   createAuthChallenge,
   createPet,
@@ -30,13 +31,19 @@ import {
   processMatchmakingQueues,
   publicPetView,
   requireAdmin,
+  reportPetAsset,
   revokeSession,
+  runServerAuthorityJob,
+  reviewTrainingReport,
   simulateBattle,
   getTurnBattle,
   startTurnBattle,
   listSessions,
   submitTurnBattleAction,
   submitTrainingReport,
+  moderateAsset,
+  seasonOperation,
+  updateAccountEnforcement,
   updatePetLoadout,
   verifyAuthChallenge,
   xpStatus,
@@ -50,6 +57,8 @@ const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const ALLOW_DEV_ACCOUNT_HEADER = process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER === "true";
 const EXPOSE_AUTH_DEV_CODE = process.env.CODEX_PET_AUTH_DEV_CODE === "true";
 const BRIDGE_SECRET = process.env.CODEX_PET_BRIDGE_SECRET ?? "";
+const BRIDGE_ATTESTATION_SECRET = process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET ?? "";
+const OPS_JOB_INTERVAL_MS = Number(process.env.CODEX_PET_OPS_JOB_INTERVAL_MS ?? 60_000);
 const SESSION_COOKIE = "league_session";
 const liveClients = new Set();
 
@@ -88,6 +97,17 @@ setInterval(async () => {
 setInterval(() => {
   broadcast("heartbeat", { live_clients: liveClients.size });
 }, 15000).unref();
+
+setInterval(async () => {
+  try {
+    const result = await updateState((state) => runServerAuthorityJob(state));
+    if (result.abuse_alerts.length > 0 || result.job.high_findings > 0) {
+      broadcast("ops.review_needed", { alerts: result.abuse_alerts.length, findings: result.job.high_findings });
+    }
+  } catch (error) {
+    console.error(`ops authority job failed: ${error.message}`);
+  }
+}, Math.max(15_000, OPS_JOB_INTERVAL_MS)).unref();
 
 async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/live") {
@@ -128,6 +148,16 @@ async function handleApi(req, res, url) {
       level100Xp: totalXpForLevel100(),
       level100FastestDaysAtCap: Math.round((totalXpForLevel100() / XP_CAPS.petDaily) * 10) / 10,
     });
+    return;
+  }
+
+  if (req.method === "GET" && path === "/api/auth/providers") {
+    sendJson(res, 200, authProviderStatus());
+    return;
+  }
+
+  if (req.method === "GET" && path === "/api/bridge/status") {
+    sendJson(res, 200, bridgeStatus());
     return;
   }
 
@@ -218,10 +248,19 @@ async function handleApi(req, res, url) {
     return;
   }
 
-  const publicPetMatch = path.match(/^\/api\/public\/pets\/([^/]+)$/);
-  if (req.method === "GET" && publicPetMatch) {
+  const publicPetMatch = path.match(/^\/api\/public\/pets\/([^/]+)(?:\/(.+))?$/);
+  if (req.method === "GET" && publicPetMatch && !publicPetMatch[2]) {
     const state = await loadState();
     sendJson(res, 200, petProfile(state, publicPetMatch[1]));
+    return;
+  }
+
+  if (req.method === "POST" && publicPetMatch && publicPetMatch[2] === "report") {
+    const result = await mutate("asset.reported", (state) => {
+      applyRequestGuard(state, req, "asset.report", accountId, body);
+      return reportPetAsset(state, accountId, publicPetMatch[1], body);
+    });
+    sendJson(res, 201, result);
     return;
   }
 
@@ -249,6 +288,62 @@ async function handleApi(req, res, url) {
     const state = await loadState();
     requireAdmin(state, accountId);
     sendJson(res, 200, adminAudit(state));
+    return;
+  }
+
+  if (req.method === "GET" && path === "/api/admin/console") {
+    const state = await loadState();
+    requireAdmin(state, accountId);
+    sendJson(res, 200, adminConsole(state));
+    return;
+  }
+
+  if (req.method === "POST" && path === "/api/admin/ops/run") {
+    const result = await mutate("ops.manual_run", (state) => {
+      applyRequestGuard(state, req, "admin.ops.run", accountId, body);
+      requireAdmin(state, accountId);
+      return runServerAuthorityJob(state, { adminAccountId: accountId });
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  const adminTrainingMatch = path.match(/^\/api\/admin\/training-reports\/([^/]+)\/review$/);
+  if (req.method === "POST" && adminTrainingMatch) {
+    const result = await mutate("admin.training.reviewed", (state) => {
+      applyRequestGuard(state, req, "admin.training.review", accountId, body);
+      return reviewTrainingReport(state, accountId, { ...body, report_id: adminTrainingMatch[1] });
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  const adminAccountMatch = path.match(/^\/api\/admin\/accounts\/([^/]+)\/enforcement$/);
+  if (req.method === "POST" && adminAccountMatch) {
+    const result = await mutate("admin.enforcement.updated", (state) => {
+      applyRequestGuard(state, req, "admin.enforcement", accountId, body);
+      return updateAccountEnforcement(state, accountId, { ...body, account_id: adminAccountMatch[1] });
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  const adminAssetMatch = path.match(/^\/api\/admin\/assets\/([^/]+)\/moderation$/);
+  if (req.method === "POST" && adminAssetMatch) {
+    const result = await mutate("admin.asset.moderated", (state) => {
+      applyRequestGuard(state, req, "admin.asset.moderation", accountId, body);
+      return moderateAsset(state, accountId, { ...body, asset_id: adminAssetMatch[1] });
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  if (req.method === "POST" && path === "/api/admin/seasons/action") {
+    const result = await mutate("admin.season.action", (state) => {
+      applyRequestGuard(state, req, "admin.season.action", accountId, body);
+      return seasonOperation(state, accountId, body);
+    });
+    sendJson(res, 201, result);
     return;
   }
 
@@ -440,14 +535,15 @@ function clientIpHash(req) {
 }
 
 async function handleLive(req, res) {
-  await resolveAccountId(req);
+  const accountId = await resolveAccountId(req);
   res.writeHead(200, {
     "content-type": "text/event-stream; charset=utf-8",
     "cache-control": "no-cache",
     connection: "keep-alive",
   });
-  const client = { res };
+  const client = { res, accountId };
   liveClients.add(client);
+  res.write("retry: 3000\n");
   res.write(`event: ready\ndata: ${JSON.stringify({ connected_at: new Date().toISOString() })}\n\n`);
   req.on("close", () => liveClients.delete(client));
 }
@@ -455,7 +551,11 @@ async function handleLive(req, res) {
 function broadcast(type, payload) {
   const event = `event: ${type}\ndata: ${JSON.stringify({ type, payload, created_at: new Date().toISOString() })}\n\n`;
   for (const client of liveClients) {
-    client.res.write(event);
+    try {
+      client.res.write(event);
+    } catch {
+      liveClients.delete(client);
+    }
   }
 }
 
@@ -500,7 +600,39 @@ function trainingReportTrust(req, body) {
   const signature = req.headers["x-league-bridge-signature"]?.toString() ?? "";
   const expected = createHmac("sha256", BRIDGE_SECRET).update(JSON.stringify(body)).digest("hex");
   if (!safeEqual(signature, expected)) return { trusted: false, reason: "bridge_signature_invalid" };
-  return { trusted: true, reason: "bridge_signature_valid" };
+  const attestation = bridgeAttestationTrust(req, body);
+  return {
+    trusted: true,
+    reason: attestation.trusted ? "bridge_signature_and_attestation_valid" : "bridge_signature_valid",
+    attestation,
+  };
+}
+
+function bridgeAttestationTrust(req, body) {
+  if (!BRIDGE_ATTESTATION_SECRET) return { trusted: false, reason: "attestation_secret_not_configured" };
+  const signature = req.headers["x-codex-app-attestation"]?.toString() ?? "";
+  const expected = createHmac("sha256", BRIDGE_ATTESTATION_SECRET).update(JSON.stringify(body)).digest("hex");
+  if (!safeEqual(signature, expected)) return { trusted: false, reason: "attestation_invalid" };
+  return { trusted: true, reason: "attestation_valid" };
+}
+
+function authProviderStatus() {
+  const provider = process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev";
+  return {
+    provider,
+    passkey: process.env.CODEX_PET_PASSKEY_PROVIDER ? "configured" : "dev_stub",
+    email_magic_link: process.env.CODEX_PET_EMAIL_PROVIDER ? "configured" : "dev_stub",
+    oauth: process.env.CODEX_PET_OAUTH_ISSUER ? "configured" : "dev_stub",
+    dev_codes_exposed: EXPOSE_AUTH_DEV_CODE,
+  };
+}
+
+function bridgeStatus() {
+  return {
+    hmac_bridge_secret: BRIDGE_SECRET ? "configured" : "missing",
+    codex_app_attestation_secret: BRIDGE_ATTESTATION_SECRET ? "configured" : "missing",
+    official_openai_identity: "unconfirmed",
+  };
 }
 
 function safeEqual(left, right) {

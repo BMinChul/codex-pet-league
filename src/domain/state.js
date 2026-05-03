@@ -26,7 +26,7 @@ import {
   submitAction,
   submitBotActionIfNeeded,
 } from "./battleEngine.js";
-import { appendRiskEvent, auditState, riskTrainingReport } from "./audit.js";
+import { accountIntegrityStatus, appendRiskEvent, auditState, riskTrainingReport } from "./audit.js";
 
 const MAX_APPEARANCE_BYTES = 4096;
 const MAX_ATLAS_BYTES = 6 * 1024 * 1024;
@@ -48,10 +48,12 @@ export function requireAdmin(state, accountId) {
 }
 
 export function leagueStatus(state) {
+  const season = activeSeason(state);
   return {
-    active_season: activeSeason(state),
+    active_season: season,
     matchmaking_policy: MATCHMAKING_POLICY,
     queue_summary: queueSummary(state),
+    live_ops: publicOpsStatus(state),
   };
 }
 
@@ -250,6 +252,7 @@ export function createPet(state, accountId, input = {}) {
     created_at: now,
     updated_at: now,
   };
+  syncCosmeticRewards(pet);
   state.pets.push(pet);
   logEvent(state, "pet.created", accountId, { pet_id: pet.id, asset_id: asset.id });
   return pet;
@@ -323,6 +326,58 @@ export function adminAudit(state) {
   return auditState(state);
 }
 
+export function adminConsole(state) {
+  const audit = auditState(state);
+  return {
+    audit,
+    ops: publicOpsStatus(state),
+    review_cases: reviewCases(state),
+    held_training_reports: (state.trainingReports ?? [])
+      .filter((report) => report.status === "review")
+      .slice(-50)
+      .reverse(),
+    moderation_queue: moderationQueue(state),
+    abuse_alerts: activeAbuseAlerts(state),
+    suspicious_accounts: (state.accounts ?? [])
+      .map((account) => accountIntegrityStatus(state, account.id))
+      .filter((status) => status.level !== "clear" || status.automatic_restrictions.ranked_locked),
+    seasons: state.seasons ?? [],
+    season_rewards: (state.seasonRewards ?? []).slice(-50).reverse(),
+    auth_provider: authProviderStatus(),
+    bridge_attestation: bridgeAttestationStatus(),
+  };
+}
+
+export function runServerAuthorityJob(state, input = {}) {
+  const now = new Date(input.now ?? new Date()).toISOString();
+  const startedAt = new Date().toISOString();
+  const matches = processMatchmakingQueues(state).matches.length;
+  const reconciled = reconcileBattleSettlements(state);
+  const alerts = generateAbuseAlerts(state, now);
+  const audit = auditState(state);
+  const job = {
+    id: `ops_${randomUUID()}`,
+    type: "server_authority_reconcile",
+    status: audit.ok ? "ok" : "review",
+    matches_processed: matches,
+    settlements_reconciled: reconciled,
+    abuse_alerts_created: alerts.length,
+    high_findings: audit.findings.filter((finding) => finding.severity === "high" || finding.severity === "critical").length,
+    started_at: startedAt,
+    finished_at: new Date().toISOString(),
+  };
+  state.opsJobs ??= [];
+  state.opsJobs.unshift(job);
+  state.opsJobs = state.opsJobs.slice(0, 100);
+  logEvent(state, "ops.server_authority_job", input.adminAccountId ?? null, {
+    job_id: job.id,
+    status: job.status,
+    settlements_reconciled: reconciled,
+    abuse_alerts_created: alerts.length,
+  });
+  return { job, audit, abuse_alerts: alerts, ops: publicOpsStatus(state) };
+}
+
 export function draftTrainingReport(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
   const counters = dailyCounters(state, accountId, pet.id);
@@ -336,6 +391,12 @@ export function draftTrainingReport(state, accountId, petId, input = {}) {
     counters,
     isFirstDailyReport,
   });
+  const risk = riskTrainingReport({
+    signals,
+    counters,
+    classification,
+    trust: input.server_trust ?? { trusted: false, reason: "draft_untrusted" },
+  });
 
   return {
     id: `draft_${randomUUID()}`,
@@ -344,6 +405,11 @@ export function draftTrainingReport(state, accountId, petId, input = {}) {
     element_signal: classification.elementSignal,
     quality_score: classification.qualityScore,
     award_preview: award,
+    risk_preview: {
+      score: risk.score,
+      flags: risk.flags,
+      hold_for_review: risk.hold_for_review,
+    },
     counters,
     status_text: statusText(counters),
   };
@@ -399,6 +465,8 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     risk_score: risk.score,
     risk_flags: risk.flags,
     trust_reason: input.server_trust?.reason ?? "not_verified",
+    review_reason: risk.flags.join(", ") || null,
+    award_preview_json: award,
     pet_xp_delta: effectiveAward.petXpApplied,
     style_xp_delta: effectiveAward.styleXpApplied,
     created_at: now,
@@ -443,6 +511,168 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     risk_score: risk.score,
   });
   return { report, award: effectiveAward, pet, counters: dailyCounters(state, accountId, pet.id) };
+}
+
+export function reviewTrainingReport(state, adminAccountId, input = {}) {
+  requireAdmin(state, adminAccountId);
+  const report = (state.trainingReports ?? []).find((entry) => entry.id === input.report_id);
+  if (!report) throw httpError(404, "TRAINING_REPORT_NOT_FOUND", "Training Report not found.");
+  if (report.status !== "review") {
+    throw httpError(409, "TRAINING_REPORT_NOT_REVIEWABLE", "Only review-held Training Reports can be resolved.");
+  }
+  const decision = input.decision === "approve" ? "approve" : "reject";
+  const now = new Date().toISOString();
+  report.reviewed_by = adminAccountId;
+  report.reviewed_at = now;
+  report.review_note = sanitizeReviewNote(input.note);
+
+  if (decision === "reject") {
+    report.status = "rejected";
+    report.rejected_at = now;
+    logEvent(state, "training.rejected", report.account_id, { report_id: report.id, reviewed_by: adminAccountId });
+    return { report };
+  }
+
+  const pet = ownedPet(state, report.account_id, report.pet_id);
+  const counters = dailyCounters(state, report.account_id, report.pet_id);
+  const award = calculateTrainingAward({
+    reportType: report.report_type,
+    counters,
+    isFirstDailyReport: counters.trainingReportsUsed === 0,
+  });
+  const battleClassBefore = pet.battle_class;
+  report.status = "approved";
+  report.pet_xp_delta = award.petXpApplied;
+  report.style_xp_delta = award.styleXpApplied;
+  report.approved_at = now;
+  report.approved_by = adminAccountId;
+  appendXpLedger(state, {
+    accountId: report.account_id,
+    petId: report.pet_id,
+    sourceType: "training_report",
+    sourceId: report.id,
+    petXpDelta: award.petXpApplied,
+    styleXpDelta: award.styleXpApplied,
+    capBuckets: ["pet_daily", "training_daily", "style_daily", "style_weekly"],
+    metadata: {
+      pet_eligible: award.petEligible,
+      report_type: report.report_type,
+      quality_score: report.quality_score,
+      reviewed_by: adminAccountId,
+    },
+  });
+  applyProgression(pet, award.petXpApplied, award.styleXpApplied);
+  if (pet.battle_class !== battleClassBefore) cancelWaitingTicketsForPet(state, pet.id, "pet_progressed");
+  logEvent(state, "training.review_approved", report.account_id, { report_id: report.id, reviewed_by: adminAccountId });
+  return { report, award, pet };
+}
+
+export function updateAccountEnforcement(state, adminAccountId, input = {}) {
+  requireAdmin(state, adminAccountId);
+  const account = getAccount(state, input.account_id);
+  account.enforcement ??= {};
+  const action = input.action ?? "watch";
+  const now = new Date().toISOString();
+  if (action === "ranked_lock") {
+    const days = Math.max(1, Math.min(30, Number(input.days ?? 1)));
+    account.enforcement.ranked_locked_until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    account.enforcement.reason = sanitizeReviewNote(input.reason ?? "manual_review");
+  } else if (action === "ranked_unlock") {
+    account.enforcement.ranked_locked_until = null;
+    account.enforcement.reason = sanitizeReviewNote(input.reason ?? "manual_unlock");
+  } else {
+    account.enforcement.watchlisted_at = now;
+    account.enforcement.reason = sanitizeReviewNote(input.reason ?? "manual_watch");
+  }
+  account.enforcement.updated_by = adminAccountId;
+  account.enforcement.updated_at = now;
+  logEvent(state, "enforcement.updated", account.id, {
+    action,
+    ranked_locked_until: account.enforcement.ranked_locked_until ?? null,
+    updated_by: adminAccountId,
+  });
+  return { account, integrity: accountIntegrityStatus(state, account.id) };
+}
+
+export function reportPetAsset(state, accountId, petId, input = {}) {
+  getAccount(state, accountId);
+  const pet = state.pets.find((entry) => entry.id === petId && entry.status === "active");
+  if (!pet) throw httpError(404, "PET_NOT_FOUND", "Pet not found.");
+  if (pet.owner_account_id === accountId) {
+    throw httpError(409, "CANNOT_REPORT_OWN_PET", "You cannot report your own pet asset.");
+  }
+  const asset = petAsset(state, pet);
+  const now = new Date().toISOString();
+  state.assetReports ??= [];
+  const duplicate = state.assetReports.find(
+    (report) => report.asset_id === asset.id && report.reporter_account_id === accountId && report.status === "open",
+  );
+  if (duplicate) return { report: duplicate, asset };
+  const report = {
+    id: `asset_report_${randomUUID()}`,
+    asset_id: asset.id,
+    pet_id: pet.id,
+    reporter_account_id: accountId,
+    owner_account_id: pet.owner_account_id,
+    reason: sanitizeReviewNote(input.reason ?? "user_report"),
+    status: "open",
+    created_at: now,
+  };
+  state.assetReports.unshift(report);
+  const openCount = state.assetReports.filter((entry) => entry.asset_id === asset.id && entry.status === "open").length;
+  if (openCount >= 3) {
+    asset.safety_status = "reported";
+    asset.visibility = "private";
+    asset.moderation_reason = "report_threshold";
+  }
+  appendRiskEvent(state, {
+    accountId: pet.owner_account_id,
+    petId: pet.id,
+    type: "asset.reported",
+    severity: openCount >= 3 ? "medium" : "low",
+    score: openCount >= 3 ? 35 : 10,
+    metadata: { asset_id: asset.id, report_id: report.id, open_reports: openCount },
+  });
+  logEvent(state, "asset.reported", accountId, { asset_id: asset.id, pet_id: pet.id, report_id: report.id });
+  return { report, asset };
+}
+
+export function moderateAsset(state, adminAccountId, input = {}) {
+  requireAdmin(state, adminAccountId);
+  const asset = (state.assets ?? []).find((entry) => entry.id === input.asset_id);
+  if (!asset) throw httpError(404, "ASSET_NOT_FOUND", "Asset not found.");
+  const action = input.action ?? "clear";
+  const now = new Date().toISOString();
+  if (action === "hide") {
+    asset.safety_status = "blocked";
+    asset.visibility = "private";
+  } else if (action === "quarantine") {
+    asset.safety_status = "review";
+    asset.visibility = "private";
+  } else {
+    asset.safety_status = "clear";
+    asset.visibility = "public";
+  }
+  asset.moderation_reason = sanitizeReviewNote(input.reason ?? action);
+  asset.moderated_by = adminAccountId;
+  asset.moderated_at = now;
+  for (const report of state.assetReports ?? []) {
+    if (report.asset_id === asset.id && report.status === "open") {
+      report.status = action === "clear" ? "dismissed" : "resolved";
+      report.resolved_at = now;
+      report.resolved_by = adminAccountId;
+    }
+  }
+  logEvent(state, "asset.moderated", asset.owner_account_id, { asset_id: asset.id, action, moderated_by: adminAccountId });
+  return { asset, reports: (state.assetReports ?? []).filter((report) => report.asset_id === asset.id) };
+}
+
+export function seasonOperation(state, adminAccountId, input = {}) {
+  requireAdmin(state, adminAccountId);
+  const action = input.action ?? "status";
+  if (action === "end_current") return endCurrentSeason(state, adminAccountId);
+  if (action === "start_next") return startNextSeason(state, adminAccountId, input);
+  return { active_season: activeSeason(state), seasons: state.seasons ?? [], rewards: state.seasonRewards ?? [] };
 }
 
 export function simulateBattle(state, accountId, petId, input = {}) {
@@ -701,11 +931,22 @@ export function acceptFriendInvite(state, accountId, petId, input = {}) {
 export function xpStatus(state, accountId, petId) {
   const pet = ownedPet(state, accountId, petId);
   const counters = dailyCounters(state, accountId, pet.id);
+  const remaining = {
+    pet: Math.max(0, XP_CAPS.petDaily - counters.petDaily),
+    training: Math.max(0, XP_CAPS.trainingDaily - counters.trainingDaily),
+    battle: Math.max(0, XP_CAPS.battleDaily - counters.battleDaily),
+    friend: Math.max(0, XP_CAPS.friendDaily - counters.friendDaily),
+    style: Math.max(0, XP_CAPS.styleDaily - counters.styleDaily),
+    weeklyStyle: Math.max(0, XP_CAPS.styleWeekly - counters.styleWeekly),
+    trainingReports: Math.max(0, XP_CAPS.petEligibleTrainingReportsDaily - counters.trainingReportsUsed),
+  };
   return {
     pet,
     counters,
+    remaining,
     caps: XP_CAPS,
     status_text: statusText(counters),
+    cosmetic_rewards: cosmeticRewardsFor(pet),
     reset_at: nextUtcMidnight().toISOString(),
   };
 }
@@ -750,9 +991,14 @@ export function petAsset(state, pet) {
 }
 
 export function publicPetView(state, pet) {
+  const asset = petAsset(state, pet);
   return {
     ...pet,
-    asset: petAsset(state, pet),
+    asset: {
+      ...asset,
+      is_visible: asset.visibility !== "private" && asset.safety_status !== "blocked",
+    },
+    cosmetic_rewards: cosmeticRewardsFor(pet),
     skills: pet.skills
       .map((skillId) => OFFICIAL_SKILLS.find((skill) => skill.id === skillId))
       .filter(Boolean)
@@ -1004,6 +1250,20 @@ function settleFinishedTurnBattle(state, room) {
   return settlements;
 }
 
+function reconcileBattleSettlements(state) {
+  let reconciled = 0;
+  for (const room of state.battleRooms ?? []) {
+    const before = Object.keys(room.settlement_battle_ids ?? {}).length;
+    if (room.status === "in_progress") advanceBattleRoom(state, room);
+    if (room.status === "finished") {
+      settleFinishedTurnBattle(state, room);
+      const after = Object.keys(room.settlement_battle_ids ?? {}).length;
+      reconciled += Math.max(0, after - before);
+    }
+  }
+  return reconciled;
+}
+
 function matchWaitingTicket(state, ticket) {
   if (!ticketStillCurrent(state, ticket)) {
     cancelTicket(ticket, "ticket_stale");
@@ -1230,6 +1490,60 @@ function activeSeason(state) {
   return state.seasons.find((season) => season.id === state.activeSeasonId) ?? DEFAULT_SEASON;
 }
 
+function endCurrentSeason(state, adminAccountId) {
+  const season = activeSeason(state);
+  if (season.status === "completed") {
+    throw httpError(409, "SEASON_ALREADY_COMPLETED", "The active season is already completed.");
+  }
+  const now = new Date().toISOString();
+  season.status = "completed";
+  season.completed_at = now;
+  season.completed_by = adminAccountId;
+  state.seasonRewards ??= [];
+  const ranked = leaderboard(state).slice(0, 100);
+  for (const row of ranked) {
+    state.seasonRewards.push({
+      id: `season_reward_${randomUUID()}`,
+      season_id: season.id,
+      account_id: row.owner_account_id,
+      pet_id: row.pet_id,
+      rank: row.rank,
+      tier_label: row.tier_label,
+      title: seasonRewardTitle(row),
+      status: "grantable",
+      created_at: now,
+    });
+  }
+  logEvent(state, "season.completed", adminAccountId, { season_id: season.id, rewards: ranked.length });
+  return { season, rewards: state.seasonRewards.filter((reward) => reward.season_id === season.id) };
+}
+
+function startNextSeason(state, adminAccountId, input = {}) {
+  const current = activeSeason(state);
+  if (current.status !== "completed") {
+    throw httpError(409, "SEASON_NOT_COMPLETED", "Complete the current season before starting the next one.");
+  }
+  const index = (state.seasons ?? []).length + 1;
+  const startsAt = input.starts_at ?? new Date().toISOString();
+  const endsAt =
+    input.ends_at ?? new Date(new Date(startsAt).getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  const season = {
+    id: `season_${index}`,
+    name: sanitizeReviewNote(input.name ?? `Season ${index}`),
+    status: "active",
+    starts_at: startsAt,
+    ends_at: endsAt,
+    ranked_seed_lp: DEFAULT_SEASON.ranked_seed_lp,
+    placement_matches: DEFAULT_SEASON.placement_matches,
+    created_by: adminAccountId,
+  };
+  state.seasons.push(season);
+  state.activeSeasonId = season.id;
+  for (const pet of state.pets ?? []) ensureActiveSeasonRating(pet, season);
+  logEvent(state, "season.started", adminAccountId, { season_id: season.id, name: season.name });
+  return { season, seasons: state.seasons };
+}
+
 function ensureActiveSeasonRating(pet, season) {
   if (pet.rating?.season_id === season.id) return;
   pet.season_history ??= [];
@@ -1286,6 +1600,138 @@ function queueSummary(state) {
   };
 }
 
+function publicOpsStatus(state) {
+  const latest = (state.opsJobs ?? [])[0] ?? null;
+  const openAlerts = activeAbuseAlerts(state).length;
+  const openReviews = (state.trainingReports ?? []).filter((report) => report.status === "review").length;
+  return {
+    latest_job: latest,
+    open_review_cases: openReviews,
+    open_abuse_alerts: openAlerts,
+    moderation_items: moderationQueue(state).length,
+    live_battle_rooms: (state.battleRooms ?? []).filter((room) => room.status === "in_progress").length,
+  };
+}
+
+function reviewCases(state) {
+  const training = (state.trainingReports ?? [])
+    .filter((report) => report.status === "review")
+    .map((report) => ({
+      id: `case_${report.id}`,
+      kind: "training_report",
+      priority: report.risk_score >= 90 ? "high" : "normal",
+      account_id: report.account_id,
+      pet_id: report.pet_id,
+      subject_id: report.id,
+      status: report.status,
+      reason: report.review_reason ?? report.risk_flags?.join(", ") ?? "review",
+      created_at: report.created_at,
+    }));
+  const accounts = (state.accounts ?? [])
+    .map((account) => accountIntegrityStatus(state, account.id))
+    .filter((status) => status.level !== "clear")
+    .map((status) => ({
+      id: `case_integrity_${status.account_id}`,
+      kind: "account_integrity",
+      priority: status.level === "review" ? "high" : "normal",
+      account_id: status.account_id,
+      subject_id: status.account_id,
+      status: status.level,
+      reason: status.recommended_actions.join(", ") || "risk_score",
+      created_at: new Date().toISOString(),
+    }));
+  const assets = moderationQueue(state).map((asset) => ({
+    id: `case_asset_${asset.id}`,
+    kind: "asset_moderation",
+    priority: asset.safety_status === "reported" ? "high" : "normal",
+    account_id: asset.owner_account_id,
+    subject_id: asset.id,
+    status: asset.safety_status,
+    reason: asset.moderation_reason ?? "asset_report",
+    created_at: asset.created_at,
+  }));
+  return [...training, ...accounts, ...assets].slice(0, 100);
+}
+
+function moderationQueue(state) {
+  const reportCounts = new Map();
+  for (const report of state.assetReports ?? []) {
+    if (report.status === "open") reportCounts.set(report.asset_id, (reportCounts.get(report.asset_id) ?? 0) + 1);
+  }
+  return (state.assets ?? [])
+    .filter((asset) => asset.safety_status !== "clear" || reportCounts.has(asset.id))
+    .map((asset) => ({
+      ...asset,
+      open_report_count: reportCounts.get(asset.id) ?? 0,
+    }))
+    .slice(-50)
+    .reverse();
+}
+
+function activeAbuseAlerts(state) {
+  return (state.abuseAlerts ?? []).filter((alert) => alert.status === "open").slice(0, 100);
+}
+
+function generateAbuseAlerts(state, nowIso) {
+  state.abuseAlerts ??= [];
+  const created = [];
+  const recentEvents = (state.riskEvents ?? []).filter(
+    (event) => new Date(nowIso).getTime() - new Date(event.created_at).getTime() <= 60 * 60 * 1000,
+  );
+  const byAccount = new Map();
+  for (const event of recentEvents) {
+    if (!event.account_id) continue;
+    const current = byAccount.get(event.account_id) ?? { score: 0, events: 0 };
+    current.score += Number(event.score ?? 0);
+    current.events += 1;
+    byAccount.set(event.account_id, current);
+  }
+  for (const [accountId, summary] of byAccount) {
+    if (summary.score < 150 && summary.events < 5) continue;
+    const dedupeKey = `risk_burst:${accountId}:${new Date(nowIso).toISOString().slice(0, 13)}`;
+    if (state.abuseAlerts.some((alert) => alert.dedupe_key === dedupeKey)) continue;
+    const alert = {
+      id: `abuse_${randomUUID()}`,
+      dedupe_key: dedupeKey,
+      kind: "risk_burst",
+      account_id: accountId,
+      severity: summary.score >= 250 ? "high" : "medium",
+      status: "open",
+      summary,
+      created_at: nowIso,
+    };
+    state.abuseAlerts.unshift(alert);
+    created.push(alert);
+  }
+  state.abuseAlerts = state.abuseAlerts.slice(0, 500);
+  return created;
+}
+
+function authProviderStatus() {
+  const provider = process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev";
+  return {
+    provider,
+    passkey: provider !== "local_dev" || process.env.CODEX_PET_PASSKEY_PROVIDER === "true" ? "configured" : "dev_stub",
+    email_magic_link: process.env.CODEX_PET_EMAIL_PROVIDER ? "configured" : "dev_stub",
+    oauth: process.env.CODEX_PET_OAUTH_ISSUER ? "configured" : "dev_stub",
+    dev_codes_exposed: process.env.CODEX_PET_AUTH_DEV_CODE === "true",
+  };
+}
+
+function bridgeAttestationStatus() {
+  return {
+    hmac_bridge_secret: process.env.CODEX_PET_BRIDGE_SECRET ? "configured" : "missing",
+    codex_app_attestation_secret: process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET ? "configured" : "missing",
+    official_openai_identity: "unconfirmed",
+  };
+}
+
+function seasonRewardTitle(row) {
+  if (row.rank === 1) return `${row.tier_label} Champion`;
+  if (row.rank <= 10) return `${row.tier_label} Top 10`;
+  return `${row.tier_label} Finisher`;
+}
+
 function friendPairDailyCount(state, accountId, petId, opponentPetId) {
   if (!opponentPetId) return 0;
   const dayStart = startOfUtcDay(new Date());
@@ -1336,6 +1782,7 @@ function applyProgression(pet, petXpDelta, styleXpDelta) {
     level: pet.level,
   });
   pet.battle_class = battleClassForTotalStats(pet.stats.total);
+  syncCosmeticRewards(pet);
   pet.updated_at = new Date().toISOString();
 }
 
@@ -1434,6 +1881,30 @@ function sanitizeAppearance(appearance) {
     throw httpError(413, "APPEARANCE_TOO_LARGE", `Pet appearance metadata must be ${MAX_APPEARANCE_BYTES} bytes or smaller.`);
   }
   return JSON.parse(json);
+}
+
+function sanitizeReviewNote(value) {
+  return String(value ?? "").trim().replace(/[<>]/g, "").slice(0, 160) || "review";
+}
+
+function cosmeticRewardsFor(pet) {
+  const level = Number(pet.level ?? 1);
+  const rewards = [];
+  if (level >= 5) rewards.push({ id: "title_first_steps", kind: "title", label: "First Steps" });
+  if (level >= 10) rewards.push({ id: "aura_warm_boot", kind: "aura", label: "Warm Boot" });
+  if (level >= 25) rewards.push({ id: "badge_steady_loop", kind: "badge", label: "Steady Loop" });
+  if (level >= 50) rewards.push({ id: "trail_release_line", kind: "trail", label: "Release Line" });
+  if (level >= 75) rewards.push({ id: "frame_deep_work", kind: "frame", label: "Deep Work" });
+  if (level >= 100) rewards.push({ id: "title_level_100", kind: "title", label: "Level 100" });
+  const mastery = Number(pet.mastery_level ?? 0);
+  if (mastery > 0) rewards.push({ id: `mastery_${mastery}`, kind: "mastery", label: `Mastery ${mastery}` });
+  return rewards;
+}
+
+function syncCosmeticRewards(pet) {
+  const existing = new Set(pet.cosmetics_unlocked ?? []);
+  for (const reward of cosmeticRewardsFor(pet)) existing.add(reward.id);
+  pet.cosmetics_unlocked = [...existing];
 }
 
 function sanitizeHatchSource(source) {

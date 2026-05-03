@@ -45,6 +45,10 @@ http://localhost:4317
 - Cookie-backed auth challenge/session flow for passkey, magic link, and OAuth-shaped account binding.
 - Local audit checks for XP/LP/replay/risk/event-log integrity with tamper-evident hash chains.
 - Anti-cheat request guards for rate limits, idempotency/replay prevention, repeated Training Report evidence, and asset upload abuse.
+- Server authority ops job for matchmaking, settlement reconciliation, audit review, and abuse alert generation.
+- Admin operations console for held Training Reports, moderation queue, risk cases, manual enforcement, and season operations.
+- Asset report/moderation flow with report threshold privacy protection.
+- Level cosmetic rewards and season reward generation for non-ranked and ranked loops.
 - Sandbox battle simulation for result testing. It does not award official XP or ranked LP.
 - LP and tier/division updates only for official Ranked PvP matchmaking battles.
 - Leaderboard and server event log.
@@ -55,7 +59,9 @@ http://localhost:4317
 ```bash
 npm test
 npm run test:runtime
+npm run test:abuse
 npm run verify:loop -- 2
+npm run ops:check
 npm start
 npm run dev
 npm run cli -- help
@@ -114,13 +120,17 @@ CODEX_PET_ACCOUNT_ID=acct_demo
 CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
 CODEX_PET_AUTH_DEV_CODE=false
 CODEX_PET_BRIDGE_SECRET=shared_bridge_hmac_secret
+CODEX_PET_BRIDGE_ATTESTATION_SECRET=shared_codex_app_attestation_secret
+CODEX_PET_OPS_JOB_INTERVAL_MS=60000
 ```
 
 `CODEX_PET_SESSION_TOKEN` or the HttpOnly `league_session` cookie is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and is disabled unless `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true`.
 `CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. Production auth should deliver codes through the chosen email/passkey/OAuth provider.
-`CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; untrusted high-value reports are held for review.
+`CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. Untrusted high-value reports are held for review.
 High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; the browser, CLI, and MCP bridge add one automatically.
 Risk scores are review signals first. Automatic ranked lock only respects an explicit/manual `ranked_locked_until` or future tamper-confirmed policy, so false positives do not silently punish normal players.
+
+See `docs/OPERATIONS.md` for the 1-13 operational checklist before the final DB migration.
 
 ## Codex App MCP Bridge
 

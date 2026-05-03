@@ -103,6 +103,14 @@ async function runOfficialRuntimeSmoke(tempRoot) {
 
       const audit = await getJson(baseUrl, "/api/admin/audit", headersA);
       assert(audit.ok === true, `audit failed: ${JSON.stringify(audit.findings)}`);
+      const adminConsole = await getJson(baseUrl, "/api/admin/console", headersA);
+      assert(adminConsole.ops, "admin console did not return ops status");
+      const opsJob = await postJson(baseUrl, "/api/admin/ops/run", {}, headersA);
+      assert(opsJob.job?.id, "manual ops job did not return a job id");
+      const providers = await getJson(baseUrl, "/api/auth/providers", {});
+      assert(providers.provider, "auth provider status did not return a provider");
+      const bridge = await getJson(baseUrl, "/api/bridge/status", {});
+      assert(bridge.official_openai_identity === "unconfirmed", "bridge status changed unexpectedly");
 
       runCli("session", baseUrl, sessionA.session_token);
       runCli("audit", baseUrl, sessionA.session_token);

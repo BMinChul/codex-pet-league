@@ -12,6 +12,7 @@ const state = {
   pets: [],
   leaderboard: [],
   events: [],
+  adminConsole: null,
   xpStatusByPetId: new Map(),
   matchmaking: null,
   activePetId: null,
@@ -63,6 +64,12 @@ const els = queryElements({
   battleOutput: "#battleOutput",
   leaderboardBody: "#leaderboardBody",
   eventLog: "#eventLog",
+  adminRefreshButton: "#adminRefreshButton",
+  adminRunOpsButton: "#adminRunOpsButton",
+  adminSummary: "#adminSummary",
+  adminReviewCases: "#adminReviewCases",
+  adminOutput: "#adminOutput",
+  adminPanel: ".admin-panel",
 });
 
 boot();
@@ -144,6 +151,8 @@ function bindEvents() {
   els.queueStatusButton?.addEventListener("click", () => runAction(loadMatchmakingStatus));
   els.createInviteButton?.addEventListener("click", () => runAction(createFriendInvite));
   els.acceptInviteButton?.addEventListener("click", () => runAction(acceptFriendInvite));
+  els.adminRefreshButton?.addEventListener("click", () => runAction(loadAdminConsole, "Admin console refreshed."));
+  els.adminRunOpsButton?.addEventListener("click", () => runAction(runAdminOpsJob, "Ops job completed."));
   for (const button of els.actionButtons ?? []) {
     button.addEventListener("click", () => runAction(() => submitBattleAction(button.dataset.action)));
   }
@@ -165,6 +174,9 @@ async function refresh() {
   state.pets = asArray(petsResult?.pets);
   state.leaderboard = asArray(boardResult?.leaderboard);
   state.events = asArray(eventsResult?.events);
+  if (isAdmin()) {
+    state.adminConsole = await loadOptional("/api/admin/console", "Admin console could not be loaded.");
+  }
   if (!state.pets.some((pet) => pet.id === state.activePetId)) {
     state.activePetId = state.pets[0]?.id ?? null;
   }
@@ -214,6 +226,7 @@ function renderApp() {
   renderBattle(state.activeBattle);
   renderLeaderboard(state.leaderboard);
   renderEvents(state.events);
+  renderAdminConsole();
   updateControls();
 }
 
@@ -396,6 +409,10 @@ async function submitTrainingReport() {
     },
   });
   setJson(els.trainingPreview, {
+    status: result.report?.status,
+    review_reason: result.report?.review_reason,
+    risk_flags: result.report?.risk_flags,
+    trust: result.report?.trust_reason,
     applied: {
       pet_xp: result.report?.pet_xp_delta ?? 0,
       style_xp: result.report?.style_xp_delta ?? 0,
@@ -404,6 +421,52 @@ async function submitTrainingReport() {
     counters: result.counters,
   });
   await refresh();
+}
+
+async function loadAdminConsole() {
+  state.adminConsole = await api("/api/admin/console");
+  renderAdminConsole();
+}
+
+async function runAdminOpsJob() {
+  const result = await api("/api/admin/ops/run", {
+    method: "POST",
+    body: {},
+  });
+  state.adminConsole = await api("/api/admin/console");
+  setJson(els.adminOutput, result);
+  renderAdminConsole();
+}
+
+async function reviewTrainingReport(reportId, decision) {
+  const result = await api(`/api/admin/training-reports/${encodeURIComponent(reportId)}/review`, {
+    method: "POST",
+    body: { decision },
+  });
+  state.adminConsole = await api("/api/admin/console");
+  setJson(els.adminOutput, result);
+  renderAdminConsole();
+  await refresh();
+}
+
+async function updateEnforcement(accountId, action) {
+  const result = await api(`/api/admin/accounts/${encodeURIComponent(accountId)}/enforcement`, {
+    method: "POST",
+    body: { action, days: 1, reason: action },
+  });
+  state.adminConsole = await api("/api/admin/console");
+  setJson(els.adminOutput, result);
+  renderAdminConsole();
+}
+
+async function moderateAsset(assetId, action) {
+  const result = await api(`/api/admin/assets/${encodeURIComponent(assetId)}/moderation`, {
+    method: "POST",
+    body: { action, reason: action },
+  });
+  state.adminConsole = await api("/api/admin/console");
+  setJson(els.adminOutput, result);
+  renderAdminConsole();
 }
 
 async function startTurnBattle() {
@@ -593,6 +656,88 @@ function renderEvents(events) {
   }
 }
 
+function renderAdminConsole() {
+  if (els.adminPanel) els.adminPanel.hidden = !isAdmin();
+  if (!isAdmin()) return;
+  clear(els.adminSummary);
+  clear(els.adminReviewCases);
+  const consoleState = state.adminConsole;
+  if (!consoleState) {
+    renderEmpty(els.adminReviewCases, "Admin console not loaded.");
+    return;
+  }
+  const summary = [
+    ["Review Cases", consoleState.review_cases?.length ?? 0],
+    ["Held Reports", consoleState.held_training_reports?.length ?? 0],
+    ["Abuse Alerts", consoleState.abuse_alerts?.length ?? 0],
+    ["Moderation", consoleState.moderation_queue?.length ?? 0],
+  ];
+  for (const [label, value] of summary) {
+    const item = document.createElement("div");
+    appendText(item, "strong", label);
+    appendText(item, "div", value);
+    els.adminSummary?.append(item);
+  }
+  const cases = asArray(consoleState.review_cases);
+  if (!cases.length) {
+    renderEmpty(els.adminReviewCases, "No open review cases.");
+  }
+  for (const item of cases.slice(0, 12)) {
+    const row = document.createElement("div");
+    row.className = "review-item";
+    const text = document.createElement("div");
+    appendText(text, "strong", `${item.kind} · ${item.priority}`);
+    appendText(text, "div", `${item.subject_id} · ${item.reason}`);
+    row.append(text);
+    if (item.kind === "training_report") {
+      const actions = document.createElement("div");
+      const approve = document.createElement("button");
+      approve.className = "secondary-button";
+      approve.textContent = "Approve";
+      approve.addEventListener("click", () => runAction(() => reviewTrainingReport(item.subject_id, "approve")));
+      const reject = document.createElement("button");
+      reject.className = "secondary-button";
+      reject.textContent = "Reject";
+      reject.addEventListener("click", () => runAction(() => reviewTrainingReport(item.subject_id, "reject")));
+      actions.append(approve, reject);
+      row.append(actions);
+    } else if (item.kind === "account_integrity") {
+      const actions = document.createElement("div");
+      const lock = document.createElement("button");
+      lock.className = "secondary-button";
+      lock.textContent = "Lock";
+      lock.addEventListener("click", () => runAction(() => updateEnforcement(item.account_id, "ranked_lock")));
+      const unlock = document.createElement("button");
+      unlock.className = "secondary-button";
+      unlock.textContent = "Unlock";
+      unlock.addEventListener("click", () => runAction(() => updateEnforcement(item.account_id, "ranked_unlock")));
+      actions.append(lock, unlock);
+      row.append(actions);
+    } else if (item.kind === "asset_moderation") {
+      const actions = document.createElement("div");
+      const clearButton = document.createElement("button");
+      clearButton.className = "secondary-button";
+      clearButton.textContent = "Clear";
+      clearButton.addEventListener("click", () => runAction(() => moderateAsset(item.subject_id, "clear")));
+      const hideButton = document.createElement("button");
+      hideButton.className = "secondary-button";
+      hideButton.textContent = "Hide";
+      hideButton.addEventListener("click", () => runAction(() => moderateAsset(item.subject_id, "hide")));
+      actions.append(clearButton, hideButton);
+      row.append(actions);
+    } else {
+      appendText(row, "span", item.status);
+    }
+    els.adminReviewCases?.append(row);
+  }
+  setJson(els.adminOutput, {
+    ops: consoleState.ops,
+    audit_ok: consoleState.audit?.ok,
+    auth_provider: consoleState.auth_provider,
+    bridge_attestation: consoleState.bridge_attestation,
+  });
+}
+
 function updateControls() {
   const hasPet = Boolean(activePet());
   const hasSkill = Boolean(els.battleSkillSelect?.value);
@@ -614,6 +759,9 @@ function updateControls() {
   }
   for (const control of [els.seedPetButton, els.createPetButton, els.refreshButton, els.petSelect]) {
     if (control) control.disabled = state.busy || !signedIn;
+  }
+  for (const control of [els.adminRefreshButton, els.adminRunOpsButton]) {
+    if (control) control.disabled = state.busy || !isAdmin();
   }
   for (const control of [els.authMethodInput, els.authIdentifierInput, els.authChallengeButton, els.authCodeInput, els.authVerifyButton]) {
     if (control) control.disabled = state.busy;
@@ -712,6 +860,10 @@ function activePet() {
 
 function isSignedIn() {
   return Boolean(state.session?.account);
+}
+
+function isAdmin() {
+  return state.session?.account?.role === "admin";
 }
 
 function requireActivePet() {

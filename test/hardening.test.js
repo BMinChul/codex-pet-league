@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   adminAudit,
+  adminConsole,
   createAuthChallenge,
   createPet,
   createPetAsset,
@@ -14,6 +15,12 @@ import {
   updatePetLoadout,
   verifyAuthChallenge,
   joinMatchmakingQueue,
+  moderateAsset,
+  reportPetAsset,
+  reviewTrainingReport,
+  runServerAuthorityJob,
+  seasonOperation,
+  updateAccountEnforcement,
 } from "../src/domain/state.js";
 import { accountIntegrityStatus, appendRiskEvent } from "../src/domain/audit.js";
 import { enforceRequestGuard, hashRequestBody } from "../src/domain/antiCheat.js";
@@ -262,6 +269,91 @@ test("risk score recommends review without auto-locking ranked", () => {
   });
   const queued = joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" });
   assert.equal(queued.status, "waiting");
+});
+
+test("manual enforcement workflow locks and unlocks ranked without risk-score auto punishment", () => {
+  const { state, pet } = createPetFixture();
+  const locked = updateAccountEnforcement(state, "acct_demo", {
+    account_id: "acct_demo",
+    action: "ranked_lock",
+    days: 1,
+    reason: "confirmed_tamper",
+  });
+  assert.equal(locked.integrity.automatic_restrictions.ranked_locked, true);
+  assert.throws(() => joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" }), /Ranked matchmaking is locked/);
+
+  updateAccountEnforcement(state, "acct_demo", {
+    account_id: "acct_demo",
+    action: "ranked_unlock",
+    reason: "appeal_accepted",
+  });
+  const queued = joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" });
+  assert.equal(queued.status, "waiting");
+});
+
+test("admin can resolve held Training Reports and ops job records authority checks", () => {
+  const { state, pet } = createPetFixture();
+  const held = submitTrainingReport(state, "acct_demo", pet.id, {
+    client_report_id: "admin-review-me",
+    signals: { testsRun: 99, milestone: true, filesChangedBucket: "large" },
+  });
+  assert.equal(held.report.status, "review");
+
+  const resolved = reviewTrainingReport(state, "acct_demo", {
+    report_id: held.report.id,
+    decision: "approve",
+    note: "verified externally",
+  });
+  assert.equal(resolved.report.status, "approved");
+  assert.ok(resolved.report.pet_xp_delta >= 0);
+
+  const job = runServerAuthorityJob(state, { adminAccountId: "acct_demo" });
+  assert.match(job.job.id, /^ops_/);
+  assert.ok(adminConsole(state).ops.latest_job);
+});
+
+test("asset reports feed moderation queue and admin can clear or hide assets", () => {
+  const state = createDefaultState();
+  const ownerAsset = createPetAsset(state, "acct_demo", {});
+  const pet = createPet(state, "acct_demo", {
+    name: "Moderation Pet",
+    pet_asset_id: ownerAsset.id,
+    primary_element: "Forge",
+    secondary_element: "Trace",
+  });
+  for (let i = 0; i < 3; i += 1) {
+    const accountId = `acct_reporter_${i}`;
+    state.accounts.push({
+      id: accountId,
+      displayName: `Reporter ${i}`,
+      role: "player",
+      identifier: `reporter-${i}@example.test`,
+      email: `reporter-${i}@example.test`,
+      verified: true,
+      authMethods: ["email_magic_link"],
+      createdAt: new Date().toISOString(),
+    });
+    reportPetAsset(state, accountId, pet.id, { reason: "bad_asset" });
+  }
+
+  assert.equal(ownerAsset.visibility, "private");
+  assert.equal(adminConsole(state).moderation_queue.length, 1);
+  const cleared = moderateAsset(state, "acct_demo", { asset_id: ownerAsset.id, action: "clear" });
+  assert.equal(cleared.asset.visibility, "public");
+  assert.equal(cleared.asset.safety_status, "clear");
+});
+
+test("season operation creates rewards and rolls pets into next season", () => {
+  const { state, pet } = createPetFixture();
+  pet.rating.lp = 2200;
+  const ended = seasonOperation(state, "acct_demo", { action: "end_current" });
+  assert.equal(ended.season.status, "completed");
+  assert.ok(ended.rewards.some((reward) => reward.pet_id === pet.id));
+
+  const next = seasonOperation(state, "acct_demo", { action: "start_next", name: "Season 2" });
+  assert.equal(next.season.status, "active");
+  assert.equal(state.activeSeasonId, next.season.id);
+  assert.equal(pet.rating.season_id, next.season.id);
 });
 
 test("audit detects tampered event and replay hash chains", () => {

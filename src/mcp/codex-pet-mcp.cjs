@@ -8,6 +8,7 @@ const baseUrl = (process.env.CODEX_PET_LEAGUE_URL || "http://localhost:4317").re
 const accountId = process.env.CODEX_PET_ACCOUNT_ID || "acct_demo";
 const sessionToken = process.env.CODEX_PET_SESSION_TOKEN || process.env.LEAGUE_SESSION_TOKEN || "";
 const bridgeSecret = process.env.CODEX_PET_BRIDGE_SECRET || "";
+const bridgeAttestationSecret = process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET || "";
 
 const tools = [
   {
@@ -517,6 +518,9 @@ async function request(method, route, body) {
   }
   if (bridgeSecret && bodyText) {
     headers["x-league-bridge-signature"] = createHmac("sha256", bridgeSecret).update(bodyText).digest("hex");
+  }
+  if (bridgeAttestationSecret && bodyText) {
+    headers["x-codex-app-attestation"] = createHmac("sha256", bridgeAttestationSecret).update(bodyText).digest("hex");
   }
   const response = await fetch(`${baseUrl}${route}`, {
     method,

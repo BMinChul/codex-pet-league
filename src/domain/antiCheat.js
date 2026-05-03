@@ -9,6 +9,7 @@ export const RATE_LIMIT_POLICIES = {
   "auth.challenge": { limit: 5, windowMs: 15 * MINUTE, score: 25 },
   "auth.verify": { limit: 8, windowMs: 15 * MINUTE, score: 35 },
   "asset.upload": { limit: 8, windowMs: HOUR, score: 35 },
+  "asset.report": { limit: 10, windowMs: HOUR, score: 25 },
   "pet.create": { limit: 12, windowMs: HOUR, score: 25 },
   "pet.loadout": { limit: 30, windowMs: 10 * MINUTE, score: 15 },
   "training.report.draft": { limit: 30, windowMs: 10 * MINUTE, score: 10 },
@@ -20,10 +21,16 @@ export const RATE_LIMIT_POLICIES = {
   "friend_invite.create": { limit: 20, windowMs: HOUR, score: 20 },
   "friend_invite.accept": { limit: 30, windowMs: HOUR, score: 20 },
   "session.revoke": { limit: 20, windowMs: HOUR, score: 15 },
+  "admin.ops.run": { limit: 10, windowMs: HOUR, score: 15 },
+  "admin.training.review": { limit: 60, windowMs: HOUR, score: 10 },
+  "admin.enforcement": { limit: 40, windowMs: HOUR, score: 15 },
+  "admin.asset.moderation": { limit: 60, windowMs: HOUR, score: 10 },
+  "admin.season.action": { limit: 10, windowMs: DAY, score: 20 },
 };
 
 export const IDEMPOTENCY_REQUIRED_ROUTES = new Set([
   "asset.upload",
+  "asset.report",
   "pet.create",
   "training.report.submit",
   "battle.start",
@@ -32,6 +39,11 @@ export const IDEMPOTENCY_REQUIRED_ROUTES = new Set([
   "matchmaking.cancel",
   "friend_invite.create",
   "friend_invite.accept",
+  "admin.ops.run",
+  "admin.training.review",
+  "admin.enforcement",
+  "admin.asset.moderation",
+  "admin.season.action",
 ]);
 
 export function enforceRequestGuard(state, input = {}) {

@@ -73,11 +73,15 @@ export function createDefaultState() {
     battleRooms: [],
     matchTickets: [],
     friendInvites: [],
+    assetReports: [],
     sessions: [],
     authChallenges: [],
     riskEvents: [],
     rateLimits: [],
     idempotencyKeys: [],
+    abuseAlerts: [],
+    opsJobs: [],
+    seasonRewards: [],
     events: [],
   };
 }
@@ -110,11 +114,15 @@ function migrateState(state) {
     battleRooms: state.battleRooms ?? [],
     matchTickets: state.matchTickets ?? [],
     friendInvites: state.friendInvites ?? [],
+    assetReports: state.assetReports ?? [],
     sessions: state.sessions ?? [],
     authChallenges: state.authChallenges ?? [],
     riskEvents: state.riskEvents ?? [],
     rateLimits: state.rateLimits ?? [],
     idempotencyKeys: state.idempotencyKeys ?? [],
+    abuseAlerts: state.abuseAlerts ?? [],
+    opsJobs: state.opsJobs ?? [],
+    seasonRewards: state.seasonRewards ?? [],
     events: state.events ?? [],
   };
 }

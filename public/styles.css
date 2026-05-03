@@ -380,13 +380,37 @@ th {
   overflow: auto;
 }
 
-.event-item {
+.event-item,
+.review-item {
   display: grid;
   grid-template-columns: 160px minmax(0, 1fr);
   gap: 10px;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
+}
+
+.review-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.ops-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.ops-summary > div {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f9fbfd;
+}
+
+.admin-panel[hidden] {
+  display: none;
 }
 
 .empty-state,

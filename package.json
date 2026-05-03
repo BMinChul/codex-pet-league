@@ -13,7 +13,9 @@
     "dev": "node --watch src/server/index.js",
     "test": "node --test test/*.test.js",
     "test:runtime": "node scripts/runtime-smoke.mjs",
-    "verify:loop": "node scripts/verify-loop.mjs"
+    "test:abuse": "node scripts/abuse-smoke.mjs",
+    "verify:loop": "node scripts/verify-loop.mjs",
+    "ops:check": "node scripts/ops-check.mjs"
   },
   "engines": {
     "node": ">=20"
