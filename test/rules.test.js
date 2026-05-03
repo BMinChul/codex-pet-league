@@ -7,6 +7,7 @@ import {
   deriveStats,
   elementModifier,
   lpDelta,
+  matchmakingWindowFor,
   progressionFromXp,
   tierForLp,
   totalXpForLevel100,
@@ -55,6 +56,14 @@ test("LP tiers and ranked deltas match the design", () => {
   assert.equal(lpDelta({ result: "loss", playerLp: 1500, opponentLp: 1000 }), -35);
   assert.equal(lpDelta({ result: "afk_loss", playerLp: 1500, opponentLp: 1500 }), -40);
   assert.equal(lpDelta({ result: "win", playerLp: 1000, opponentLp: 1500, placement: true }), 70);
+});
+
+test("ranked matchmaking LP windows expand with queue time", () => {
+  assert.equal(matchmakingWindowFor("ranked", 0), 150);
+  assert.equal(matchmakingWindowFor("ranked", 30), 300);
+  assert.equal(matchmakingWindowFor("ranked", 60), 500);
+  assert.equal(matchmakingWindowFor("ranked", 90), 800);
+  assert.equal(matchmakingWindowFor("casual", 60), 2000);
 });
 
 test("Training Report award respects report count and XP caps", () => {

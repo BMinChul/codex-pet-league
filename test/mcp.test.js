@@ -32,6 +32,7 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
     [
       "pet_status",
       "pet_create",
+      "league_status",
       "training_report_draft",
       "training_report_submit",
       "battle_simulate",

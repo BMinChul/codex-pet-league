@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_SEASON } from "../domain/rules.js";
 
 export const STATE_PATH = new URL("../../data/league-state.json", import.meta.url);
 const STATE_FILE_PATH = fileURLToPath(STATE_PATH);
@@ -35,6 +36,8 @@ export async function updateState(mutator) {
 export function createDefaultState() {
   return {
     version: 1,
+    activeSeasonId: DEFAULT_SEASON.id,
+    seasons: [DEFAULT_SEASON],
     accounts: [
       {
         id: "acct_demo",
@@ -73,6 +76,8 @@ function migrateState(state) {
   return {
     ...base,
     ...state,
+    activeSeasonId: state.activeSeasonId ?? base.activeSeasonId,
+    seasons: state.seasons ?? base.seasons,
     accounts,
     assets: state.assets ?? [],
     pets: state.pets ?? [],

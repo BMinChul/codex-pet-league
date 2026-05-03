@@ -30,9 +30,11 @@ http://localhost:4317
   - Style XP `1,000/day`, `5,000/week`
 - Server-authoritative 30-second turn battle rooms with Strike, Guard, Focus, Skill, replay hash, and AFK loss.
 - Random PvP matchmaking with same Battle Class and LP-window matching.
+- Active season tracking. Season 1 runs from `2026-05-03` to `2026-08-01`.
+- Ranked queue LP windows expand with wait time: `150 -> 300 -> 500 -> 800`.
 - Friend Duel invite codes that create PvP turn battle rooms.
-- Server-authoritative battle simulation for ranked, casual, friend, and training battle-result testing.
-- LP and tier/division updates for ranked battles.
+- Sandbox battle simulation for result testing. It does not award official XP or ranked LP.
+- LP and tier/division updates only for official Ranked PvP matchmaking battles.
 - Leaderboard and server event log.
 - Node test coverage for core rules.
 
@@ -53,6 +55,7 @@ The CLI is the local bridge that Codex App slash commands or natural-language to
 
 ```bash
 npm run cli -- session
+npm run cli -- league
 npm run cli -- pet create --name Pebble --primary Forge --secondary Trace
 npm run cli -- pets
 npm run cli -- xp status
@@ -91,6 +94,7 @@ The MCP bridge exposes the same product actions as tools:
 
 - `pet_status`
 - `pet_create`
+- `league_status`
 - `training_report_draft`
 - `training_report_submit`
 - `battle_simulate`

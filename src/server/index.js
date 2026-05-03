@@ -6,6 +6,7 @@ import {
   ELEMENTS,
   OFFICIAL_SKILLS,
   XP_CAPS,
+  MATCHMAKING_POLICY,
   totalXpForLevel100,
   tierForLp,
 } from "../domain/rules.js";
@@ -18,6 +19,7 @@ import {
   acceptFriendInvite,
   createFriendInvite,
   joinMatchmakingQueue,
+  leagueStatus,
   matchmakingStatus,
   publicPetView,
   simulateBattle,
@@ -71,9 +73,17 @@ async function handleApi(req, res, url) {
       elements: ELEMENTS,
       skills: OFFICIAL_SKILLS,
       caps: XP_CAPS,
+      matchmakingPolicy: MATCHMAKING_POLICY,
       level100Xp: totalXpForLevel100(),
       level100FastestDaysAtCap: Math.round((totalXpForLevel100() / XP_CAPS.petDaily) * 10) / 10,
     });
+    return;
+  }
+
+  if (req.method === "GET" && path === "/api/league") {
+    const state = await loadState();
+    getAccount(state, accountId);
+    sendJson(res, 200, leagueStatus(state));
     return;
   }
 

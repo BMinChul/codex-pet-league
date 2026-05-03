@@ -1,5 +1,6 @@
 const state = {
   rules: null,
+  league: null,
   pets: [],
   activePetId: null,
   activeBattleId: null,
@@ -7,6 +8,7 @@ const state = {
 
 const els = {
   sessionLabel: document.querySelector("#sessionLabel"),
+  leagueLabel: document.querySelector("#leagueLabel"),
   petSelect: document.querySelector("#petSelect"),
   seedPetButton: document.querySelector("#seedPetButton"),
   petNameInput: document.querySelector("#petNameInput"),
@@ -42,9 +44,11 @@ const els = {
 await boot();
 
 async function boot() {
-  const [session, rules] = await Promise.all([api("/api/session"), api("/api/rules")]);
+  const [session, rules, league] = await Promise.all([api("/api/session"), api("/api/rules"), api("/api/league")]);
   state.rules = rules;
+  state.league = league;
   els.sessionLabel.textContent = `${session.account.displayName} · verified`;
+  els.leagueLabel.textContent = `${league.active_season.name} · ranked queue starts ±${league.matchmaking_policy.ranked.lpWindows[0].lpWindow} LP`;
   fillElements();
   bindEvents();
   await refresh();
@@ -389,6 +393,7 @@ function renderMatchmaking(result) {
       status: result.status ?? result.invite?.status ?? "created",
       ticket: result.ticket ?? null,
       invite: result.invite ?? null,
+      queue_window_lp: result.ticket?.search_window_lp ?? null,
       battle_id: result.battle?.id ?? null,
       viewer_side: result.battle?.viewer_side ?? null,
     },

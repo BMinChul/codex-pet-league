@@ -47,7 +47,7 @@ test("skill actions require server-side energy", () => {
 
 test("three missed turns produce an official AFK loss and settlement", () => {
   const { state, pet } = createPetFixture();
-  const started = startTurnBattle(state, "acct_demo", pet.id, { mode: "ranked" });
+  const started = startTurnBattle(state, "acct_demo", pet.id, { mode: "casual" });
   const room = state.battleRooms.find((entry) => entry.id === started.battle.id);
 
   for (let i = 0; i < 3; i += 1) {
@@ -61,7 +61,7 @@ test("three missed turns produce an official AFK loss and settlement", () => {
   assert.equal(state.battles.length, 1);
   assert.equal(state.battles[0].result, "afk_loss");
   assert.equal(state.battles[0].pet_xp_delta, 0);
-  assert.equal(state.pets[0].rating.losses, 1);
+  assert.equal(state.pets[0].rating.losses, 0);
 });
 
 function createPetFixture() {

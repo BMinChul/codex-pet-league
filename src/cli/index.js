@@ -37,9 +37,16 @@ async function main(args) {
       elements: rules.elements,
       skillCount: rules.skills.length,
       caps: rules.caps,
+      matchmakingPolicy: rules.matchmakingPolicy,
       level100Xp: rules.level100Xp,
       level100FastestDaysAtCap: rules.level100FastestDaysAtCap,
     });
+    return;
+  }
+
+  if (area === "league") {
+    const league = await client.get("/api/league");
+    printObject(league);
     return;
   }
 
@@ -338,6 +345,7 @@ function printTurnBattle(battle) {
 function printMatchmaking(result) {
   if (result.status === "waiting") {
     console.log(`Waiting for ${result.ticket.mode} match · ${result.ticket.battle_class} · ${result.ticket.lp} LP`);
+    console.log(`Search window: ±${result.ticket.search_window_lp} LP after ${result.ticket.wait_seconds}s`);
     console.log(`Ticket: ${result.ticket.id}`);
     return;
   }
@@ -373,6 +381,7 @@ function printHelp() {
 
 Usage:
   codexpet session
+  codexpet league
   codexpet rules
   codexpet pets
   codexpet pet create --name Pebble --primary Forge --secondary Trace [--atlas path.png]

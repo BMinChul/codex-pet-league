@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  DEFAULT_SEASON,
+  MATCHMAKING_POLICY,
   XP_CAPS,
   calculateBattleAward,
   calculateTrainingAward,
@@ -8,6 +10,7 @@ import {
   battleClassForTotalStats,
   elementModifier,
   lpDelta,
+  matchmakingWindowFor,
   progressionFromXp,
   tierForLp,
   OFFICIAL_SKILLS,
@@ -30,6 +33,14 @@ export function getAccount(state, accountId = "acct_demo") {
     throw httpError(401, "ACCOUNT_NOT_VERIFIED", "A verified League account is required.");
   }
   return account;
+}
+
+export function leagueStatus(state) {
+  return {
+    active_season: activeSeason(state),
+    matchmaking_policy: MATCHMAKING_POLICY,
+    queue_summary: queueSummary(state),
+  };
 }
 
 export function createPetAsset(state, accountId, input = {}) {
@@ -73,6 +84,7 @@ export function createPetAsset(state, accountId, input = {}) {
 export function createPet(state, accountId, input = {}) {
   const asset = state.assets.find((entry) => entry.id === input.pet_asset_id && entry.owner_account_id === accountId);
   if (!asset) throw httpError(404, "ASSET_NOT_FOUND", "Register a pet asset before creating a pet.");
+  const season = activeSeason(state);
 
   const primaryElement = input.primary_element && ELEMENTS.includes(input.primary_element) ? input.primary_element : "Forge";
   const secondaryElement =
@@ -80,7 +92,7 @@ export function createPet(state, accountId, input = {}) {
   const progression = progressionFromXp(0);
   const stats = deriveStats({ primaryElement, secondaryElement, level: progression.level });
   const now = new Date().toISOString();
-  const tier = tierForLp(1500);
+  const tier = tierForLp(season.ranked_seed_lp);
   const pet = {
     id: `pet_${randomUUID()}`,
     owner_account_id: accountId,
@@ -99,14 +111,15 @@ export function createPet(state, accountId, input = {}) {
     battle_class: battleClassForTotalStats(stats.total),
     skills: defaultLoadout(primaryElement, secondaryElement),
     rating: {
-      lp: 1500,
+      season_id: season.id,
+      lp: season.ranked_seed_lp,
       tier: tier.tier,
       division: tier.division,
       label: tier.label,
       wins: 0,
       losses: 0,
       draws: 0,
-      placements_remaining: 5,
+      placements_remaining: season.placement_matches,
     },
     created_at: now,
     updated_at: now,
@@ -215,12 +228,16 @@ export function simulateBattle(state, accountId, petId, input = {}) {
     opponentLp,
     opponent,
     source: "simulated",
+    official: false,
   });
 }
 
 export function startTurnBattle(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
   const mode = ["ranked", "casual", "friend", "training"].includes(input.mode) ? input.mode : "casual";
+  if (mode === "ranked") {
+    throw httpError(409, "RANKED_REQUIRES_MATCHMAKING", "Ranked battles must be created through random matchmaking.");
+  }
   assertPetAvailableForBattle(state, pet.id);
   cancelWaitingTicketsForPet(state, pet.id, "direct_battle");
   cancelOpenInvitesForPet(state, pet.id, "direct_battle");
@@ -270,6 +287,8 @@ export function submitTurnBattleAction(state, accountId, battleRoomId, input = {
 export function joinMatchmakingQueue(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
   const mode = ["ranked", "casual"].includes(input.mode) ? input.mode : "ranked";
+  const season = activeSeason(state);
+  if (mode === "ranked") ensureActiveSeasonRating(pet, season);
   assertPetAvailableForBattle(state, pet.id);
   state.matchTickets ??= [];
 
@@ -279,10 +298,10 @@ export function joinMatchmakingQueue(state, accountId, petId, input = {}) {
   if (existing) {
     const matched = matchWaitingTicket(state, existing);
     if (matched) return matchedResponse(state, matched.room, existing, matched.opponentTicket, accountId);
-    return { status: "waiting", ticket: publicTicket(existing) };
+    return { status: "waiting", ticket: publicTicket(existing), season, policy: publicMatchmakingPolicy(mode) };
   }
 
-  const ticket = createMatchTicket(accountId, pet, mode);
+  const ticket = createMatchTicket(accountId, pet, mode, season);
   state.matchTickets.unshift(ticket);
   const matched = matchWaitingTicket(state, ticket);
   if (matched) return matchedResponse(state, matched.room, ticket, matched.opponentTicket, accountId);
@@ -293,12 +312,15 @@ export function joinMatchmakingQueue(state, accountId, petId, input = {}) {
     mode,
     battle_class: pet.battle_class,
     lp: pet.rating.lp,
+    season_id: ticket.season_id,
+    search_window_lp: ticketSearchWindow(ticket),
   });
-  return { status: "waiting", ticket: publicTicket(ticket) };
+  return { status: "waiting", ticket: publicTicket(ticket), season, policy: publicMatchmakingPolicy(mode) };
 }
 
 export function matchmakingStatus(state, accountId, petId = null) {
   getAccount(state, accountId);
+  const season = activeSeason(state);
   const tickets = (state.matchTickets ?? [])
     .filter((ticket) => ticket.account_id === accountId && (!petId || ticket.pet_id === petId))
     .slice(0, 10)
@@ -306,7 +328,7 @@ export function matchmakingStatus(state, accountId, petId = null) {
   const activeBattles = (state.battleRooms ?? [])
     .filter((room) => room.status === "in_progress" && sideKeyForAccount(room, accountId))
     .map((room) => publicBattleRoom(room, accountId));
-  return { tickets, active_battles: activeBattles };
+  return { season, policy: MATCHMAKING_POLICY, tickets, active_battles: activeBattles };
 }
 
 export function createFriendInvite(state, accountId, petId, input = {}) {
@@ -496,11 +518,14 @@ function settleBattleResult(state, accountId, pet, input) {
   const opponentLp = Number(input.opponentLp ?? pet.rating.lp);
   const opponent = input.opponent ?? defaultOpponentFor(pet, opponentLp);
   const counters = dailyCounters(state, accountId, pet.id);
-  const award = calculateBattleAward({ mode, result, counters });
+  const official = input.official !== false;
+  const award = official ? calculateBattleAward({ mode, result, counters }) : { rawPetXp: 0, petXpApplied: 0, capped: false };
   const now = input.now ?? new Date().toISOString();
   let lp = null;
+  const season = activeSeason(state);
+  if (mode === "ranked") ensureActiveSeasonRating(pet, season);
 
-  if (mode === "ranked") {
+  if (official && mode === "ranked" && input.source === "random_matchmaking") {
     const normalizedResult = result === "complete" ? "draw" : result;
     const delta = lpDelta({
       result: normalizedResult,
@@ -523,6 +548,7 @@ function settleBattleResult(state, accountId, pet, input) {
       id: `lp_${randomUUID()}`,
       account_id: accountId,
       pet_id: pet.id,
+      season_id: season.id,
       source_type: "ranked_battle",
       lp_delta: delta,
       lp_before: before,
@@ -536,6 +562,7 @@ function settleBattleResult(state, accountId, pet, input) {
     id: `battle_${randomUUID()}`,
     account_id: accountId,
     pet_id: pet.id,
+    season_id: mode === "ranked" ? season.id : input.seasonId ?? null,
     mode,
     result,
     opponent,
@@ -552,17 +579,19 @@ function settleBattleResult(state, accountId, pet, input) {
     created_at: now,
   };
   state.battles.push(battle);
-  appendXpLedger(state, {
-    accountId,
-    petId: pet.id,
-    sourceType: mode === "friend" ? "friend_duel" : `${mode}_battle`,
-    sourceId: battle.id,
-    petXpDelta: award.petXpApplied,
-    styleXpDelta: 0,
-    capBuckets: mode === "friend" ? ["pet_daily", "battle_daily", "friend_daily"] : ["pet_daily", "battle_daily"],
-    metadata: { mode, result, source: battle.battle_source, battle_room_id: input.battleRoomId ?? null },
-  });
-  applyProgression(pet, award.petXpApplied, 0);
+  if (official) {
+    appendXpLedger(state, {
+      accountId,
+      petId: pet.id,
+      sourceType: mode === "friend" ? "friend_duel" : `${mode}_battle`,
+      sourceId: battle.id,
+      petXpDelta: award.petXpApplied,
+      styleXpDelta: 0,
+      capBuckets: mode === "friend" ? ["pet_daily", "battle_daily", "friend_daily"] : ["pet_daily", "battle_daily"],
+      metadata: { mode, result, source: battle.battle_source, battle_room_id: input.battleRoomId ?? null },
+    });
+    applyProgression(pet, award.petXpApplied, 0);
+  }
   logEvent(state, "battle.finished", accountId, {
     pet_id: pet.id,
     battle_id: battle.id,
@@ -609,6 +638,7 @@ function settleFinishedTurnBattle(state, room) {
       battleClass: side.battle_class,
       assetHash: side.asset_hash,
       source: room.source ?? "server_turn",
+      seasonId: room.season_id ?? null,
       battleRoomId: room.id,
       replayHash: room.replay_hash,
       turnCount: room.log.length,
@@ -624,12 +654,14 @@ function settleFinishedTurnBattle(state, room) {
 }
 
 function matchWaitingTicket(state, ticket) {
+  const now = new Date();
   const candidate = (state.matchTickets ?? [])
     .filter((entry) => entry.status === "waiting" && entry.id !== ticket.id)
     .filter((entry) => entry.account_id !== ticket.account_id)
     .filter((entry) => entry.mode === ticket.mode)
     .filter((entry) => entry.battle_class === ticket.battle_class)
-    .filter((entry) => Math.abs(entry.lp - ticket.lp) <= matchLpWindow(ticket.mode))
+    .filter((entry) => ticket.mode !== "ranked" || entry.season_id === ticket.season_id)
+    .filter((entry) => Math.abs(entry.lp - ticket.lp) <= effectiveMatchWindow(ticket, entry, now))
     .filter((entry) => !petHasActiveBattle(state, entry.pet_id))
     .sort((a, b) => Math.abs(a.lp - ticket.lp) - Math.abs(b.lp - ticket.lp) || a.created_at.localeCompare(b.created_at))[0];
 
@@ -675,6 +707,8 @@ function matchedResponse(state, room, ticket, opponentTicket, accountId) {
     ticket: publicTicket(ticket),
     opponent_ticket: publicTicket(opponentTicket),
     battle: publicBattleRoom(room, accountId),
+    season: activeSeason(state),
+    policy: publicMatchmakingPolicy(room.mode),
   };
 }
 
@@ -688,6 +722,7 @@ function createPvpBattleRoom(state, input) {
     opponent: opponentFromPet(state, input.opponentAccountId, input.opponentPet),
   });
   room.source = input.source;
+  room.season_id = input.mode === "ranked" ? activeSeason(state).id : null;
   room.metadata = input.metadata ?? {};
   room.participant_account_ids = [input.playerAccountId, input.opponentAccountId];
   room.participant_pet_ids = [input.playerPet.id, input.opponentPet.id];
@@ -710,12 +745,13 @@ function createPvpBattleRoom(state, input) {
   return room;
 }
 
-function createMatchTicket(accountId, pet, mode) {
+function createMatchTicket(accountId, pet, mode, season) {
   return {
     id: `ticket_${randomUUID()}`,
     account_id: accountId,
     pet_id: pet.id,
     mode,
+    season_id: mode === "ranked" ? season.id : null,
     status: "waiting",
     battle_class: pet.battle_class,
     lp: pet.rating.lp,
@@ -727,14 +763,18 @@ function createMatchTicket(accountId, pet, mode) {
 }
 
 function publicTicket(ticket) {
+  const waitSeconds = ticketWaitSeconds(ticket);
   return {
     id: ticket.id,
     pet_id: ticket.pet_id,
     mode: ticket.mode,
+    season_id: ticket.season_id ?? null,
     status: ticket.status,
     battle_class: ticket.battle_class,
     lp: ticket.lp,
     tier_label: ticket.tier_label,
+    wait_seconds: waitSeconds,
+    search_window_lp: ticketSearchWindow(ticket, waitSeconds),
     battle_room_id: ticket.battle_room_id,
     created_at: ticket.created_at,
     matched_at: ticket.matched_at,
@@ -808,8 +848,58 @@ function cancelOpenInvitesForPet(state, petId, reason, preserveIds = []) {
   }
 }
 
-function matchLpWindow(mode) {
-  return mode === "ranked" ? 300 : 600;
+function activeSeason(state) {
+  state.seasons ??= [DEFAULT_SEASON];
+  state.activeSeasonId ??= DEFAULT_SEASON.id;
+  return state.seasons.find((season) => season.id === state.activeSeasonId) ?? DEFAULT_SEASON;
+}
+
+function ensureActiveSeasonRating(pet, season) {
+  if (pet.rating?.season_id === season.id) return;
+  pet.season_history ??= [];
+  if (pet.rating) {
+    pet.season_history.push({
+      ...pet.rating,
+      archived_at: new Date().toISOString(),
+    });
+  }
+  const tier = tierForLp(season.ranked_seed_lp);
+  pet.rating = {
+    season_id: season.id,
+    lp: season.ranked_seed_lp,
+    tier: tier.tier,
+    division: tier.division,
+    label: tier.label,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    placements_remaining: season.placement_matches,
+  };
+}
+
+function effectiveMatchWindow(ticket, candidate, now = new Date()) {
+  return Math.max(ticketSearchWindow(ticket, ticketWaitSeconds(ticket, now)), ticketSearchWindow(candidate, ticketWaitSeconds(candidate, now)));
+}
+
+function ticketSearchWindow(ticket, waitSeconds = ticketWaitSeconds(ticket)) {
+  return matchmakingWindowFor(ticket.mode, waitSeconds);
+}
+
+function ticketWaitSeconds(ticket, now = new Date()) {
+  return Math.max(0, Math.floor((now.getTime() - new Date(ticket.created_at).getTime()) / 1000));
+}
+
+function publicMatchmakingPolicy(mode) {
+  return MATCHMAKING_POLICY[mode] ?? MATCHMAKING_POLICY.casual;
+}
+
+function queueSummary(state) {
+  const waiting = (state.matchTickets ?? []).filter((ticket) => ticket.status === "waiting");
+  return {
+    waiting_total: waiting.length,
+    ranked_waiting: waiting.filter((ticket) => ticket.mode === "ranked").length,
+    casual_waiting: waiting.filter((ticket) => ticket.mode === "casual").length,
+  };
 }
 
 function createInviteCode(state) {

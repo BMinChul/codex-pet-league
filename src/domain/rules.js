@@ -51,6 +51,38 @@ export const XP_CAPS = {
   petEligibleTrainingReportsDaily: 3,
 };
 
+export const DEFAULT_SEASON = {
+  id: "season_1",
+  name: "Season 1: First Hatch",
+  status: "active",
+  starts_at: "2026-05-03T00:00:00.000Z",
+  ends_at: "2026-08-01T00:00:00.000Z",
+  ranked_seed_lp: 1500,
+  placement_matches: 5,
+};
+
+export const MATCHMAKING_POLICY = {
+  ranked: {
+    sameBattleClass: true,
+    sameSeason: true,
+    lpWindows: [
+      { waitSeconds: 0, lpWindow: 150 },
+      { waitSeconds: 30, lpWindow: 300 },
+      { waitSeconds: 60, lpWindow: 500 },
+      { waitSeconds: 90, lpWindow: 800 },
+    ],
+  },
+  casual: {
+    sameBattleClass: true,
+    sameSeason: false,
+    lpWindows: [
+      { waitSeconds: 0, lpWindow: 600 },
+      { waitSeconds: 30, lpWindow: 1000 },
+      { waitSeconds: 60, lpWindow: 2000 },
+    ],
+  },
+};
+
 export const LEVEL_XP_TABLE = [
   { min: 1, max: 10, xpToNext: 100 },
   { min: 11, max: 25, xpToNext: 250 },
@@ -170,6 +202,13 @@ export function tierForLp(lp) {
   const division = divisionOffset <= 333 ? 1 : divisionOffset <= 666 ? 2 : 3;
   const tier = tiers[Math.min(tierIndex, tiers.length - 1)];
   return { tier, division, label: `${tier} ${division}` };
+}
+
+export function matchmakingWindowFor(mode, waitSeconds) {
+  const policy = MATCHMAKING_POLICY[mode] ?? MATCHMAKING_POLICY.casual;
+  return [...policy.lpWindows]
+    .sort((a, b) => b.waitSeconds - a.waitSeconds)
+    .find((entry) => waitSeconds >= entry.waitSeconds).lpWindow;
 }
 
 export function lpDelta({ result, playerLp, opponentLp, placement = false }) {

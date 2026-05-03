@@ -36,6 +36,16 @@ const tools = [
     },
   },
   {
+    name: "league_status",
+    title: "League Status",
+    description: "Shows the active season and official matchmaking policy.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
     name: "training_report_draft",
     title: "Draft Training Report",
     description: "Creates a Training Report preview. This does not submit or award XP.",
@@ -253,6 +263,10 @@ async function callTool(name, args) {
       primary_element: args.primary_element ?? "Forge",
       secondary_element: args.secondary_element ?? "Trace",
     });
+  }
+
+  if (name === "league_status") {
+    return apiGet("/api/league");
   }
 
   if (name === "training_report_draft") {
