@@ -54,6 +54,7 @@ import { IDEMPOTENCY_REQUIRED_ROUTES, enforceRequestGuard, hashRequestBody } fro
 import { deliverAuthChallenge, verifyExternalAuth } from "./authProviders.js";
 import { assetStorageStatus, readAssetObject, saveAtlasObject } from "../storage/assetStore.js";
 import { loadState, storageStatus, updateState } from "../storage/jsonStore.js";
+import { createRealtimeBus } from "../realtime/bus.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
 const PUBLIC_DIR = fileURLToPath(new URL("../../public", import.meta.url));
@@ -67,6 +68,7 @@ const BRIDGE_ATTESTATION_SECRET = process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRE
 const OPS_JOB_INTERVAL_MS = Number(process.env.CODEX_PET_OPS_JOB_INTERVAL_MS ?? 60_000);
 const SESSION_COOKIE = "league_session";
 const liveClients = new Set();
+const realtimeBus = createRealtimeBus();
 
 const server = createServer(async (req, res) => {
   try {
@@ -89,6 +91,12 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Codex Pet League dev server running at http://localhost:${PORT}`);
+});
+
+realtimeBus.start((event) => {
+  broadcastLocal(event);
+}).catch((error) => {
+  console.error(`realtime bus failed to start: ${error.message}`);
 });
 
 setInterval(async () => {
@@ -650,10 +658,17 @@ async function handleLive(req, res) {
 }
 
 function broadcast(type, payload) {
-  const event = `event: ${type}\ndata: ${JSON.stringify({ type, payload, created_at: new Date().toISOString() })}\n\n`;
+  realtimeBus.publish(type, payload).catch((error) => {
+    console.error(`realtime bus publish failed: ${error.message}`);
+    broadcastLocal({ type, payload, created_at: new Date().toISOString() });
+  });
+}
+
+function broadcastLocal(event) {
+  const wireEvent = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
   for (const client of liveClients) {
     try {
-      client.res.write(event);
+      client.res.write(wireEvent);
     } catch {
       liveClients.delete(client);
     }
@@ -737,6 +752,7 @@ async function healthStatus() {
       storage: storageStatus(),
       auth_provider: authProviderStatus(),
       bridge: bridgeStatus(),
+      realtime: realtimeBus.status(),
       counts: stateCounts(state),
       live_clients: liveClients.size,
       checked_at: new Date().toISOString(),
@@ -761,6 +777,9 @@ async function metricsText() {
     "# HELP codex_pet_info Static Codex Pet League runtime labels.",
     "# TYPE codex_pet_info gauge",
     `codex_pet_info{storage_driver="${metricLabel(storage.driver)}",auth_provider="${metricLabel(auth.provider)}"} 1`,
+    "# HELP codex_pet_realtime_info Static realtime bus labels.",
+    "# TYPE codex_pet_realtime_info gauge",
+    `codex_pet_realtime_info{provider="${metricLabel(realtimeBus.status().provider)}",channel="${metricLabel(realtimeBus.status().channel)}"} 1`,
     "# HELP codex_pet_uptime_seconds League server uptime in seconds.",
     "# TYPE codex_pet_uptime_seconds gauge",
     `codex_pet_uptime_seconds ${uptimeSeconds()}`,

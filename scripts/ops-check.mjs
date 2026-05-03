@@ -24,6 +24,9 @@ const checks = [
   ["CODEX_PET_S3_REGION", process.env.CODEX_PET_S3_REGION ?? "auto"],
   ["CODEX_PET_S3_ACCESS_KEY_ID", process.env.CODEX_PET_S3_ACCESS_KEY_ID ? "configured" : "missing"],
   ["CODEX_PET_S3_SECRET_ACCESS_KEY", process.env.CODEX_PET_S3_SECRET_ACCESS_KEY ? "configured" : "missing"],
+  ["CODEX_PET_REALTIME_BUS", process.env.CODEX_PET_REALTIME_BUS ?? "local"],
+  ["CODEX_PET_REALTIME_CHANNEL", process.env.CODEX_PET_REALTIME_CHANNEL ?? "codex-pet-league:events"],
+  ["CODEX_PET_REDIS_URL", process.env.CODEX_PET_REDIS_URL ? "configured" : "missing"],
 ];
 
 for (const [name, value] of checks) {

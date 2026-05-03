@@ -11,6 +11,8 @@ services:
       CODEX_PET_STATE_PATH: /app/data/league-state.json
       CODEX_PET_SQLITE_PATH: /app/data/league-state.sqlite
       CODEX_PET_ASSET_ROOT: /app/data/assets
+      CODEX_PET_REALTIME_BUS: ${CODEX_PET_REALTIME_BUS:-local}
+      CODEX_PET_REDIS_URL: ${CODEX_PET_REDIS_URL:-}
     ports:
       - "4317:4317"
     volumes:

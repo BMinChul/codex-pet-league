@@ -67,6 +67,7 @@ npm run test:storage
 npm run test:load
 npm run test:browser
 npm run db:migrate -- data/league-state.json data/league-state.sqlite
+npm run db:schema:check
 npm run prod:check
 npm run backup
 npm run verify:loop -- 2
@@ -156,6 +157,10 @@ CODEX_PET_S3_BUCKET=
 CODEX_PET_S3_REGION=auto
 CODEX_PET_S3_ACCESS_KEY_ID=
 CODEX_PET_S3_SECRET_ACCESS_KEY=
+CODEX_PET_REALTIME_BUS=local
+CODEX_PET_REALTIME_CHANNEL=codex-pet-league:events
+CODEX_PET_REDIS_URL=
+CODEX_PET_POSTGRES_URL=
 ```
 
 `CODEX_PET_SESSION_TOKEN` or the HttpOnly `league_session` cookie is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and is disabled unless `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true`.
@@ -163,6 +168,7 @@ CODEX_PET_S3_SECRET_ACCESS_KEY=
 Set `CODEX_PET_COOKIE_SECURE=true` behind HTTPS so League session cookies are marked `Secure`.
 Email delivery webhooks receive a signed JSON payload when `CODEX_PET_EMAIL_WEBHOOK_SECRET` is set. Passkey and OAuth verification hooks must return JSON with `verified: true` before the server creates an official League session.
 Set `CODEX_PET_ASSET_STORAGE=s3_compatible` with the `CODEX_PET_S3_*` values to store hatch atlas PNGs in S3-compatible object storage. If `CODEX_PET_ASSET_CDN_BASE_URL` is set, public pet profiles return CDN atlas URLs.
+Set `CODEX_PET_REALTIME_BUS=redis` with `CODEX_PET_REDIS_URL` when running more than one server instance. `npm run db:schema:check` validates the Postgres schema migrations under `db/migrations`; `CODEX_PET_POSTGRES_URL` is reserved for the final table-backed store.
 `CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. Untrusted high-value reports are held for review.
 High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; the browser, CLI, and MCP bridge add one automatically.
 Risk scores are review signals first. Automatic ranked lock only respects an explicit/manual `ranked_locked_until` or future tamper-confirmed policy, so false positives do not silently punish normal players.

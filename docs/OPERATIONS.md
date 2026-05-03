@@ -25,6 +25,7 @@ npm run test:abuse
 npm run test:storage
 npm run test:load
 npm run test:browser
+npm run db:schema:check
 npm run verify:loop -- 2
 npm run prod:check
 ```
@@ -35,6 +36,7 @@ Set `CODEX_PET_COOKIE_SECURE=true` when serving over HTTPS.
 Before a SQLite run, migrate once with `npm run db:migrate -- data/league-state.json data/league-state.sqlite`, then set `CODEX_PET_STORAGE_DRIVER=sqlite` and `CODEX_PET_SQLITE_PATH=data/league-state.sqlite`.
 Keep `CODEX_PET_ASSET_ROOT` on persistent storage. The server stores uploaded hatch atlas PNGs under that root and serves visible active pets through `/api/assets/:asset_id/atlas`; hidden or blocked assets return 404.
 For S3-compatible storage, set `CODEX_PET_ASSET_STORAGE=s3_compatible` and keep the bucket private unless a CDN URL is configured.
+For more than one server instance, set `CODEX_PET_REALTIME_BUS=redis` and point `CODEX_PET_REDIS_URL` at the shared Redis deployment.
 Run `npm run backup` before upgrades or risky maintenance.
 
 The admin console shows open review cases, audit findings, active abuse alerts, recent risk events, enforcement history, and asset moderation history. Audit-driven alerts are review-only signals; ranked locks stay manual to avoid false-positive punishment.

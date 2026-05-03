@@ -14,6 +14,7 @@ check("CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER", env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEAD
 check("CODEX_PET_COOKIE_SECURE", env.CODEX_PET_COOKIE_SECURE || "false");
 check("CODEX_PET_STORAGE_DRIVER", env.CODEX_PET_STORAGE_DRIVER || "json");
 check("CODEX_PET_PUBLIC_BASE_URL", env.CODEX_PET_PUBLIC_BASE_URL || "missing");
+check("CODEX_PET_REALTIME_BUS", env.CODEX_PET_REALTIME_BUS || "local");
 
 const auth = authProviderStatus(env);
 const authReady = ["passkey", "email_magic_link", "league_oauth"].some(
@@ -31,6 +32,8 @@ if (production) {
   requireSecret("CODEX_PET_REPLAY_SIGNING_SECRET");
   requireCondition((env.CODEX_PET_STORAGE_DRIVER || "json") !== "json", "production should use sqlite until the final DB backend lands");
   requireCondition(/^https:\/\//.test(env.CODEX_PET_PUBLIC_BASE_URL || ""), "production public base URL must be HTTPS");
+  requireCondition((env.CODEX_PET_REALTIME_BUS || "local") !== "local", "production should use redis realtime bus for scale-out");
+  requireCondition(Boolean(env.CODEX_PET_REDIS_URL), "production redis realtime bus requires CODEX_PET_REDIS_URL");
   if ((env.CODEX_PET_ASSET_STORAGE || "local_fs") === "s3_compatible") requireS3Config();
 } else {
   warnIf(env.CODEX_PET_AUTH_DEV_CODE === "true", "auth dev codes are exposed");

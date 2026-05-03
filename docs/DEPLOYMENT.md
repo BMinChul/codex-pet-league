@@ -34,6 +34,7 @@ In production mode it fails if:
 - no real auth method is fully configured
 - storage still uses JSON
 - public base URL is not HTTPS
+- realtime bus is still local or Redis is not configured
 
 ## Runtime Layout
 
@@ -45,6 +46,26 @@ Use persistent storage for:
 
 The Docker compose file maps `./data` to `/app/data`, so local containers keep state between restarts.
 For object storage instead of a local volume, set `CODEX_PET_ASSET_STORAGE=s3_compatible` plus `CODEX_PET_S3_ENDPOINT`, `CODEX_PET_S3_BUCKET`, `CODEX_PET_S3_ACCESS_KEY_ID`, and `CODEX_PET_S3_SECRET_ACCESS_KEY`. Set `CODEX_PET_ASSET_CDN_BASE_URL` when a CDN should serve public atlas URLs directly.
+
+## Database And Realtime Scale-Out
+
+The current runtime store can run on JSON or SQLite snapshots. The next production DB path is staged under `db/migrations` as a Postgres schema:
+
+```bash
+npm run db:schema:check
+```
+
+The schema keeps narrow indexed columns for hot paths and JSONB documents for compatibility with the current domain state while the table-backed store is implemented.
+
+For multi-instance realtime updates, use Redis pub/sub:
+
+```bash
+CODEX_PET_REALTIME_BUS=redis
+CODEX_PET_REDIS_URL=redis://default:password@redis.example.com:6379/0
+CODEX_PET_REALTIME_CHANNEL=codex-pet-league:events
+```
+
+Local development stays on `CODEX_PET_REALTIME_BUS=local`.
 
 ## Backup
 

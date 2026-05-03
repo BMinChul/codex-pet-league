@@ -16,6 +16,7 @@ const syntaxFiles = [
   "src/domain/authConfig.js",
   "src/storage/jsonStore.js",
   "src/storage/assetStore.js",
+  "src/realtime/bus.js",
   "src/server/authProviders.js",
   "src/cli/index.js",
   "src/mcp/codex-pet-mcp.cjs",
@@ -27,6 +28,7 @@ const syntaxFiles = [
   "scripts/healthcheck.mjs",
   "scripts/production-check.mjs",
   "scripts/backup-state.mjs",
+  "scripts/postgres-schema-check.mjs",
   "scripts/migrate-json-to-sqlite.mjs",
   "scripts/balance-sim.mjs",
   "scripts/ops-check.mjs",
@@ -59,6 +61,7 @@ for (let index = 1; index <= iterations; index += 1) {
   run(nodeBin, ["scripts/storage-smoke.mjs"], "storage smoke");
   run(nodeBin, ["scripts/load-smoke.mjs"], "load and security smoke");
   run(nodeBin, ["scripts/production-check.mjs"], "production readiness local check");
+  run(nodeBin, ["scripts/postgres-schema-check.mjs"], "postgres schema check");
   run(nodeBin, ["scripts/balance-sim.mjs"], "balance sim");
   run(nodeBin, ["scripts/abuse-smoke.mjs"], "abuse smoke");
   run(nodeBin, ["scripts/runtime-smoke.mjs"], "runtime smoke");
