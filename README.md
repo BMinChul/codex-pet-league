@@ -29,6 +29,8 @@ http://localhost:4317
   - Friend Duel XP `75/day`
   - Style XP `1,000/day`, `5,000/week`
 - Server-authoritative 30-second turn battle rooms with Strike, Guard, Focus, Skill, replay hash, and AFK loss.
+- Random PvP matchmaking with same Battle Class and LP-window matching.
+- Friend Duel invite codes that create PvP turn battle rooms.
 - Server-authoritative battle simulation for ranked, casual, friend, and training battle-result testing.
 - LP and tier/division updates for ranked battles.
 - Leaderboard and server event log.
@@ -59,6 +61,10 @@ npm run cli -- report submit --milestone --files large
 npm run cli -- battle start --mode casual
 npm run cli -- battle action --battle battle_room_id --kind strike
 npm run cli -- battle get --battle battle_room_id
+npm run cli -- queue join --mode ranked
+npm run cli -- queue status
+npm run cli -- invite create
+npm run cli -- invite accept --code ABC123
 npm run cli -- battle simulate --mode ranked --result win --opponent-lp 1500
 npm run cli -- leaderboard
 ```
@@ -91,6 +97,10 @@ The MCP bridge exposes the same product actions as tools:
 - `battle_start`
 - `battle_action`
 - `battle_get`
+- `matchmaking_join`
+- `matchmaking_status`
+- `friend_invite_create`
+- `friend_invite_accept`
 - `leaderboard`
 
 Run directly:

@@ -43,6 +43,13 @@ export function createDefaultState() {
         authMethods: ["passkey", "email_magic_link", "league_oauth"],
         createdAt: new Date().toISOString(),
       },
+      {
+        id: "acct_rival",
+        displayName: "Demo Rival",
+        verified: true,
+        authMethods: ["passkey", "email_magic_link", "league_oauth"],
+        createdAt: new Date().toISOString(),
+      },
     ],
     assets: [],
     pets: [],
@@ -51,16 +58,22 @@ export function createDefaultState() {
     lpLedger: [],
     battles: [],
     battleRooms: [],
+    matchTickets: [],
+    friendInvites: [],
     events: [],
   };
 }
 
 function migrateState(state) {
   const base = createDefaultState();
+  const accounts = [...(state.accounts ?? [])];
+  for (const account of base.accounts) {
+    if (!accounts.some((entry) => entry.id === account.id)) accounts.push(account);
+  }
   return {
     ...base,
     ...state,
-    accounts: state.accounts ?? base.accounts,
+    accounts,
     assets: state.assets ?? [],
     pets: state.pets ?? [],
     trainingReports: state.trainingReports ?? [],
@@ -68,6 +81,8 @@ function migrateState(state) {
     lpLedger: state.lpLedger ?? [],
     battles: state.battles ?? [],
     battleRooms: state.battleRooms ?? [],
+    matchTickets: state.matchTickets ?? [],
+    friendInvites: state.friendInvites ?? [],
     events: state.events ?? [],
   };
 }

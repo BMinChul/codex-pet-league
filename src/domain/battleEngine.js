@@ -39,6 +39,7 @@ export function createBattleRoomSnapshot(input) {
     log: [],
     result: null,
     settlement_battle_id: null,
+    settlement_battle_ids: {},
     replay_hash: null,
     created_at: now,
     updated_at: now,
@@ -47,19 +48,22 @@ export function createBattleRoomSnapshot(input) {
   return room;
 }
 
-export function publicBattleRoom(room) {
+export function publicBattleRoom(room, viewerAccountId = null) {
+  const viewerSide = sideKeyForAccount(room, viewerAccountId);
   return {
     id: room.id,
     mode: room.mode,
     status: room.status,
+    source: room.source ?? "direct",
+    viewer_side: viewerSide,
     turn_seconds: room.turn_seconds,
     max_turns: room.max_turns,
     turn_index: room.turn_index,
     turn_started_at: room.turn_started_at,
     turn_deadline_at: room.turn_deadline_at,
     sides: {
-      player: publicSide(room.sides.player),
-      opponent: publicSide(room.sides.opponent),
+      player: publicSide(room.sides.player, viewerAccountId),
+      opponent: publicSide(room.sides.opponent, viewerAccountId),
     },
     pending: {
       player: Boolean(room.pending_actions.player),
@@ -118,8 +122,10 @@ export function resolveExpiredTurn(room, now = new Date().toISOString()) {
     if (!room.pending_actions[sideKey]) {
       const side = room.sides[sideKey];
       side.timeout_count += 1;
-      if (sideKey === "player" && side.timeout_count >= 3) {
-        finishBattle(room, "afk_loss", now, `${side.name} missed three turns.`);
+      if (side.timeout_count >= 3) {
+        finishBattle(room, sideKey === "player" ? "afk_loss" : "win", now, `${side.name} missed three turns.`, {
+          afk_side: sideKey,
+        });
         return true;
       }
       room.pending_actions[sideKey] = timeoutActionFor(side.timeout_count, now);
@@ -134,6 +140,25 @@ export function resultForWinner(winner) {
   if (winner === "player") return "win";
   if (winner === "opponent") return "loss";
   return "draw";
+}
+
+export function sideKeyForAccount(room, accountId) {
+  if (!room || !accountId) return null;
+  if (room.sides.player.account_id === accountId) return "player";
+  if (room.sides.opponent.account_id === accountId) return "opponent";
+  return null;
+}
+
+export function resultForSide(room, sideKey) {
+  const result = room.result?.result;
+  if (!result || result === "draw") return result ?? null;
+  if (room.result.afk_side) {
+    return room.result.afk_side === sideKey ? "afk_loss" : "win";
+  }
+  if (sideKey === "player") return result;
+  if (result === "win") return "loss";
+  if (result === "loss" || result === "afk_loss") return "win";
+  return result;
 }
 
 export function hashRoomState(room) {
@@ -188,6 +213,8 @@ function createOpponentSnapshot(opponent) {
   return {
     side: "opponent",
     kind: opponent.kind ?? "bot",
+    account_id: opponent.account_id ?? null,
+    pet_id: opponent.pet_id ?? null,
     name: opponent.name,
     lp: opponent.lp,
     level: opponent.level,
@@ -206,10 +233,12 @@ function createOpponentSnapshot(opponent) {
   };
 }
 
-function publicSide(side) {
+function publicSide(side, viewerAccountId) {
   return {
     side: side.side,
     kind: side.kind,
+    is_you: Boolean(viewerAccountId && side.account_id === viewerAccountId),
+    pet_id: side.pet_id ?? null,
     name: side.name,
     level: side.level,
     battle_class: side.battle_class,
@@ -445,11 +474,12 @@ function winnerByHp(room) {
   return playerRatio > opponentRatio ? "player" : "opponent";
 }
 
-function finishBattle(room, result, now, reason) {
+function finishBattle(room, result, now, reason, metadata = {}) {
   room.status = "finished";
   room.result = {
     result,
     reason,
+    ...metadata,
     finished_at: now,
   };
   room.pending_actions = {};

@@ -136,6 +136,14 @@ h2 {
   gap: 8px;
 }
 
+.invite-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 82px;
+  gap: 8px;
+  align-items: start;
+  margin-top: 8px;
+}
+
 .field {
   width: 100%;
   height: 38px;
@@ -299,6 +307,11 @@ label {
   white-space: pre-wrap;
 }
 
+.compact-output {
+  min-height: 70px;
+  max-height: 120px;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -349,7 +362,9 @@ th {
   }
 
   .grid,
-  .pet-panel {
+  .pet-panel,
+  .action-grid,
+  .invite-row {
     grid-template-columns: 1fr;
   }
 

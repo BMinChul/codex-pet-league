@@ -18,6 +18,8 @@ import {
   publicBattleRoom,
   resolveExpiredTurn,
   resolveTurnIfReady,
+  resultForSide,
+  sideKeyForAccount,
   submitAction,
   submitBotActionIfNeeded,
 } from "./battleEngine.js";
@@ -219,6 +221,9 @@ export function simulateBattle(state, accountId, petId, input = {}) {
 export function startTurnBattle(state, accountId, petId, input = {}) {
   const pet = ownedPet(state, accountId, petId);
   const mode = ["ranked", "casual", "friend", "training"].includes(input.mode) ? input.mode : "casual";
+  assertPetAvailableForBattle(state, pet.id);
+  cancelWaitingTicketsForPet(state, pet.id, "direct_battle");
+  cancelOpenInvitesForPet(state, pet.id, "direct_battle");
   const opponentLp = Number(input.opponent_lp ?? pet.rating.lp);
   const opponent = input.opponent ?? defaultTurnOpponentFor(pet, opponentLp);
   const room = createBattleRoomSnapshot({
@@ -238,26 +243,150 @@ export function startTurnBattle(state, accountId, petId, input = {}) {
     mode,
     opponent: opponent.name,
   });
-  return { battle: publicBattleRoom(room) };
+  return { battle: publicBattleRoom(room, accountId) };
 }
 
 export function getTurnBattle(state, accountId, battleRoomId) {
   const room = ownedBattleRoom(state, accountId, battleRoomId);
-  advanceBattleRoom(state, accountId, room);
-  return { battle: publicBattleRoom(room) };
+  advanceBattleRoom(state, room);
+  return { battle: publicBattleRoom(room, accountId) };
 }
 
 export function submitTurnBattleAction(state, accountId, battleRoomId, input = {}) {
   const room = ownedBattleRoom(state, accountId, battleRoomId);
-  advanceBattleRoom(state, accountId, room);
-  if (room.status === "finished") return { battle: publicBattleRoom(room), submitted: false };
+  advanceBattleRoom(state, room);
+  if (room.status === "finished") return { battle: publicBattleRoom(room, accountId), submitted: false };
 
   const now = new Date().toISOString();
-  const submission = submitAction(room, "player", input, now);
+  const sideKey = sideKeyForAccount(room, accountId);
+  if (!sideKey) throw httpError(403, "BATTLE_NOT_PARTICIPANT", "This account is not a participant in the battle.");
+  const submission = submitAction(room, sideKey, input, now);
   submitBotActionIfNeeded(room, now);
   resolveTurnIfReady(room, now);
-  settleFinishedTurnBattle(state, accountId, room);
-  return { battle: publicBattleRoom(room), submitted: submission.submitted, duplicate: submission.duplicate };
+  settleFinishedTurnBattle(state, room);
+  return { battle: publicBattleRoom(room, accountId), submitted: submission.submitted, duplicate: submission.duplicate };
+}
+
+export function joinMatchmakingQueue(state, accountId, petId, input = {}) {
+  const pet = ownedPet(state, accountId, petId);
+  const mode = ["ranked", "casual"].includes(input.mode) ? input.mode : "ranked";
+  assertPetAvailableForBattle(state, pet.id);
+  state.matchTickets ??= [];
+
+  const existing = state.matchTickets.find(
+    (ticket) => ticket.status === "waiting" && ticket.account_id === accountId && ticket.pet_id === pet.id && ticket.mode === mode,
+  );
+  if (existing) {
+    const matched = matchWaitingTicket(state, existing);
+    if (matched) return matchedResponse(state, matched.room, existing, matched.opponentTicket, accountId);
+    return { status: "waiting", ticket: publicTicket(existing) };
+  }
+
+  const ticket = createMatchTicket(accountId, pet, mode);
+  state.matchTickets.unshift(ticket);
+  const matched = matchWaitingTicket(state, ticket);
+  if (matched) return matchedResponse(state, matched.room, ticket, matched.opponentTicket, accountId);
+
+  logEvent(state, "matchmaking.waiting", accountId, {
+    ticket_id: ticket.id,
+    pet_id: pet.id,
+    mode,
+    battle_class: pet.battle_class,
+    lp: pet.rating.lp,
+  });
+  return { status: "waiting", ticket: publicTicket(ticket) };
+}
+
+export function matchmakingStatus(state, accountId, petId = null) {
+  getAccount(state, accountId);
+  const tickets = (state.matchTickets ?? [])
+    .filter((ticket) => ticket.account_id === accountId && (!petId || ticket.pet_id === petId))
+    .slice(0, 10)
+    .map(publicTicket);
+  const activeBattles = (state.battleRooms ?? [])
+    .filter((room) => room.status === "in_progress" && sideKeyForAccount(room, accountId))
+    .map((room) => publicBattleRoom(room, accountId));
+  return { tickets, active_battles: activeBattles };
+}
+
+export function createFriendInvite(state, accountId, petId, input = {}) {
+  const pet = ownedPet(state, accountId, petId);
+  assertPetAvailableForBattle(state, pet.id);
+  state.friendInvites ??= [];
+  expireOldInvites(state);
+
+  const existing = state.friendInvites.find(
+    (invite) => invite.status === "open" && invite.host_account_id === accountId && invite.host_pet_id === pet.id,
+  );
+  if (existing) return { invite: publicInvite(existing) };
+
+  const now = new Date();
+  const invite = {
+    id: `invite_${randomUUID()}`,
+    code: createInviteCode(state),
+    host_account_id: accountId,
+    host_pet_id: pet.id,
+    mode: "friend",
+    battle_class: pet.battle_class,
+    lp: pet.rating.lp,
+    status: "open",
+    battle_room_id: null,
+    created_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),
+  };
+  state.friendInvites.unshift(invite);
+  logEvent(state, "friend_invite.created", accountId, {
+    invite_id: invite.id,
+    code: invite.code,
+    pet_id: pet.id,
+    battle_class: pet.battle_class,
+  });
+  return { invite: publicInvite(invite) };
+}
+
+export function acceptFriendInvite(state, accountId, petId, input = {}) {
+  const guestPet = ownedPet(state, accountId, petId);
+  assertPetAvailableForBattle(state, guestPet.id);
+  state.friendInvites ??= [];
+  expireOldInvites(state);
+
+  const code = normalizeInviteCode(input.code);
+  const invite = state.friendInvites.find((entry) => entry.code === code && entry.status === "open");
+  if (!invite) throw httpError(404, "INVITE_NOT_FOUND", "Friend invite code is not open.");
+  if (invite.host_account_id === accountId) {
+    throw httpError(409, "INVITE_SELF_MATCH_BLOCKED", "A League account cannot accept its own invite.");
+  }
+
+  const hostPet = ownedPet(state, invite.host_account_id, invite.host_pet_id);
+  assertPetAvailableForBattle(state, hostPet.id);
+  if (hostPet.battle_class !== guestPet.battle_class) {
+    throw httpError(409, "BATTLE_CLASS_MISMATCH", "Friend Duel requires both pets to be in the same Battle Class.");
+  }
+
+  const room = createPvpBattleRoom(state, {
+    mode: "friend",
+    source: "friend_invite",
+    playerAccountId: invite.host_account_id,
+    playerPet: hostPet,
+    opponentAccountId: accountId,
+    opponentPet: guestPet,
+    metadata: { invite_id: invite.id, invite_code: invite.code },
+  });
+  invite.status = "accepted";
+  invite.guest_account_id = accountId;
+  invite.guest_pet_id = guestPet.id;
+  invite.battle_room_id = room.id;
+  invite.accepted_at = new Date().toISOString();
+  cancelWaitingTicketsForPet(state, hostPet.id, "friend_invite");
+  cancelWaitingTicketsForPet(state, guestPet.id, "friend_invite");
+  cancelOpenInvitesForPet(state, hostPet.id, "friend_invite", [invite.id]);
+  cancelOpenInvitesForPet(state, guestPet.id, "friend_invite");
+  logEvent(state, "friend_invite.accepted", accountId, {
+    invite_id: invite.id,
+    code: invite.code,
+    battle_room_id: room.id,
+  });
+  return { status: "matched", invite: publicInvite(invite), battle: publicBattleRoom(room, accountId) };
 }
 
 export function xpStatus(state, accountId, petId) {
@@ -301,7 +430,7 @@ export function ownedPet(state, accountId, petId) {
 
 export function ownedBattleRoom(state, accountId, battleRoomId) {
   const room = (state.battleRooms ?? []).find(
-    (entry) => entry.id === battleRoomId && entry.account_id === accountId,
+    (entry) => entry.id === battleRoomId && sideKeyForAccount(entry, accountId),
   );
   if (!room) throw httpError(404, "BATTLE_ROOM_NOT_FOUND", "Battle room not found for this account.");
   return room;
@@ -447,41 +576,265 @@ function settleBattleResult(state, accountId, pet, input) {
   return { battle, award, pet, counters: dailyCounters(state, accountId, pet.id) };
 }
 
-function advanceBattleRoom(state, accountId, room) {
+function advanceBattleRoom(state, room) {
   const now = new Date().toISOString();
   resolveExpiredTurn(room, now);
   submitBotActionIfNeeded(room, now);
   resolveTurnIfReady(room, now);
-  settleFinishedTurnBattle(state, accountId, room);
+  settleFinishedTurnBattle(state, room);
 }
 
-function settleFinishedTurnBattle(state, accountId, room) {
-  if (room.status !== "finished" || room.settlement_battle_id) return null;
-  const pet = ownedPet(state, accountId, room.pet_id);
-  const settlement = settleBattleResult(state, accountId, pet, {
-    mode: room.mode,
-    result: room.result.result,
-    opponentLp: room.sides.opponent.lp ?? pet.rating.lp,
-    opponent: {
-      name: room.sides.opponent.name,
-      lp: room.sides.opponent.lp,
-      primary_element: room.sides.opponent.primary_element,
-      secondary_element: room.sides.opponent.secondary_element,
-      kind: room.sides.opponent.kind,
-    },
-    statsSnapshot: room.sides.player.stats,
-    battleClass: room.sides.player.battle_class,
-    assetHash: room.sides.player.asset_hash,
-    source: "server_turn",
-    battleRoomId: room.id,
-    replayHash: room.replay_hash,
-    turnCount: room.log.length,
-    replayLog: room.log,
-    now: room.result.finished_at,
-  });
-  room.settlement_battle_id = settlement.battle.id;
+function settleFinishedTurnBattle(state, room) {
+  if (room.status !== "finished") return [];
+  room.settlement_battle_ids ??= {};
+  const settlements = [];
+  for (const sideKey of ["player", "opponent"]) {
+    const side = room.sides[sideKey];
+    if (side.kind !== "player" || !side.account_id || !side.pet_id || room.settlement_battle_ids[sideKey]) continue;
+    const opponentSide = room.sides[sideKey === "player" ? "opponent" : "player"];
+    const pet = ownedPet(state, side.account_id, side.pet_id);
+    const settlement = settleBattleResult(state, side.account_id, pet, {
+      mode: room.mode,
+      result: resultForSide(room, sideKey),
+      opponentLp: opponentSide.lp ?? pet.rating.lp,
+      opponent: {
+        name: opponentSide.name,
+        lp: opponentSide.lp,
+        primary_element: opponentSide.primary_element,
+        secondary_element: opponentSide.secondary_element,
+        kind: opponentSide.kind,
+        pet_id: opponentSide.pet_id ?? null,
+      },
+      statsSnapshot: side.stats,
+      battleClass: side.battle_class,
+      assetHash: side.asset_hash,
+      source: room.source ?? "server_turn",
+      battleRoomId: room.id,
+      replayHash: room.replay_hash,
+      turnCount: room.log.length,
+      replayLog: room.log,
+      now: room.result.finished_at,
+    });
+    room.settlement_battle_ids[sideKey] = settlement.battle.id;
+    if (!room.settlement_battle_id && sideKey === "player") room.settlement_battle_id = settlement.battle.id;
+    settlements.push(settlement);
+  }
   room.updated_at = new Date().toISOString();
-  return settlement;
+  return settlements;
+}
+
+function matchWaitingTicket(state, ticket) {
+  const candidate = (state.matchTickets ?? [])
+    .filter((entry) => entry.status === "waiting" && entry.id !== ticket.id)
+    .filter((entry) => entry.account_id !== ticket.account_id)
+    .filter((entry) => entry.mode === ticket.mode)
+    .filter((entry) => entry.battle_class === ticket.battle_class)
+    .filter((entry) => Math.abs(entry.lp - ticket.lp) <= matchLpWindow(ticket.mode))
+    .filter((entry) => !petHasActiveBattle(state, entry.pet_id))
+    .sort((a, b) => Math.abs(a.lp - ticket.lp) - Math.abs(b.lp - ticket.lp) || a.created_at.localeCompare(b.created_at))[0];
+
+  if (!candidate) return null;
+  const playerPet = ownedPet(state, candidate.account_id, candidate.pet_id);
+  const opponentPet = ownedPet(state, ticket.account_id, ticket.pet_id);
+  assertPetAvailableForBattle(state, playerPet.id);
+  assertPetAvailableForBattle(state, opponentPet.id);
+  const room = createPvpBattleRoom(state, {
+    mode: ticket.mode,
+    source: "random_matchmaking",
+    playerAccountId: candidate.account_id,
+    playerPet,
+    opponentAccountId: ticket.account_id,
+    opponentPet,
+    metadata: {
+      player_ticket_id: candidate.id,
+      opponent_ticket_id: ticket.id,
+      lp_gap: Math.abs(candidate.lp - ticket.lp),
+    },
+  });
+  for (const matchedTicket of [candidate, ticket]) {
+    matchedTicket.status = "matched";
+    matchedTicket.matched_at = room.created_at;
+    matchedTicket.battle_room_id = room.id;
+  }
+  cancelWaitingTicketsForPet(state, playerPet.id, "matched", [candidate.id, ticket.id]);
+  cancelWaitingTicketsForPet(state, opponentPet.id, "matched", [candidate.id, ticket.id]);
+  cancelOpenInvitesForPet(state, playerPet.id, "matched");
+  cancelOpenInvitesForPet(state, opponentPet.id, "matched");
+  return { room, opponentTicket: candidate };
+}
+
+function matchedResponse(state, room, ticket, opponentTicket, accountId) {
+  logEvent(state, "matchmaking.matched", accountId, {
+    ticket_id: ticket.id,
+    opponent_ticket_id: opponentTicket.id,
+    battle_room_id: room.id,
+    mode: room.mode,
+  });
+  return {
+    status: "matched",
+    ticket: publicTicket(ticket),
+    opponent_ticket: publicTicket(opponentTicket),
+    battle: publicBattleRoom(room, accountId),
+  };
+}
+
+function createPvpBattleRoom(state, input) {
+  const room = createBattleRoomSnapshot({
+    id: `battle_room_${randomUUID()}`,
+    accountId: input.playerAccountId,
+    pet: input.playerPet,
+    mode: input.mode,
+    assetHash: petAsset(state, input.playerPet).canonical_hash,
+    opponent: opponentFromPet(state, input.opponentAccountId, input.opponentPet),
+  });
+  room.source = input.source;
+  room.metadata = input.metadata ?? {};
+  room.participant_account_ids = [input.playerAccountId, input.opponentAccountId];
+  room.participant_pet_ids = [input.playerPet.id, input.opponentPet.id];
+  state.battleRooms ??= [];
+  state.battleRooms.unshift(room);
+  logEvent(state, "battle.room.started", input.playerAccountId, {
+    pet_id: input.playerPet.id,
+    battle_room_id: room.id,
+    mode: input.mode,
+    source: input.source,
+    opponent_pet_id: input.opponentPet.id,
+  });
+  logEvent(state, "battle.room.started", input.opponentAccountId, {
+    pet_id: input.opponentPet.id,
+    battle_room_id: room.id,
+    mode: input.mode,
+    source: input.source,
+    opponent_pet_id: input.playerPet.id,
+  });
+  return room;
+}
+
+function createMatchTicket(accountId, pet, mode) {
+  return {
+    id: `ticket_${randomUUID()}`,
+    account_id: accountId,
+    pet_id: pet.id,
+    mode,
+    status: "waiting",
+    battle_class: pet.battle_class,
+    lp: pet.rating.lp,
+    tier_label: pet.rating.label,
+    created_at: new Date().toISOString(),
+    matched_at: null,
+    battle_room_id: null,
+  };
+}
+
+function publicTicket(ticket) {
+  return {
+    id: ticket.id,
+    pet_id: ticket.pet_id,
+    mode: ticket.mode,
+    status: ticket.status,
+    battle_class: ticket.battle_class,
+    lp: ticket.lp,
+    tier_label: ticket.tier_label,
+    battle_room_id: ticket.battle_room_id,
+    created_at: ticket.created_at,
+    matched_at: ticket.matched_at,
+  };
+}
+
+function publicInvite(invite) {
+  return {
+    id: invite.id,
+    code: invite.code,
+    host_pet_id: invite.host_pet_id,
+    mode: invite.mode,
+    status: invite.status,
+    battle_class: invite.battle_class,
+    battle_room_id: invite.battle_room_id,
+    created_at: invite.created_at,
+    expires_at: invite.expires_at,
+    accepted_at: invite.accepted_at ?? null,
+  };
+}
+
+function opponentFromPet(state, accountId, pet) {
+  return {
+    kind: "player",
+    account_id: accountId,
+    pet_id: pet.id,
+    name: pet.name,
+    lp: pet.rating.lp,
+    level: pet.level,
+    battle_class: pet.battle_class,
+    primary_element: pet.primary_element,
+    secondary_element: pet.secondary_element,
+    stats: pet.stats,
+    skills: pet.skills,
+    asset_hash: petAsset(state, pet).canonical_hash,
+  };
+}
+
+function assertPetAvailableForBattle(state, petId) {
+  const activeRoom = petHasActiveBattle(state, petId);
+  if (activeRoom) {
+    throw httpError(409, "PET_ALREADY_IN_BATTLE", "This pet already has an active battle room.");
+  }
+}
+
+function petHasActiveBattle(state, petId) {
+  return (state.battleRooms ?? []).find(
+    (room) => room.status === "in_progress" && [room.sides.player.pet_id, room.sides.opponent.pet_id].includes(petId),
+  );
+}
+
+function cancelWaitingTicketsForPet(state, petId, reason, preserveIds = []) {
+  const preserve = new Set(preserveIds);
+  for (const ticket of state.matchTickets ?? []) {
+    if (ticket.pet_id === petId && ticket.status === "waiting" && !preserve.has(ticket.id)) {
+      ticket.status = "cancelled";
+      ticket.cancel_reason = reason;
+      ticket.cancelled_at = new Date().toISOString();
+    }
+  }
+}
+
+function cancelOpenInvitesForPet(state, petId, reason, preserveIds = []) {
+  const preserve = new Set(preserveIds);
+  for (const invite of state.friendInvites ?? []) {
+    if (invite.host_pet_id === petId && invite.status === "open" && !preserve.has(invite.id)) {
+      invite.status = "cancelled";
+      invite.cancel_reason = reason;
+      invite.cancelled_at = new Date().toISOString();
+    }
+  }
+}
+
+function matchLpWindow(mode) {
+  return mode === "ranked" ? 300 : 600;
+}
+
+function createInviteCode(state) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    let code = "";
+    for (let i = 0; i < 6; i += 1) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    if (!(state.friendInvites ?? []).some((invite) => invite.code === code && invite.status === "open")) return code;
+  }
+  return randomUUID().slice(0, 6).toUpperCase();
+}
+
+function normalizeInviteCode(code) {
+  return String(code ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function expireOldInvites(state) {
+  const now = new Date();
+  for (const invite of state.friendInvites ?? []) {
+    if (invite.status === "open" && new Date(invite.expires_at) <= now) {
+      invite.status = "expired";
+    }
+  }
 }
 
 function applyProgression(pet, petXpDelta, styleXpDelta) {

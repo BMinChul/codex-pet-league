@@ -15,6 +15,10 @@ import {
   draftTrainingReport,
   getAccount,
   leaderboard,
+  acceptFriendInvite,
+  createFriendInvite,
+  joinMatchmakingQueue,
+  matchmakingStatus,
   publicPetView,
   simulateBattle,
   getTurnBattle,
@@ -107,6 +111,12 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && path === "/api/matchmaking/status") {
+    const state = await loadState();
+    sendJson(res, 200, matchmakingStatus(state, accountId, url.searchParams.get("pet_id")));
+    return;
+  }
+
   const battleMatch = path.match(/^\/api\/battles\/([^/]+)(?:\/(.+))?$/);
   if (battleMatch) {
     const [, battleRoomId, subpath = ""] = battleMatch;
@@ -179,6 +189,33 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
     const result = await updateState((state) => {
       getAccount(state, accountId);
       return startTurnBattle(state, accountId, petId, body);
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  if (req.method === "POST" && subpath === "matchmaking/queue") {
+    const result = await updateState((state) => {
+      getAccount(state, accountId);
+      return joinMatchmakingQueue(state, accountId, petId, body);
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  if (req.method === "POST" && subpath === "friend-invites") {
+    const result = await updateState((state) => {
+      getAccount(state, accountId);
+      return createFriendInvite(state, accountId, petId, body);
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  if (req.method === "POST" && subpath === "friend-invites/accept") {
+    const result = await updateState((state) => {
+      getAccount(state, accountId);
+      return acceptFriendInvite(state, accountId, petId, body);
     });
     sendJson(res, 201, result);
     return;

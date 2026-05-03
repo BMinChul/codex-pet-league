@@ -26,6 +26,11 @@ const els = {
   submitReportButton: document.querySelector("#submitReportButton"),
   trainingPreview: document.querySelector("#trainingPreview"),
   startBattleButton: document.querySelector("#startBattleButton"),
+  joinQueueButton: document.querySelector("#joinQueueButton"),
+  createInviteButton: document.querySelector("#createInviteButton"),
+  inviteCodeInput: document.querySelector("#inviteCodeInput"),
+  acceptInviteButton: document.querySelector("#acceptInviteButton"),
+  matchmakingOutput: document.querySelector("#matchmakingOutput"),
   battleState: document.querySelector("#battleState"),
   battleSkillSelect: document.querySelector("#battleSkillSelect"),
   actionButtons: document.querySelectorAll("[data-action]"),
@@ -56,6 +61,9 @@ function bindEvents() {
   els.draftReportButton.addEventListener("click", draftTrainingReport);
   els.submitReportButton.addEventListener("click", submitTrainingReport);
   els.startBattleButton.addEventListener("click", startTurnBattle);
+  els.joinQueueButton.addEventListener("click", joinRandomMatch);
+  els.createInviteButton.addEventListener("click", createFriendInvite);
+  els.acceptInviteButton.addEventListener("click", acceptFriendInvite);
   for (const button of els.actionButtons) {
     button.addEventListener("click", () => submitBattleAction(button.dataset.action));
   }
@@ -248,6 +256,59 @@ async function startTurnBattle() {
   }
 }
 
+async function joinRandomMatch() {
+  const pet = activePet();
+  if (!pet) return;
+  try {
+    const result = await api(`/api/pets/${pet.id}/matchmaking/queue`, {
+      method: "POST",
+      body: {
+        mode: document.querySelector("#battleMode").value === "ranked" ? "ranked" : "casual",
+      },
+    });
+    renderMatchmaking(result);
+    if (result.battle) {
+      state.activeBattleId = result.battle.id;
+      renderBattle(result.battle);
+    }
+  } catch (error) {
+    renderMatchmakingError(error);
+  }
+}
+
+async function createFriendInvite() {
+  const pet = activePet();
+  if (!pet) return;
+  try {
+    const result = await api(`/api/pets/${pet.id}/friend-invites`, {
+      method: "POST",
+      body: {},
+    });
+    els.inviteCodeInput.value = result.invite.code;
+    renderMatchmaking(result);
+  } catch (error) {
+    renderMatchmakingError(error);
+  }
+}
+
+async function acceptFriendInvite() {
+  const pet = activePet();
+  if (!pet) return;
+  try {
+    const result = await api(`/api/pets/${pet.id}/friend-invites/accept`, {
+      method: "POST",
+      body: { code: els.inviteCodeInput.value },
+    });
+    renderMatchmaking(result);
+    if (result.battle) {
+      state.activeBattleId = result.battle.id;
+      renderBattle(result.battle);
+    }
+  } catch (error) {
+    renderMatchmakingError(error);
+  }
+}
+
 async function submitBattleAction(kind) {
   if (!state.activeBattleId) {
     els.battleOutput.textContent = "Start a server battle first.";
@@ -281,8 +342,8 @@ function renderBattleSkills(pet) {
 function renderBattle(battle) {
   const secondsLeft = Math.max(0, Math.ceil((new Date(battle.turn_deadline_at) - Date.now()) / 1000));
   els.battleState.innerHTML = `
-    ${battleSide("You", battle.sides.player)}
-    ${battleSide(battle.sides.opponent.name, battle.sides.opponent)}
+    ${battleSide(battle.sides.player.is_you ? "You" : battle.sides.player.name, battle.sides.player)}
+    ${battleSide(battle.sides.opponent.is_you ? "You" : battle.sides.opponent.name, battle.sides.opponent)}
     <div class="turn-line">
       <strong>Turn ${battle.turn_index}</strong>
       <span>${battle.status === "in_progress" ? `${secondsLeft}s left` : battle.result.result}</span>
@@ -320,6 +381,24 @@ function battleSide(label, side) {
 
 function renderBattleError(error) {
   els.battleOutput.textContent = `Battle error: ${error.message}`;
+}
+
+function renderMatchmaking(result) {
+  els.matchmakingOutput.textContent = JSON.stringify(
+    {
+      status: result.status ?? result.invite?.status ?? "created",
+      ticket: result.ticket ?? null,
+      invite: result.invite ?? null,
+      battle_id: result.battle?.id ?? null,
+      viewer_side: result.battle?.viewer_side ?? null,
+    },
+    null,
+    2,
+  );
+}
+
+function renderMatchmakingError(error) {
+  els.matchmakingOutput.textContent = `Matchmaking error: ${error.message}`;
 }
 
 function collectSignals() {

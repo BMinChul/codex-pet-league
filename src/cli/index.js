@@ -121,6 +121,39 @@ async function main(args) {
     return;
   }
 
+  if (area === "queue" && action === "join") {
+    const pet = await resolvePet(client, parsed.flags.pet);
+    const result = await client.post(`/api/pets/${pet.id}/matchmaking/queue`, {
+      mode: parsed.flags.mode ?? "ranked",
+    });
+    printMatchmaking(result);
+    return;
+  }
+
+  if (area === "queue" && action === "status") {
+    const query = parsed.flags.pet ? `?pet_id=${encodeURIComponent(parsed.flags.pet)}` : "";
+    const result = await client.get(`/api/matchmaking/status${query}`);
+    printObject(result);
+    return;
+  }
+
+  if (area === "invite" && action === "create") {
+    const pet = await resolvePet(client, parsed.flags.pet);
+    const result = await client.post(`/api/pets/${pet.id}/friend-invites`, {});
+    console.log(`Invite code: ${result.invite.code}`);
+    printObject(result.invite);
+    return;
+  }
+
+  if (area === "invite" && action === "accept") {
+    const pet = await resolvePet(client, parsed.flags.pet);
+    const code = parsed.flags.code;
+    if (!code) throw new Error("Pass --code invite_code");
+    const result = await client.post(`/api/pets/${pet.id}/friend-invites/accept`, { code });
+    printMatchmaking(result);
+    return;
+  }
+
   if (area === "leaderboard") {
     const board = await client.get("/api/leaderboard");
     printLeaderboard(board.leaderboard);
@@ -302,6 +335,21 @@ function printTurnBattle(battle) {
   if (battle.log.at(-1)) printObject({ latest_turn: battle.log.at(-1) });
 }
 
+function printMatchmaking(result) {
+  if (result.status === "waiting") {
+    console.log(`Waiting for ${result.ticket.mode} match · ${result.ticket.battle_class} · ${result.ticket.lp} LP`);
+    console.log(`Ticket: ${result.ticket.id}`);
+    return;
+  }
+  if (result.status === "matched" && result.battle) {
+    console.log(`Matched: ${result.battle.id} · ${result.battle.mode} · ${result.battle.source}`);
+    console.log(`Your side: ${result.battle.viewer_side}`);
+    console.log("Action: codexpet battle action --battle <id> --kind strike");
+    return;
+  }
+  printObject(result);
+}
+
 function summarizePet(pet) {
   return {
     name: pet.name,
@@ -335,6 +383,10 @@ Usage:
   codexpet battle start [--pet pet_id] [--mode casual] [--opponent-lp 1500]
   codexpet battle action --battle battle_room_id --kind strike|guard|focus|skill [--skill skill_id]
   codexpet battle get --battle battle_room_id
+  codexpet queue join [--pet pet_id] [--mode ranked|casual]
+  codexpet queue status [--pet pet_id]
+  codexpet invite create [--pet pet_id]
+  codexpet invite accept --code ABC123 [--pet pet_id]
   codexpet leaderboard
 
 Environment:

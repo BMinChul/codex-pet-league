@@ -120,6 +120,57 @@ const tools = [
     },
   },
   {
+    name: "matchmaking_join",
+    title: "Join Random Matchmaking",
+    description: "Queues the selected pet for a same-Battle-Class random ranked or casual match.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+        mode: { type: "string", enum: ["ranked", "casual"] },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "matchmaking_status",
+    title: "Matchmaking Status",
+    description: "Shows waiting tickets and active PvP battle rooms for this League account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "friend_invite_create",
+    title: "Create Friend Invite",
+    description: "Creates a 10-minute Friend Duel invite code for the selected pet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "friend_invite_accept",
+    title: "Accept Friend Invite",
+    description: "Accepts a Friend Duel invite code using the selected pet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+        code: { type: "string" },
+      },
+      required: ["code"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "leaderboard",
     title: "Leaderboard",
     description: "Shows the current server-derived leaderboard.",
@@ -247,6 +298,29 @@ async function callTool(name, args) {
   if (name === "battle_get") {
     if (!args.battle_id) throw new Error("battle_id is required.");
     return apiGet(`/api/battles/${args.battle_id}`);
+  }
+
+  if (name === "matchmaking_join") {
+    const pet = await resolvePet(args.pet_id);
+    return apiPost(`/api/pets/${pet.id}/matchmaking/queue`, {
+      mode: args.mode ?? "ranked",
+    });
+  }
+
+  if (name === "matchmaking_status") {
+    const suffix = args.pet_id ? `?pet_id=${encodeURIComponent(args.pet_id)}` : "";
+    return apiGet(`/api/matchmaking/status${suffix}`);
+  }
+
+  if (name === "friend_invite_create") {
+    const pet = await resolvePet(args.pet_id);
+    return apiPost(`/api/pets/${pet.id}/friend-invites`, {});
+  }
+
+  if (name === "friend_invite_accept") {
+    if (!args.code) throw new Error("code is required.");
+    const pet = await resolvePet(args.pet_id);
+    return apiPost(`/api/pets/${pet.id}/friend-invites/accept`, { code: args.code });
   }
 
   if (name === "leaderboard") {
