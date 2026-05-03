@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_SEASON } from "../domain/rules.js";
@@ -11,7 +11,7 @@ let writeQueue = Promise.resolve();
 
 export async function loadState() {
   try {
-    const raw = await readFile(STATE_FILE_PATH, "utf8");
+    const raw = await retryTransientFileOperation(() => readFile(STATE_FILE_PATH, "utf8"));
     return migrateState(JSON.parse(raw));
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
@@ -23,7 +23,12 @@ export async function saveState(state) {
   await mkdir(dirname(STATE_FILE_PATH), { recursive: true });
   const tempPath = `${STATE_FILE_PATH}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-  await rename(tempPath, STATE_FILE_PATH);
+  try {
+    await retryTransientFileOperation(() => rename(tempPath, STATE_FILE_PATH));
+  } catch (error) {
+    await rm(tempPath, { force: true });
+    throw error;
+  }
 }
 
 export async function updateState(mutator) {
@@ -125,4 +130,24 @@ function migrateState(state) {
     seasonRewards: state.seasonRewards ?? [],
     events: state.events ?? [],
   };
+}
+
+async function retryTransientFileOperation(operation) {
+  const delaysMs = [20, 50, 100, 200, 400];
+  for (let attempt = 0; attempt <= delaysMs.length; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isTransientFileError(error) || attempt === delaysMs.length) throw error;
+      await sleep(delaysMs[attempt]);
+    }
+  }
+}
+
+function isTransientFileError(error) {
+  return ["EBUSY", "EMFILE", "ENFILE", "EPERM"].includes(error?.code);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -13,6 +13,7 @@ const state = {
   leaderboard: [],
   events: [],
   adminConsole: null,
+  adminOutput: null,
   xpStatusByPetId: new Map(),
   matchmaking: null,
   activePetId: null,
@@ -425,6 +426,7 @@ async function submitTrainingReport() {
 
 async function loadAdminConsole() {
   state.adminConsole = await api("/api/admin/console");
+  state.adminOutput = null;
   renderAdminConsole();
 }
 
@@ -434,7 +436,7 @@ async function runAdminOpsJob() {
     body: {},
   });
   state.adminConsole = await api("/api/admin/console");
-  setJson(els.adminOutput, result);
+  state.adminOutput = result;
   renderAdminConsole();
 }
 
@@ -444,7 +446,7 @@ async function reviewTrainingReport(reportId, decision) {
     body: { decision },
   });
   state.adminConsole = await api("/api/admin/console");
-  setJson(els.adminOutput, result);
+  state.adminOutput = result;
   renderAdminConsole();
   await refresh();
 }
@@ -455,7 +457,7 @@ async function updateEnforcement(accountId, action) {
     body: { action, days: 1, reason: action },
   });
   state.adminConsole = await api("/api/admin/console");
-  setJson(els.adminOutput, result);
+  state.adminOutput = result;
   renderAdminConsole();
 }
 
@@ -465,7 +467,7 @@ async function moderateAsset(assetId, action) {
     body: { action, reason: action },
   });
   state.adminConsole = await api("/api/admin/console");
-  setJson(els.adminOutput, result);
+  state.adminOutput = result;
   renderAdminConsole();
 }
 
@@ -730,7 +732,7 @@ function renderAdminConsole() {
     }
     els.adminReviewCases?.append(row);
   }
-  setJson(els.adminOutput, {
+  setJson(els.adminOutput, state.adminOutput ?? {
     ops: consoleState.ops,
     audit_ok: consoleState.audit?.ok,
     auth_provider: consoleState.auth_provider,

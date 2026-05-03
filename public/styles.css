@@ -147,6 +147,7 @@ h2 {
 
 .panel.wide {
   grid-column: 1 / -1;
+  overflow-x: auto;
 }
 
 .panel-header,
@@ -155,6 +156,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .action-grid {
@@ -356,6 +358,7 @@ select:disabled {
 
 table {
   width: 100%;
+  min-width: 560px;
   border-collapse: collapse;
   margin-top: 10px;
 }
@@ -443,8 +446,18 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .ops-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+  .ops-summary {
+    grid-template-columns: 1fr;
   }
 }

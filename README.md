@@ -60,6 +60,7 @@ http://localhost:4317
 npm test
 npm run test:runtime
 npm run test:abuse
+npm run test:browser
 npm run verify:loop -- 2
 npm run ops:check
 npm start

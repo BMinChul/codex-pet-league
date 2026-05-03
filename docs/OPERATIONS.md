@@ -22,6 +22,7 @@ This project still uses the JSON store until the final DB migration, so producti
 ```bash
 npm run ops:check
 npm run test:abuse
+npm run test:browser
 npm run verify:loop -- 2
 ```
 

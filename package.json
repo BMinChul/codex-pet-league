@@ -14,10 +14,14 @@
     "test": "node --test test/*.test.js",
     "test:runtime": "node scripts/runtime-smoke.mjs",
     "test:abuse": "node scripts/abuse-smoke.mjs",
+    "test:browser": "playwright test test/browser-smoke.spec.mjs --browser=chromium --workers=1 --output=runs/playwright",
     "verify:loop": "node scripts/verify-loop.mjs",
     "ops:check": "node scripts/ops-check.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1"
   }
 }

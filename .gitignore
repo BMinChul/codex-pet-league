@@ -1,4 +1,6 @@
 runs/
+test-results/
+playwright-report/
 identity-probe/logs/
 identity-probe/codex-exec-output.txt
 data/*.json
