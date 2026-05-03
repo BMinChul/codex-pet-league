@@ -17,6 +17,9 @@ import {
   leaderboard,
   publicPetView,
   simulateBattle,
+  getTurnBattle,
+  startTurnBattle,
+  submitTurnBattleAction,
   submitTrainingReport,
   xpStatus,
 } from "../domain/state.js";
@@ -104,6 +107,13 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const battleMatch = path.match(/^\/api\/battles\/([^/]+)(?:\/(.+))?$/);
+  if (battleMatch) {
+    const [, battleRoomId, subpath = ""] = battleMatch;
+    await handleBattleApi(req, res, accountId, battleRoomId, subpath, body);
+    return;
+  }
+
   if (req.method === "GET" && path === "/api/leaderboard") {
     const state = await loadState();
     sendJson(res, 200, { leaderboard: leaderboard(state) });
@@ -165,7 +175,38 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
     return;
   }
 
+  if (req.method === "POST" && subpath === "battles") {
+    const result = await updateState((state) => {
+      getAccount(state, accountId);
+      return startTurnBattle(state, accountId, petId, body);
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
   sendJson(res, 404, { error: { code: "NOT_FOUND", message: "Pet API route not found." } });
+}
+
+async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body) {
+  if (req.method === "GET" && subpath === "") {
+    const result = await updateState((state) => {
+      getAccount(state, accountId);
+      return getTurnBattle(state, accountId, battleRoomId);
+    });
+    sendJson(res, 200, result);
+    return;
+  }
+
+  if (req.method === "POST" && subpath === "actions") {
+    const result = await updateState((state) => {
+      getAccount(state, accountId);
+      return submitTurnBattleAction(state, accountId, battleRoomId, body);
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  sendJson(res, 404, { error: { code: "NOT_FOUND", message: "Battle API route not found." } });
 }
 
 async function serveStatic(req, res, url) {

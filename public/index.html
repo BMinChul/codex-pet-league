@@ -104,7 +104,7 @@
           </article>
 
           <article class="panel">
-            <h2>Battle Simulator</h2>
+            <h2>Turn Battle</h2>
             <label>
               Mode
               <select id="battleMode" class="field">
@@ -115,20 +115,22 @@
               </select>
             </label>
             <label>
-              Result
-              <select id="battleResult" class="field">
-                <option value="win">Win</option>
-                <option value="draw">Draw</option>
-                <option value="loss">Loss</option>
-                <option value="afk_loss">AFK Loss</option>
-              </select>
-            </label>
-            <label>
               Opponent LP
               <input id="opponentLp" class="field" type="number" value="1500" />
             </label>
-            <button id="simulateBattleButton" class="primary-button">Resolve Server Battle</button>
-            <pre id="battleOutput" class="output">No battle yet.</pre>
+            <button id="startBattleButton" class="primary-button">Start Server Battle</button>
+            <div id="battleState" class="battle-state"></div>
+            <label>
+              Skill
+              <select id="battleSkillSelect" class="field"></select>
+            </label>
+            <div class="action-grid">
+              <button data-action="strike" class="secondary-button">Strike</button>
+              <button data-action="guard" class="secondary-button">Guard</button>
+              <button data-action="focus" class="secondary-button">Focus</button>
+              <button data-action="skill" class="primary-button">Skill</button>
+            </div>
+            <pre id="battleOutput" class="output">No active battle.</pre>
           </article>
 
           <article class="panel wide">

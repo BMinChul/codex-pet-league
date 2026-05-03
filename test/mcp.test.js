@@ -29,7 +29,17 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
   assert.equal(initialize.result.serverInfo.name, "codex-pet-league");
   assert.deepEqual(
     list.result.tools.map((tool) => tool.name),
-    ["pet_status", "pet_create", "training_report_draft", "training_report_submit", "battle_simulate", "leaderboard"],
+    [
+      "pet_status",
+      "pet_create",
+      "training_report_draft",
+      "training_report_submit",
+      "battle_simulate",
+      "battle_start",
+      "battle_action",
+      "battle_get",
+      "leaderboard",
+    ],
   );
 });
 

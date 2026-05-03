@@ -50,6 +50,7 @@ export function createDefaultState() {
     xpLedger: [],
     lpLedger: [],
     battles: [],
+    battleRooms: [],
     events: [],
   };
 }
@@ -66,6 +67,7 @@ function migrateState(state) {
     xpLedger: state.xpLedger ?? [],
     lpLedger: state.lpLedger ?? [],
     battles: state.battles ?? [],
+    battleRooms: state.battleRooms ?? [],
     events: state.events ?? [],
   };
 }

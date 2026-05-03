@@ -78,6 +78,48 @@ const tools = [
     },
   },
   {
+    name: "battle_start",
+    title: "Start Turn Battle",
+    description: "Starts a 30-second simultaneous turn battle room for the selected pet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+        mode: { type: "string", enum: ["ranked", "casual", "friend", "training"] },
+        opponent_lp: { type: "number" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "battle_action",
+    title: "Submit Battle Action",
+    description: "Submits one locked action for the current turn in a server battle room.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        battle_id: { type: "string" },
+        kind: { type: "string", enum: ["strike", "guard", "focus", "skill"] },
+        skill_id: { type: "string" },
+      },
+      required: ["battle_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "battle_get",
+    title: "Get Turn Battle",
+    description: "Gets the current server state for a turn battle room and advances expired turns.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        battle_id: { type: "string" },
+      },
+      required: ["battle_id"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "leaderboard",
     title: "Leaderboard",
     description: "Shows the current server-derived leaderboard.",
@@ -184,6 +226,27 @@ async function callTool(name, args) {
       result: args.result ?? "win",
       opponent_lp: Number(args.opponent_lp ?? 1500),
     });
+  }
+
+  if (name === "battle_start") {
+    const pet = await resolvePet(args.pet_id);
+    return apiPost(`/api/pets/${pet.id}/battles`, {
+      mode: args.mode ?? "casual",
+      opponent_lp: Number(args.opponent_lp ?? 1500),
+    });
+  }
+
+  if (name === "battle_action") {
+    if (!args.battle_id) throw new Error("battle_id is required.");
+    return apiPost(`/api/battles/${args.battle_id}/actions`, {
+      kind: args.kind ?? "strike",
+      skill_id: args.skill_id,
+    });
+  }
+
+  if (name === "battle_get") {
+    if (!args.battle_id) throw new Error("battle_id is required.");
+    return apiGet(`/api/battles/${args.battle_id}`);
   }
 
   if (name === "leaderboard") {

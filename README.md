@@ -28,7 +28,8 @@ http://localhost:4317
   - Battle XP `300/day`
   - Friend Duel XP `75/day`
   - Style XP `1,000/day`, `5,000/week`
-- Server-authoritative battle simulation for ranked, casual, friend, and training battles.
+- Server-authoritative 30-second turn battle rooms with Strike, Guard, Focus, Skill, replay hash, and AFK loss.
+- Server-authoritative battle simulation for ranked, casual, friend, and training battle-result testing.
 - LP and tier/division updates for ranked battles.
 - Leaderboard and server event log.
 - Node test coverage for core rules.
@@ -55,6 +56,9 @@ npm run cli -- pets
 npm run cli -- xp status
 npm run cli -- report draft --implementation --verification --tests-run 3
 npm run cli -- report submit --milestone --files large
+npm run cli -- battle start --mode casual
+npm run cli -- battle action --battle battle_room_id --kind strike
+npm run cli -- battle get --battle battle_room_id
 npm run cli -- battle simulate --mode ranked --result win --opponent-lp 1500
 npm run cli -- leaderboard
 ```
@@ -84,6 +88,9 @@ The MCP bridge exposes the same product actions as tools:
 - `training_report_draft`
 - `training_report_submit`
 - `battle_simulate`
+- `battle_start`
+- `battle_action`
+- `battle_get`
 - `leaderboard`
 
 Run directly:

@@ -130,6 +130,12 @@ h2 {
   gap: 10px;
 }
 
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .field {
   width: 100%;
   height: 38px;
@@ -216,6 +222,46 @@ label {
   height: 100%;
   border-radius: inherit;
   background: var(--green);
+}
+
+.battle-state {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.battle-side {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9fbfd;
+}
+
+.battle-side > div:first-child,
+.turn-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.battle-side span,
+.battle-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.hp-bar span {
+  background: var(--red);
+}
+
+.turn-line {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #eef2f6;
 }
 
 .meter-stack {

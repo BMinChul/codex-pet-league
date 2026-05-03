@@ -2,6 +2,7 @@ const state = {
   rules: null,
   pets: [],
   activePetId: null,
+  activeBattleId: null,
 };
 
 const els = {
@@ -24,7 +25,10 @@ const els = {
   draftReportButton: document.querySelector("#draftReportButton"),
   submitReportButton: document.querySelector("#submitReportButton"),
   trainingPreview: document.querySelector("#trainingPreview"),
-  simulateBattleButton: document.querySelector("#simulateBattleButton"),
+  startBattleButton: document.querySelector("#startBattleButton"),
+  battleState: document.querySelector("#battleState"),
+  battleSkillSelect: document.querySelector("#battleSkillSelect"),
+  actionButtons: document.querySelectorAll("[data-action]"),
   battleOutput: document.querySelector("#battleOutput"),
   leaderboardBody: document.querySelector("#leaderboardBody"),
   eventLog: document.querySelector("#eventLog"),
@@ -51,7 +55,10 @@ function bindEvents() {
   els.refreshButton.addEventListener("click", refresh);
   els.draftReportButton.addEventListener("click", draftTrainingReport);
   els.submitReportButton.addEventListener("click", submitTrainingReport);
-  els.simulateBattleButton.addEventListener("click", simulateBattle);
+  els.startBattleButton.addEventListener("click", startTurnBattle);
+  for (const button of els.actionButtons) {
+    button.addEventListener("click", () => submitBattleAction(button.dataset.action));
+  }
 }
 
 async function refresh() {
@@ -109,6 +116,7 @@ async function renderActivePet() {
     els.rankPill.textContent = "Rank -";
     els.statList.innerHTML = "";
     els.xpStatus.innerHTML = "";
+    els.battleSkillSelect.innerHTML = "";
     return;
   }
 
@@ -117,6 +125,7 @@ async function renderActivePet() {
   els.classPill.textContent = pet.battle_class.toUpperCase();
   els.rankPill.textContent = `${pet.rating.label} · ${pet.rating.lp} LP`;
   renderStats(pet);
+  renderBattleSkills(pet);
   await renderXpStatus(pet.id);
 }
 
@@ -221,27 +230,96 @@ async function submitTrainingReport() {
   await refresh();
 }
 
-async function simulateBattle() {
+async function startTurnBattle() {
   const pet = activePet();
   if (!pet) return;
-  const result = await api(`/api/pets/${pet.id}/battles/simulate`, {
-    method: "POST",
-    body: {
-      mode: document.querySelector("#battleMode").value,
-      result: document.querySelector("#battleResult").value,
-      opponent_lp: Number(document.querySelector("#opponentLp").value),
-    },
-  });
+  try {
+    const result = await api(`/api/pets/${pet.id}/battles`, {
+      method: "POST",
+      body: {
+        mode: document.querySelector("#battleMode").value,
+        opponent_lp: Number(document.querySelector("#opponentLp").value),
+      },
+    });
+    state.activeBattleId = result.battle.id;
+    renderBattle(result.battle);
+  } catch (error) {
+    renderBattleError(error);
+  }
+}
+
+async function submitBattleAction(kind) {
+  if (!state.activeBattleId) {
+    els.battleOutput.textContent = "Start a server battle first.";
+    return;
+  }
+  try {
+    const result = await api(`/api/battles/${state.activeBattleId}/actions`, {
+      method: "POST",
+      body: {
+        kind,
+        skill_id: kind === "skill" ? els.battleSkillSelect.value : undefined,
+      },
+    });
+    renderBattle(result.battle);
+    if (result.battle.status === "finished") await refresh();
+  } catch (error) {
+    renderBattleError(error);
+  }
+}
+
+function renderBattleSkills(pet) {
+  els.battleSkillSelect.innerHTML = "";
+  for (const skill of pet.skills) {
+    const option = document.createElement("option");
+    option.value = skill.id;
+    option.textContent = `${skill.officialName} · ${skill.role}`;
+    els.battleSkillSelect.append(option);
+  }
+}
+
+function renderBattle(battle) {
+  const secondsLeft = Math.max(0, Math.ceil((new Date(battle.turn_deadline_at) - Date.now()) / 1000));
+  els.battleState.innerHTML = `
+    ${battleSide("You", battle.sides.player)}
+    ${battleSide(battle.sides.opponent.name, battle.sides.opponent)}
+    <div class="turn-line">
+      <strong>Turn ${battle.turn_index}</strong>
+      <span>${battle.status === "in_progress" ? `${secondsLeft}s left` : battle.result.result}</span>
+    </div>
+  `;
   els.battleOutput.textContent = JSON.stringify(
     {
-      battle: result.battle,
-      pet: summarizePet(result.pet),
-      counters: result.counters,
+      id: battle.id,
+      status: battle.status,
+      turn: battle.turn_index,
+      pending: battle.pending,
+      result: battle.result,
+      latest_turn: battle.log.at(-1) ?? null,
+      replay_hash: battle.replay_hash,
     },
     null,
     2,
   );
-  await refresh();
+}
+
+function battleSide(label, side) {
+  const hpPercent = Math.round((side.hp / side.max_hp) * 100);
+  const energyDots = "#".repeat(side.energy).padEnd(6, ".");
+  return `
+    <div class="battle-side">
+      <div>
+        <strong>${label}</strong>
+        <span>${side.primary_element}${side.secondary_element ? ` + ${side.secondary_element}` : ""}</span>
+      </div>
+      <div class="bar hp-bar"><span style="width:${hpPercent}%"></span></div>
+      <div class="battle-meta">${side.hp}/${side.max_hp} HP · ${energyDots} · AFK ${side.timeout_count}/3</div>
+    </div>
+  `;
+}
+
+function renderBattleError(error) {
+  els.battleOutput.textContent = `Battle error: ${error.message}`;
 }
 
 function collectSignals() {

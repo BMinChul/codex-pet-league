@@ -13,6 +13,14 @@ import {
   OFFICIAL_SKILLS,
   ELEMENTS,
 } from "./rules.js";
+import {
+  createBattleRoomSnapshot,
+  publicBattleRoom,
+  resolveExpiredTurn,
+  resolveTurnIfReady,
+  submitAction,
+  submitBotActionIfNeeded,
+} from "./battleEngine.js";
 
 export function getAccount(state, accountId = "acct_demo") {
   const account = state.accounts.find((entry) => entry.id === accountId);
@@ -199,79 +207,57 @@ export function simulateBattle(state, accountId, petId, input = {}) {
   const result = ["win", "draw", "loss", "afk_loss", "complete"].includes(input.result) ? input.result : "win";
   const opponentLp = Number(input.opponent_lp ?? pet.rating.lp);
   const opponent = input.opponent ?? defaultOpponentFor(pet, opponentLp);
-  const counters = dailyCounters(state, accountId, pet.id);
-  const award = calculateBattleAward({ mode, result, counters });
-  const now = new Date().toISOString();
-  let lp = null;
-
-  if (mode === "ranked") {
-    const normalizedResult = result === "complete" ? "draw" : result;
-    const delta = lpDelta({
-      result: normalizedResult,
-      playerLp: pet.rating.lp,
-      opponentLp,
-      placement: pet.rating.placements_remaining > 0,
-    });
-    const before = pet.rating.lp;
-    pet.rating.lp = Math.max(0, pet.rating.lp + delta);
-    const tier = tierForLp(pet.rating.lp);
-    pet.rating.tier = tier.tier;
-    pet.rating.division = tier.division;
-    pet.rating.label = tier.label;
-    if (normalizedResult === "win") pet.rating.wins += 1;
-    if (normalizedResult === "loss" || normalizedResult === "afk_loss") pet.rating.losses += 1;
-    if (normalizedResult === "draw") pet.rating.draws += 1;
-    pet.rating.placements_remaining = Math.max(0, pet.rating.placements_remaining - 1);
-    lp = { before, after: pet.rating.lp, delta, opponent_lp: opponentLp, placement: pet.rating.placements_remaining };
-    state.lpLedger.push({
-      id: `lp_${randomUUID()}`,
-      account_id: accountId,
-      pet_id: pet.id,
-      source_type: "ranked_battle",
-      lp_delta: delta,
-      lp_before: before,
-      lp_after: pet.rating.lp,
-      opponent_lp: opponentLp,
-      applied_at: now,
-    });
-  }
-
-  const battle = {
-    id: `battle_${randomUUID()}`,
-    account_id: accountId,
-    pet_id: pet.id,
+  return settleBattleResult(state, accountId, pet, {
     mode,
     result,
+    opponentLp,
     opponent,
-    pet_xp_delta: award.petXpApplied,
-    lp,
-    stats_snapshot_json: pet.stats,
-    battle_class_at_start: pet.battle_class,
-    asset_hash_at_start: petAsset(state, pet).canonical_hash,
-    created_at: now,
-  };
-  state.battles.push(battle);
-  appendXpLedger(state, {
-    accountId,
-    petId: pet.id,
-    sourceType: mode === "friend" ? "friend_duel" : `${mode}_battle`,
-    sourceId: battle.id,
-    petXpDelta: award.petXpApplied,
-    styleXpDelta: 0,
-    capBuckets: mode === "friend" ? ["pet_daily", "battle_daily", "friend_daily"] : ["pet_daily", "battle_daily"],
-    metadata: { mode, result },
+    source: "simulated",
   });
-  applyProgression(pet, award.petXpApplied, 0);
-  logEvent(state, "battle.finished", accountId, {
-    pet_id: pet.id,
-    battle_id: battle.id,
-    mode,
-    result,
-    pet_xp_delta: award.petXpApplied,
-    lp_delta: lp?.delta ?? 0,
-  });
+}
 
-  return { battle, award, pet, counters: dailyCounters(state, accountId, pet.id) };
+export function startTurnBattle(state, accountId, petId, input = {}) {
+  const pet = ownedPet(state, accountId, petId);
+  const mode = ["ranked", "casual", "friend", "training"].includes(input.mode) ? input.mode : "casual";
+  const opponentLp = Number(input.opponent_lp ?? pet.rating.lp);
+  const opponent = input.opponent ?? defaultTurnOpponentFor(pet, opponentLp);
+  const room = createBattleRoomSnapshot({
+    id: `battle_room_${randomUUID()}`,
+    accountId,
+    pet,
+    mode,
+    opponent,
+    assetHash: petAsset(state, pet).canonical_hash,
+  });
+  submitBotActionIfNeeded(room, room.created_at);
+  state.battleRooms ??= [];
+  state.battleRooms.unshift(room);
+  logEvent(state, "battle.room.started", accountId, {
+    pet_id: pet.id,
+    battle_room_id: room.id,
+    mode,
+    opponent: opponent.name,
+  });
+  return { battle: publicBattleRoom(room) };
+}
+
+export function getTurnBattle(state, accountId, battleRoomId) {
+  const room = ownedBattleRoom(state, accountId, battleRoomId);
+  advanceBattleRoom(state, accountId, room);
+  return { battle: publicBattleRoom(room) };
+}
+
+export function submitTurnBattleAction(state, accountId, battleRoomId, input = {}) {
+  const room = ownedBattleRoom(state, accountId, battleRoomId);
+  advanceBattleRoom(state, accountId, room);
+  if (room.status === "finished") return { battle: publicBattleRoom(room), submitted: false };
+
+  const now = new Date().toISOString();
+  const submission = submitAction(room, "player", input, now);
+  submitBotActionIfNeeded(room, now);
+  resolveTurnIfReady(room, now);
+  settleFinishedTurnBattle(state, accountId, room);
+  return { battle: publicBattleRoom(room), submitted: submission.submitted, duplicate: submission.duplicate };
 }
 
 export function xpStatus(state, accountId, petId) {
@@ -311,6 +297,14 @@ export function ownedPet(state, accountId, petId) {
   const pet = state.pets.find((entry) => entry.id === petId && entry.owner_account_id === accountId);
   if (!pet) throw httpError(404, "PET_NOT_FOUND", "Pet not found for this account.");
   return pet;
+}
+
+export function ownedBattleRoom(state, accountId, battleRoomId) {
+  const room = (state.battleRooms ?? []).find(
+    (entry) => entry.id === battleRoomId && entry.account_id === accountId,
+  );
+  if (!room) throw httpError(404, "BATTLE_ROOM_NOT_FOUND", "Battle room not found for this account.");
+  return room;
 }
 
 export function petAsset(state, pet) {
@@ -367,6 +361,129 @@ function appendXpLedger(state, input) {
   });
 }
 
+function settleBattleResult(state, accountId, pet, input) {
+  const mode = input.mode;
+  const result = input.result;
+  const opponentLp = Number(input.opponentLp ?? pet.rating.lp);
+  const opponent = input.opponent ?? defaultOpponentFor(pet, opponentLp);
+  const counters = dailyCounters(state, accountId, pet.id);
+  const award = calculateBattleAward({ mode, result, counters });
+  const now = input.now ?? new Date().toISOString();
+  let lp = null;
+
+  if (mode === "ranked") {
+    const normalizedResult = result === "complete" ? "draw" : result;
+    const delta = lpDelta({
+      result: normalizedResult,
+      playerLp: pet.rating.lp,
+      opponentLp,
+      placement: pet.rating.placements_remaining > 0,
+    });
+    const before = pet.rating.lp;
+    pet.rating.lp = Math.max(0, pet.rating.lp + delta);
+    const tier = tierForLp(pet.rating.lp);
+    pet.rating.tier = tier.tier;
+    pet.rating.division = tier.division;
+    pet.rating.label = tier.label;
+    if (normalizedResult === "win") pet.rating.wins += 1;
+    if (normalizedResult === "loss" || normalizedResult === "afk_loss") pet.rating.losses += 1;
+    if (normalizedResult === "draw") pet.rating.draws += 1;
+    pet.rating.placements_remaining = Math.max(0, pet.rating.placements_remaining - 1);
+    lp = { before, after: pet.rating.lp, delta, opponent_lp: opponentLp, placement: pet.rating.placements_remaining };
+    state.lpLedger.push({
+      id: `lp_${randomUUID()}`,
+      account_id: accountId,
+      pet_id: pet.id,
+      source_type: "ranked_battle",
+      lp_delta: delta,
+      lp_before: before,
+      lp_after: pet.rating.lp,
+      opponent_lp: opponentLp,
+      applied_at: now,
+    });
+  }
+
+  const battle = {
+    id: `battle_${randomUUID()}`,
+    account_id: accountId,
+    pet_id: pet.id,
+    mode,
+    result,
+    opponent,
+    pet_xp_delta: award.petXpApplied,
+    lp,
+    stats_snapshot_json: input.statsSnapshot ?? pet.stats,
+    battle_class_at_start: input.battleClass ?? pet.battle_class,
+    asset_hash_at_start: input.assetHash ?? petAsset(state, pet).canonical_hash,
+    battle_source: input.source ?? "server_turn",
+    battle_room_id: input.battleRoomId ?? null,
+    replay_hash: input.replayHash ?? null,
+    turn_count: input.turnCount ?? null,
+    replay_log_json: input.replayLog ?? null,
+    created_at: now,
+  };
+  state.battles.push(battle);
+  appendXpLedger(state, {
+    accountId,
+    petId: pet.id,
+    sourceType: mode === "friend" ? "friend_duel" : `${mode}_battle`,
+    sourceId: battle.id,
+    petXpDelta: award.petXpApplied,
+    styleXpDelta: 0,
+    capBuckets: mode === "friend" ? ["pet_daily", "battle_daily", "friend_daily"] : ["pet_daily", "battle_daily"],
+    metadata: { mode, result, source: battle.battle_source, battle_room_id: input.battleRoomId ?? null },
+  });
+  applyProgression(pet, award.petXpApplied, 0);
+  logEvent(state, "battle.finished", accountId, {
+    pet_id: pet.id,
+    battle_id: battle.id,
+    battle_room_id: input.battleRoomId ?? null,
+    mode,
+    result,
+    pet_xp_delta: award.petXpApplied,
+    lp_delta: lp?.delta ?? 0,
+  });
+
+  return { battle, award, pet, counters: dailyCounters(state, accountId, pet.id) };
+}
+
+function advanceBattleRoom(state, accountId, room) {
+  const now = new Date().toISOString();
+  resolveExpiredTurn(room, now);
+  submitBotActionIfNeeded(room, now);
+  resolveTurnIfReady(room, now);
+  settleFinishedTurnBattle(state, accountId, room);
+}
+
+function settleFinishedTurnBattle(state, accountId, room) {
+  if (room.status !== "finished" || room.settlement_battle_id) return null;
+  const pet = ownedPet(state, accountId, room.pet_id);
+  const settlement = settleBattleResult(state, accountId, pet, {
+    mode: room.mode,
+    result: room.result.result,
+    opponentLp: room.sides.opponent.lp ?? pet.rating.lp,
+    opponent: {
+      name: room.sides.opponent.name,
+      lp: room.sides.opponent.lp,
+      primary_element: room.sides.opponent.primary_element,
+      secondary_element: room.sides.opponent.secondary_element,
+      kind: room.sides.opponent.kind,
+    },
+    statsSnapshot: room.sides.player.stats,
+    battleClass: room.sides.player.battle_class,
+    assetHash: room.sides.player.asset_hash,
+    source: "server_turn",
+    battleRoomId: room.id,
+    replayHash: room.replay_hash,
+    turnCount: room.log.length,
+    replayLog: room.log,
+    now: room.result.finished_at,
+  });
+  room.settlement_battle_id = settlement.battle.id;
+  room.updated_at = new Date().toISOString();
+  return settlement;
+}
+
 function applyProgression(pet, petXpDelta, styleXpDelta) {
   pet.xp += petXpDelta;
   pet.style_xp += styleXpDelta;
@@ -400,6 +517,28 @@ function defaultOpponentFor(pet, opponentLp) {
       { primaryElement: "Logic", secondaryElement: "Pulse" },
       { primaryElement: pet.primary_element, secondaryElement: pet.secondary_element },
     ),
+  };
+}
+
+function defaultTurnOpponentFor(pet, opponentLp) {
+  const primaryElement = "Logic";
+  const secondaryElement = "Pulse";
+  const stats = deriveStats({
+    primaryElement,
+    secondaryElement,
+    level: pet.level,
+  });
+  return {
+    kind: "bot",
+    name: "Queue Rival",
+    lp: opponentLp,
+    level: pet.level,
+    battle_class: battleClassForTotalStats(stats.total),
+    primary_element: primaryElement,
+    secondary_element: secondaryElement,
+    stats,
+    skills: defaultLoadout(primaryElement, secondaryElement),
+    asset_hash: "server-bot-queue-rival",
   };
 }
 

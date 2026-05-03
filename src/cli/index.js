@@ -94,6 +94,33 @@ async function main(args) {
     return;
   }
 
+  if (area === "battle" && action === "start") {
+    const pet = await resolvePet(client, parsed.flags.pet);
+    const result = await client.post(`/api/pets/${pet.id}/battles`, {
+      mode: parsed.flags.mode ?? "casual",
+      opponent_lp: Number(parsed.flags.opponentLp ?? parsed.flags["opponent-lp"] ?? 1500),
+    });
+    printTurnBattle(result.battle);
+    return;
+  }
+
+  if (area === "battle" && action === "get") {
+    if (!parsed.flags.battle) throw new Error("Pass --battle battle_room_id");
+    const result = await client.get(`/api/battles/${parsed.flags.battle}`);
+    printTurnBattle(result.battle);
+    return;
+  }
+
+  if (area === "battle" && action === "action") {
+    if (!parsed.flags.battle) throw new Error("Pass --battle battle_room_id");
+    const result = await client.post(`/api/battles/${parsed.flags.battle}/actions`, {
+      kind: parsed.flags.kind ?? "strike",
+      skill_id: parsed.flags.skill,
+    });
+    printTurnBattle(result.battle);
+    return;
+  }
+
   if (area === "leaderboard") {
     const board = await client.get("/api/leaderboard");
     printLeaderboard(board.leaderboard);
@@ -260,6 +287,21 @@ function printLeaderboard(rows) {
   }
 }
 
+function printTurnBattle(battle) {
+  const player = battle.sides.player;
+  const opponent = battle.sides.opponent;
+  console.log(`${battle.id} · ${battle.mode} · ${battle.status} · turn ${battle.turn_index}`);
+  console.log(`You: ${player.hp}/${player.max_hp} HP, energy ${player.energy}, AFK ${player.timeout_count}/3`);
+  console.log(`${opponent.name}: ${opponent.hp}/${opponent.max_hp} HP, energy ${opponent.energy}`);
+  if (battle.status === "in_progress") {
+    console.log(`Deadline: ${new Date(battle.turn_deadline_at).toLocaleTimeString()}`);
+    console.log("Action: codexpet battle action --battle <id> --kind strike");
+  } else {
+    console.log(`Result: ${battle.result.result} · replay ${battle.replay_hash}`);
+  }
+  if (battle.log.at(-1)) printObject({ latest_turn: battle.log.at(-1) });
+}
+
 function summarizePet(pet) {
   return {
     name: pet.name,
@@ -290,6 +332,9 @@ Usage:
   codexpet report draft [--pet pet_id] [--implementation] [--verification] [--tests-run 3]
   codexpet report submit [--pet pet_id] [--milestone] [--files large]
   codexpet battle simulate [--pet pet_id] --mode ranked --result win --opponent-lp 1500
+  codexpet battle start [--pet pet_id] [--mode casual] [--opponent-lp 1500]
+  codexpet battle action --battle battle_room_id --kind strike|guard|focus|skill [--skill skill_id]
+  codexpet battle get --battle battle_room_id
   codexpet leaderboard
 
 Environment:
