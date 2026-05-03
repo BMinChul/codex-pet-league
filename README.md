@@ -5,7 +5,13 @@ Local product prototype for the Codex App exclusive pet league.
 ## Run
 
 ```bash
-npm start
+CODEX_PET_AUTH_DEV_CODE=true npm start
+```
+
+PowerShell:
+
+```powershell
+$env:CODEX_PET_AUTH_DEV_CODE="true"; npm start
 ```
 
 Then open:
@@ -36,7 +42,7 @@ http://localhost:4317
 - Real-time browser updates over `/api/live` SSE.
 - Skill loadout updates with cosmetic skill aliases.
 - Public pet profiles and replay logs.
-- Dev auth challenge/session flow for passkey, magic link, and OAuth-shaped account binding.
+- Cookie-backed auth challenge/session flow for passkey, magic link, and OAuth-shaped account binding.
 - Local audit checks for XP/LP/replay/risk integrity.
 - Sandbox battle simulation for result testing. It does not award official XP or ranked LP.
 - LP and tier/division updates only for official Ranked PvP matchmaking battles.
@@ -47,6 +53,8 @@ http://localhost:4317
 
 ```bash
 npm test
+npm run test:runtime
+npm run verify:loop -- 2
 npm start
 npm run dev
 npm run cli -- help
@@ -102,12 +110,14 @@ CODEX_PET_LEAGUE_URL=http://localhost:4317
 CODEX_PET_STATE_PATH=C:\path\to\league-state.json
 CODEX_PET_SESSION_TOKEN=league_session_token
 CODEX_PET_ACCOUNT_ID=acct_demo
-CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true
-CODEX_PET_AUTH_DEV_CODE=true
+CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
+CODEX_PET_AUTH_DEV_CODE=false
+CODEX_PET_BRIDGE_SECRET=shared_bridge_hmac_secret
 ```
 
-`CODEX_PET_SESSION_TOKEN` is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and should be disabled in production with `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false`.
-`CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only; production auth should set it to `false` and deliver codes through the chosen email/passkey/OAuth provider.
+`CODEX_PET_SESSION_TOKEN` or the HttpOnly `league_session` cookie is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and is disabled unless `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true`.
+`CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. Production auth should deliver codes through the chosen email/passkey/OAuth provider.
+`CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; untrusted high-value reports are held for review.
 
 ## Codex App MCP Bridge
 

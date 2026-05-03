@@ -16,7 +16,7 @@ test("turn battle resolves simultaneous player and server actions", () => {
   assert.equal(started.battle.turn_seconds, 30);
   assert.equal(started.battle.pending.opponent, true);
 
-  const result = submitTurnBattleAction(state, "acct_demo", started.battle.id, { kind: "strike" });
+  const result = submitTurnBattleAction(state, "acct_demo", started.battle.id, actionFor(started.battle, "strike"));
 
   assert.equal(result.submitted, true);
   assert.equal(result.battle.log.length, 1);
@@ -31,15 +31,12 @@ test("skill actions require server-side energy", () => {
   const skillId = started.battle.sides.player.skills[0];
 
   assert.throws(
-    () => submitTurnBattleAction(state, "acct_demo", started.battle.id, { kind: "skill", skill_id: skillId }),
+    () => submitTurnBattleAction(state, "acct_demo", started.battle.id, actionFor(started.battle, "skill", skillId)),
     /requires 2 energy/,
   );
 
-  const focused = submitTurnBattleAction(state, "acct_demo", started.battle.id, { kind: "focus" });
-  const afterSkill = submitTurnBattleAction(state, "acct_demo", focused.battle.id, {
-    kind: "skill",
-    skill_id: skillId,
-  });
+  const focused = submitTurnBattleAction(state, "acct_demo", started.battle.id, actionFor(started.battle, "focus"));
+  const afterSkill = submitTurnBattleAction(state, "acct_demo", focused.battle.id, actionFor(focused.battle, "skill", skillId));
 
   assert.equal(afterSkill.battle.log.length, 2);
   assert.equal(afterSkill.battle.log[1].actions.player.skill_id, skillId);
@@ -74,4 +71,13 @@ function createPetFixture() {
     secondary_element: "Trace",
   });
   return { state, pet };
+}
+
+function actionFor(battle, kind, skillId = undefined) {
+  return {
+    kind,
+    skill_id: skillId,
+    turn_index: battle.turn_index,
+    turn_nonce: battle.turn_nonce,
+  };
 }

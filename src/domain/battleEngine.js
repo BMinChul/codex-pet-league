@@ -545,6 +545,14 @@ function assertDeadlineOpen(room, now) {
 }
 
 function assertFreshTurn(room, input) {
+  const source = sanitizeActionSource(input.source);
+  if (source === "bot" || source === "timeout") return;
+  if (input.turn_index === undefined) {
+    throw actionError("TURN_INDEX_REQUIRED", "Action must include the current turn index.");
+  }
+  if (input.turn_nonce === undefined) {
+    throw actionError("TURN_NONCE_REQUIRED", "Action must include the current turn nonce.");
+  }
   if (input.turn_index !== undefined && Number(input.turn_index) !== room.turn_index) {
     throw actionError("TURN_INDEX_STALE", "Action was submitted for a stale turn.");
   }

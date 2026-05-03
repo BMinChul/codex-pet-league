@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +29,7 @@ import {
   petReplays,
   processMatchmakingQueues,
   publicPetView,
+  requireAdmin,
   revokeSession,
   simulateBattle,
   getTurnBattle,
@@ -44,8 +46,10 @@ import { loadState, updateState } from "../storage/jsonStore.js";
 const PORT = Number(process.env.PORT ?? 4317);
 const PUBLIC_DIR = fileURLToPath(new URL("../../public", import.meta.url));
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
-const ALLOW_DEV_ACCOUNT_HEADER = process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER !== "false";
-const EXPOSE_AUTH_DEV_CODE = process.env.CODEX_PET_AUTH_DEV_CODE !== "false";
+const ALLOW_DEV_ACCOUNT_HEADER = process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER === "true";
+const EXPOSE_AUTH_DEV_CODE = process.env.CODEX_PET_AUTH_DEV_CODE === "true";
+const BRIDGE_SECRET = process.env.CODEX_PET_BRIDGE_SECRET ?? "";
+const SESSION_COOKIE = "league_session";
 const liveClients = new Set();
 
 const server = createServer(async (req, res) => {
@@ -102,30 +106,8 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && path === "/api/auth/verify") {
     const result = await updateState((state) => verifyAuthChallenge(state, body));
-    sendJson(res, 201, result);
+    sendJson(res, 201, result, { "set-cookie": sessionCookie(result.session_token, result.session.expires_at) });
     broadcast("auth.session.created", { account_id: result.account.id });
-    return;
-  }
-
-  accountId = await resolveAccountId(req);
-
-  if (req.method === "GET" && path === "/api/session") {
-    const state = await loadState();
-    if (req.headers["x-league-session-token"]) accountId = getAccountBySession(state, req.headers["x-league-session-token"].toString()).id;
-    const account = getAccount(state, accountId);
-    sendJson(res, 200, { account });
-    return;
-  }
-
-  if (req.method === "GET" && path === "/api/sessions") {
-    const state = await loadState();
-    sendJson(res, 200, listSessions(state, accountId));
-    return;
-  }
-
-  if (req.method === "POST" && path === "/api/sessions/revoke") {
-    const result = await mutate("auth.session.revoked", (state) => revokeSession(state, accountId, body));
-    sendJson(res, 201, result);
     return;
   }
 
@@ -138,6 +120,32 @@ async function handleApi(req, res, url) {
       level100Xp: totalXpForLevel100(),
       level100FastestDaysAtCap: Math.round((totalXpForLevel100() / XP_CAPS.petDaily) * 10) / 10,
     });
+    return;
+  }
+
+  accountId = await resolveAccountId(req);
+
+  if (req.method === "GET" && path === "/api/session") {
+    const state = await loadState();
+    const account = getAccount(state, accountId);
+    sendJson(res, 200, { account });
+    return;
+  }
+
+  if (req.method === "GET" && path === "/api/sessions") {
+    const state = await loadState();
+    sendJson(res, 200, listSessions(state, accountId));
+    return;
+  }
+
+  if (req.method === "POST" && path === "/api/sessions/revoke") {
+    const currentToken = getSessionToken(req);
+    const result = await mutate("auth.session.revoked", (state) => revokeSession(state, accountId, body));
+    const headers =
+      currentToken && (result.session.id === body.session_id || currentToken === body.token)
+        ? { "set-cookie": clearSessionCookie() }
+        : {};
+    sendJson(res, 201, result, headers);
     return;
   }
 
@@ -217,13 +225,13 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && path === "/api/events") {
     const state = await loadState();
     getAccount(state, accountId);
-    sendJson(res, 200, { events: state.events.slice(0, 80).map(redactEvent) });
+    sendJson(res, 200, { events: state.events.filter((event) => event.account_id === accountId).slice(0, 80).map(redactEvent) });
     return;
   }
 
   if (req.method === "GET" && path === "/api/admin/audit") {
     const state = await loadState();
-    getAccount(state, accountId);
+    requireAdmin(state, accountId);
     sendJson(res, 200, adminAudit(state));
     return;
   }
@@ -277,7 +285,10 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
   if (req.method === "POST" && subpath === "training-reports") {
     const result = await mutate("training.report.submitted", (state) => {
       getAccount(state, accountId);
-      return submitTrainingReport(state, accountId, petId, body);
+      return submitTrainingReport(state, accountId, petId, {
+        ...body,
+        server_trust: trainingReportTrust(req, body),
+      });
     });
     sendJson(res, 201, result);
     return;
@@ -354,7 +365,7 @@ async function handleBattleApi(req, res, accountId, battleRoomId, subpath, body)
 }
 
 async function resolveAccountId(req) {
-  const sessionToken = req.headers["x-league-session-token"]?.toString();
+  const sessionToken = getSessionToken(req);
   if (sessionToken) {
     const state = await loadState();
     return getAccountBySession(state, sessionToken).id;
@@ -407,6 +418,43 @@ function publicAuthChallenge(result) {
   return safeResult;
 }
 
+function getSessionToken(req) {
+  return req.headers["x-league-session-token"]?.toString() || parseCookies(req.headers.cookie)[SESSION_COOKIE] || "";
+}
+
+function parseCookies(cookieHeader) {
+  const cookies = {};
+  for (const part of String(cookieHeader ?? "").split(";")) {
+    const [name, ...valueParts] = part.trim().split("=");
+    if (!name || valueParts.length === 0) continue;
+    cookies[name] = decodeURIComponent(valueParts.join("="));
+  }
+  return cookies;
+}
+
+function sessionCookie(token, expiresAt) {
+  const maxAge = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+}
+
+function clearSessionCookie() {
+  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+}
+
+function trainingReportTrust(req, body) {
+  if (!BRIDGE_SECRET) return { trusted: false, reason: "bridge_secret_not_configured" };
+  const signature = req.headers["x-league-bridge-signature"]?.toString() ?? "";
+  const expected = createHmac("sha256", BRIDGE_SECRET).update(JSON.stringify(body)).digest("hex");
+  if (!safeEqual(signature, expected)) return { trusted: false, reason: "bridge_signature_invalid" };
+  return { trusted: true, reason: "bridge_signature_valid" };
+}
+
+function safeEqual(left, right) {
+  const a = Buffer.from(left);
+  const b = Buffer.from(right);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 async function serveStatic(req, res, url) {
   const requested = url.pathname === "/" ? "/index.html" : url.pathname;
   const safePath = normalize(requested).replace(/^(\.\.[/\\])+/, "");
@@ -452,8 +500,8 @@ async function readJson(req) {
   }
 }
 
-function sendJson(res, status, payload) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+function sendJson(res, status, payload, headers = {}) {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers });
   res.end(JSON.stringify(payload, null, 2));
 }
 

@@ -89,8 +89,8 @@ test("PvP battle actions and settlement are recorded for both participants", () 
 
   let room = state.battleRooms.find((entry) => entry.id === roomId);
   while (room.status === "in_progress") {
-    submitTurnBattleAction(state, "acct_demo", roomId, { kind: "strike" });
-    submitTurnBattleAction(state, "acct_rival", roomId, { kind: "strike" });
+    submitTurnBattleAction(state, "acct_demo", roomId, actionFor(room, "strike"));
+    submitTurnBattleAction(state, "acct_rival", roomId, actionFor(room, "strike"));
     room = state.battleRooms.find((entry) => entry.id === roomId);
   }
 
@@ -109,8 +109,8 @@ test("official ranked PvP settlements are season-scoped", () => {
 
   let room = state.battleRooms.find((entry) => entry.id === roomId);
   while (room.status === "in_progress") {
-    submitTurnBattleAction(state, "acct_demo", roomId, { kind: "strike" });
-    submitTurnBattleAction(state, "acct_rival", roomId, { kind: "strike" });
+    submitTurnBattleAction(state, "acct_demo", roomId, actionFor(room, "strike"));
+    submitTurnBattleAction(state, "acct_rival", roomId, actionFor(room, "strike"));
     room = state.battleRooms.find((entry) => entry.id === roomId);
   }
 
@@ -136,4 +136,12 @@ function createTwoPetFixture() {
     secondary_element: "Pulse",
   });
   return { state, demoPet, rivalPet };
+}
+
+function actionFor(room, kind) {
+  return {
+    kind,
+    turn_index: room.turn_index,
+    turn_nonce: room.turn_nonce,
+  };
 }

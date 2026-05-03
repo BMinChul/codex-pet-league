@@ -5,6 +5,8 @@ const state = {
   ready: false,
   busy: false,
   session: null,
+  authChallenge: null,
+  liveStream: null,
   rules: { elements: [], skills: [], caps: {}, matchmakingPolicy: {} },
   league: null,
   pets: [],
@@ -20,6 +22,12 @@ const state = {
 
 const els = queryElements({
   appStatus: "#appStatus",
+  authMethodInput: "#authMethodInput",
+  authIdentifierInput: "#authIdentifierInput",
+  authChallengeButton: "#authChallengeButton",
+  authCodeInput: "#authCodeInput",
+  authVerifyButton: "#authVerifyButton",
+  authHint: "#authHint",
   sessionLabel: "#sessionLabel",
   leagueLabel: "#leagueLabel",
   petSelect: "#petSelect",
@@ -64,18 +72,19 @@ async function boot() {
   setBusy(true);
   pushNotice("Loading League status...", "info");
 
-  const [session, rules, league] = await Promise.all([
-    loadOptional("/api/session", "Session unavailable."),
-    loadOptional("/api/rules", "Rules unavailable."),
-    loadOptional("/api/league", "League status unavailable."),
-  ]);
-
-  state.session = session;
+  const rules = await loadOptional("/api/rules", "Rules unavailable.");
   state.rules = normalizeRules(rules);
-  state.league = league;
-  state.ready = true;
-
   fillElements();
+
+  const signedIn = await refreshSession();
+  if (!signedIn) {
+    state.ready = false;
+    setBusy(false);
+    pushNotice("Sign in to use League actions.", "error");
+    renderApp();
+    return;
+  }
+
   connectLiveEvents();
   await refresh();
   setBusy(false);
@@ -84,15 +93,25 @@ async function boot() {
 
 function connectLiveEvents() {
   if (!("EventSource" in window)) return;
+  state.liveStream?.close();
   const stream = new EventSource("/api/live");
+  state.liveStream = stream;
   stream.addEventListener("battle.action.submitted", () => refreshSilently());
   stream.addEventListener("battle.room.viewed", () => refreshSilently());
-  stream.addEventListener("matchmaking.background_matched", () => loadMatchmakingStatus());
-  stream.addEventListener("matchmaking.queue", () => loadMatchmakingStatus());
+  stream.addEventListener("matchmaking.background_matched", () => safeLiveAction(loadMatchmakingStatus));
+  stream.addEventListener("matchmaking.queue", () => safeLiveAction(loadMatchmakingStatus));
   stream.addEventListener("heartbeat", () => {
     if (state.ready) setText(els.appStatus, "Live.");
   });
   stream.addEventListener("error", () => pushNotice("Live updates reconnecting...", "info"));
+}
+
+async function safeLiveAction(action) {
+  try {
+    await action();
+  } catch (error) {
+    pushNotice(`Live update skipped. ${error.message}`, "error");
+  }
 }
 
 async function refreshSilently() {
@@ -113,6 +132,8 @@ function bindEvents() {
     await loadActivePetDetails();
     renderApp();
   });
+  els.authChallengeButton?.addEventListener("click", () => runAction(startAuthChallenge));
+  els.authVerifyButton?.addEventListener("click", () => runAction(verifyAuthChallenge, "Signed in."));
   els.seedPetButton?.addEventListener("click", () => runAction(() => createPet({ demo: true }), "Demo pet registered."));
   els.createPetButton?.addEventListener("click", () => runAction(() => createPet({ demo: false }), "Pet created."));
   els.refreshButton?.addEventListener("click", () => runAction(refresh, "Refreshed."));
@@ -129,6 +150,10 @@ function bindEvents() {
 }
 
 async function refresh() {
+  if (!isSignedIn()) {
+    renderApp();
+    return;
+  }
   const [petsResult, boardResult, eventsResult, league] = await Promise.all([
     loadOptional("/api/pets", "Pets could not be loaded."),
     loadOptional("/api/leaderboard", "Leaderboard could not be loaded."),
@@ -145,6 +170,20 @@ async function refresh() {
   }
   await loadActivePetDetails();
   renderApp();
+}
+
+async function refreshSession() {
+  try {
+    state.session = await api("/api/session");
+    state.ready = true;
+    return true;
+  } catch (error) {
+    if (error.status === 401) {
+      state.session = null;
+      return false;
+    }
+    throw error;
+  }
 }
 
 async function loadActivePetDetails() {
@@ -179,9 +218,9 @@ function renderApp() {
 }
 
 function renderChrome() {
-  const accountName = state.session?.account?.displayName ?? "Local account";
+  const accountName = state.session?.account?.displayName ?? "Sign in required";
   const verified = state.session?.account?.verified === false ? "not verified" : "verified";
-  setText(els.sessionLabel, `${accountName} · ${verified}`);
+  setText(els.sessionLabel, state.session?.account ? `${accountName} · ${verified}` : accountName);
 
   const season = state.league?.active_season;
   const policy = state.league?.matchmaking_policy ?? state.rules.matchmakingPolicy;
@@ -306,6 +345,38 @@ async function createPet({ demo }) {
   await refresh();
 }
 
+async function startAuthChallenge() {
+  const result = await api("/api/auth/challenge", {
+    method: "POST",
+    body: {
+      method: els.authMethodInput?.value ?? "email_magic_link",
+      identifier: els.authIdentifierInput?.value ?? "local@example.test",
+    },
+  });
+  state.authChallenge = result;
+  if (els.authCodeInput && result.dev_code) els.authCodeInput.value = result.dev_code;
+  setText(
+    els.authHint,
+    result.dev_code ? `Local dev code: ${result.dev_code}` : "Challenge created. Use the code from your provider.",
+  );
+}
+
+async function verifyAuthChallenge() {
+  if (!state.authChallenge?.challenge_id) throw new Error("Create an auth challenge first.");
+  const result = await api("/api/auth/verify", {
+    method: "POST",
+    body: {
+      challenge_id: state.authChallenge.challenge_id,
+      code: els.authCodeInput?.value,
+    },
+  });
+  state.session = { account: result.account };
+  state.authChallenge = null;
+  setText(els.authHint, "Signed in.");
+  connectLiveEvents();
+  await refresh();
+}
+
 async function draftTrainingReport() {
   const pet = requireActivePet();
   const draft = await api(`/api/pets/${encodeURIComponent(pet.id)}/training-reports/draft`, {
@@ -388,6 +459,8 @@ async function submitBattleAction(kind) {
     method: "POST",
     body: {
       kind,
+      turn_index: state.activeBattle?.turn_index,
+      turn_nonce: state.activeBattle?.turn_nonce,
       skill_id: kind === "skill" ? els.battleSkillSelect?.value || undefined : undefined,
     },
   });
@@ -523,6 +596,7 @@ function renderEvents(events) {
 function updateControls() {
   const hasPet = Boolean(activePet());
   const hasSkill = Boolean(els.battleSkillSelect?.value);
+  const signedIn = isSignedIn();
   const disableWhenNoPet = [
     els.draftReportButton,
     els.submitReportButton,
@@ -533,12 +607,15 @@ function updateControls() {
     els.acceptInviteButton,
   ];
   for (const control of disableWhenNoPet) {
-    if (control) control.disabled = state.busy || !hasPet;
+    if (control) control.disabled = state.busy || !signedIn || !hasPet;
   }
   for (const button of els.actionButtons ?? []) {
-    button.disabled = state.busy || !state.activeBattleId || (button.dataset.action === "skill" && !hasSkill);
+    button.disabled = state.busy || !signedIn || !state.activeBattleId || (button.dataset.action === "skill" && !hasSkill);
   }
   for (const control of [els.seedPetButton, els.createPetButton, els.refreshButton, els.petSelect]) {
+    if (control) control.disabled = state.busy || !signedIn;
+  }
+  for (const control of [els.authMethodInput, els.authIdentifierInput, els.authChallengeButton, els.authCodeInput, els.authVerifyButton]) {
     if (control) control.disabled = state.busy;
   }
 }
@@ -606,13 +683,16 @@ async function api(path, options = {}) {
   const response = await fetch(path, {
     method: options.method ?? "GET",
     headers: { "content-type": "application/json" },
+    credentials: "same-origin",
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const text = await response.text();
   const payload = text ? parseJson(text) : {};
   if (!response.ok) {
     const message = payload.error?.message ?? payload.message ?? `API request failed (${response.status})`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -625,6 +705,10 @@ function setActiveBattle(battle) {
 
 function activePet() {
   return state.pets.find((pet) => pet.id === state.activePetId) ?? null;
+}
+
+function isSignedIn() {
+  return Boolean(state.session?.account);
 }
 
 function requireActivePet() {

@@ -87,10 +87,16 @@ export function appendRiskEvent(state, input) {
   return event;
 }
 
-export function riskTrainingReport({ signals, counters, classification }) {
+export function riskTrainingReport({ signals, counters, classification, trust = {} }) {
   const flags = [];
   let score = 0;
   const testsRun = Number(signals.testsRun ?? 0);
+  const highValue = ["major", "milestone"].includes(classification.reportType);
+
+  if (!trust.trusted && highValue) {
+    score += 70;
+    flags.push("untrusted_high_value_report");
+  }
 
   if (testsRun > 20) {
     score += testsRun > 50 ? 60 : 35;

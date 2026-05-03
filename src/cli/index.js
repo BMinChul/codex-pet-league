@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { buildSignalsFromWorkspace } from "./signals.js";
 
 const DEFAULT_BASE_URL = process.env.CODEX_PET_LEAGUE_URL ?? "http://localhost:4317";
 const DEFAULT_ACCOUNT_ID = process.env.CODEX_PET_ACCOUNT_ID ?? "acct_demo";
 const DEFAULT_SESSION_TOKEN = process.env.CODEX_PET_SESSION_TOKEN ?? process.env.LEAGUE_SESSION_TOKEN ?? "";
+const DEFAULT_BRIDGE_SECRET = process.env.CODEX_PET_BRIDGE_SECRET ?? "";
 
 const [, , ...argv] = process.argv;
 
@@ -190,9 +191,12 @@ async function main(args) {
 
   if (area === "battle" && action === "action") {
     if (!parsed.flags.battle) throw new Error("Pass --battle battle_room_id");
+    const current = await client.get(`/api/battles/${parsed.flags.battle}`);
     const result = await client.post(`/api/battles/${parsed.flags.battle}/actions`, {
       kind: parsed.flags.kind ?? "strike",
       skill_id: parsed.flags.skill,
+      turn_index: parsed.flags.turnIndex ?? current.battle.turn_index,
+      turn_nonce: parsed.flags.turnNonce ?? current.battle.turn_nonce,
     });
     printTurnBattle(result.battle);
     return;
@@ -317,15 +321,19 @@ function createApiClient(baseUrl, auth) {
 
 async function request(root, auth, method, path, body) {
   const headers = { "content-type": "application/json" };
+  const bodyText = body ? JSON.stringify(body) : undefined;
   if (auth.sessionToken) {
     headers["x-league-session-token"] = auth.sessionToken;
   } else {
     headers["x-league-account-id"] = auth.accountId;
   }
+  if (DEFAULT_BRIDGE_SECRET && bodyText) {
+    headers["x-league-bridge-signature"] = createHmac("sha256", DEFAULT_BRIDGE_SECRET).update(bodyText).digest("hex");
+  }
   const response = await fetch(`${root}${path}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: bodyText,
   });
   const payload = await response.json();
   if (!response.ok) {

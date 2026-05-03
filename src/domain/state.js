@@ -36,6 +36,14 @@ export function getAccount(state, accountId = "acct_demo") {
   return account;
 }
 
+export function requireAdmin(state, accountId) {
+  const account = getAccount(state, accountId);
+  if (account.role !== "admin") {
+    throw httpError(403, "ADMIN_REQUIRED", "An admin League account is required.");
+  }
+  return account;
+}
+
 export function leagueStatus(state) {
   return {
     active_season: activeSeason(state),
@@ -347,7 +355,12 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     counters,
     isFirstDailyReport,
   });
-  const risk = riskTrainingReport({ signals: input.signals ?? {}, counters, classification });
+  const risk = riskTrainingReport({
+    signals: input.signals ?? {},
+    counters,
+    classification,
+    trust: input.server_trust ?? { trusted: false, reason: "not_verified" },
+  });
   const effectiveAward = risk.hold_for_review
     ? { ...award, petXpApplied: 0, styleXpApplied: 0, capped: true }
     : award;
@@ -364,6 +377,7 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     quality_score: classification.qualityScore,
     risk_score: risk.score,
     risk_flags: risk.flags,
+    trust_reason: input.server_trust?.reason ?? "not_verified",
     pet_xp_delta: effectiveAward.petXpApplied,
     style_xp_delta: effectiveAward.styleXpApplied,
     created_at: now,
@@ -381,6 +395,7 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
     });
   }
   if (!risk.hold_for_review) {
+    const battleClassBefore = pet.battle_class;
     appendXpLedger(state, {
       accountId,
       petId: pet.id,
@@ -397,6 +412,7 @@ export function submitTrainingReport(state, accountId, petId, input = {}) {
       },
     });
     applyProgression(pet, effectiveAward.petXpApplied, effectiveAward.styleXpApplied);
+    if (pet.battle_class !== battleClassBefore) cancelWaitingTicketsForPet(state, pet.id, "pet_progressed");
   }
   logEvent(state, risk.hold_for_review ? "training.review" : "training.approved", accountId, {
     pet_id: pet.id,
@@ -498,9 +514,13 @@ export function joinMatchmakingQueue(state, accountId, petId, input = {}) {
     (ticket) => ticket.status === "waiting" && ticket.account_id === accountId && ticket.pet_id === pet.id && ticket.mode === mode,
   );
   if (existing) {
-    const matched = matchWaitingTicket(state, existing);
-    if (matched) return matchedResponse(state, matched.room, existing, matched.opponentTicket, accountId);
-    return { status: "waiting", ticket: publicTicket(existing), season, policy: publicMatchmakingPolicy(mode) };
+    if (!ticketStillCurrent(state, existing)) {
+      cancelTicket(existing, "ticket_stale");
+    } else {
+      const matched = matchWaitingTicket(state, existing);
+      if (matched) return matchedResponse(state, matched.room, existing, matched.opponentTicket, accountId);
+      return { status: "waiting", ticket: publicTicket(existing), season, policy: publicMatchmakingPolicy(mode) };
+    }
   }
 
   const ticket = createMatchTicket(accountId, pet, mode, season);
@@ -961,9 +981,18 @@ function settleFinishedTurnBattle(state, room) {
 }
 
 function matchWaitingTicket(state, ticket) {
+  if (!ticketStillCurrent(state, ticket)) {
+    cancelTicket(ticket, "ticket_stale");
+    return null;
+  }
   const now = new Date();
   const candidate = (state.matchTickets ?? [])
     .filter((entry) => entry.status === "waiting" && entry.id !== ticket.id)
+    .filter((entry) => {
+      if (ticketStillCurrent(state, entry)) return true;
+      cancelTicket(entry, "ticket_stale");
+      return false;
+    })
     .filter((entry) => entry.account_id !== ticket.account_id)
     .filter((entry) => entry.mode === ticket.mode)
     .filter((entry) => entry.battle_class === ticket.battle_class)
@@ -1000,6 +1029,21 @@ function matchWaitingTicket(state, ticket) {
   cancelOpenInvitesForPet(state, playerPet.id, "matched");
   cancelOpenInvitesForPet(state, opponentPet.id, "matched");
   return { room, opponentTicket: candidate };
+}
+
+function ticketStillCurrent(state, ticket) {
+  const pet = state.pets.find((entry) => entry.id === ticket.pet_id && entry.owner_account_id === ticket.account_id);
+  if (!pet || pet.status !== "active") return false;
+  if (pet.battle_class !== ticket.battle_class) return false;
+  if (Number(pet.rating?.lp ?? 0) !== Number(ticket.lp ?? 0)) return false;
+  if (ticket.mode === "ranked" && pet.rating?.season_id !== ticket.season_id) return false;
+  return true;
+}
+
+function cancelTicket(ticket, reason) {
+  ticket.status = "cancelled";
+  ticket.cancel_reason = reason;
+  ticket.cancelled_at = new Date().toISOString();
 }
 
 function matchedResponse(state, room, ticket, opponentTicket, accountId) {
@@ -1364,6 +1408,7 @@ function findOrCreateVerifiedAccount(state, challenge) {
   const account = {
     id: `acct_${randomUUID()}`,
     displayName: challenge.identifier.split("@")[0] || "League Player",
+    role: "player",
     identifier: challenge.identifier,
     email: challenge.method === "email_magic_link" ? challenge.identifier : null,
     verified: true,

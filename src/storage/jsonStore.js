@@ -46,6 +46,9 @@ export function createDefaultState() {
       {
         id: "acct_demo",
         displayName: "Demo Coder",
+        role: "admin",
+        identifier: "demo@codexpet.local",
+        email: "demo@codexpet.local",
         verified: true,
         authMethods: ["passkey", "email_magic_link", "league_oauth"],
         createdAt: new Date().toISOString(),
@@ -53,6 +56,9 @@ export function createDefaultState() {
       {
         id: "acct_rival",
         displayName: "Demo Rival",
+        role: "player",
+        identifier: "rival@codexpet.local",
+        email: "rival@codexpet.local",
         verified: true,
         authMethods: ["passkey", "email_magic_link", "league_oauth"],
         createdAt: new Date().toISOString(),
@@ -78,7 +84,14 @@ function migrateState(state) {
   const base = createDefaultState();
   const accounts = [...(state.accounts ?? [])];
   for (const account of base.accounts) {
-    if (!accounts.some((entry) => entry.id === account.id)) accounts.push(account);
+    const existing = accounts.find((entry) => entry.id === account.id);
+    if (existing) {
+      existing.role ??= account.role;
+      existing.identifier ??= account.identifier;
+      existing.email ??= account.email;
+    } else {
+      accounts.push(account);
+    }
   }
   return {
     ...base,

@@ -255,12 +255,13 @@ export function calculateTrainingAward({ reportType, counters, isFirstDailyRepor
   const reportSlotsRemaining = Math.max(0, XP_CAPS.petEligibleTrainingReportsDaily - counters.trainingReportsUsed);
   const petEligible = reportSlotsRemaining > 0;
 
-  const petRemaining = Math.max(0, XP_CAPS.petDaily - counters.petDaily);
-  const trainingRemaining = Math.max(0, XP_CAPS.trainingDaily - counters.trainingDaily);
+  const petRemaining = Math.max(0, XP_CAPS.petDaily - Number(counters.petDaily ?? 0));
+  const trainingRemaining = Math.max(0, XP_CAPS.trainingDaily - Number(counters.trainingDaily ?? 0));
   const petXpApplied = petEligible ? Math.min(rawPetXp, petRemaining, trainingRemaining) : 0;
   const styleOverflow = rawPetXp - petXpApplied;
-  const styleRemaining = Math.max(0, XP_CAPS.styleDaily - counters.styleDaily);
-  const styleXpApplied = Math.min(styleOverflow, styleRemaining);
+  const styleRemaining = Math.max(0, XP_CAPS.styleDaily - Number(counters.styleDaily ?? 0));
+  const styleWeeklyRemaining = Math.max(0, XP_CAPS.styleWeekly - Number(counters.styleWeekly ?? 0));
+  const styleXpApplied = Math.min(styleOverflow, styleRemaining, styleWeeklyRemaining);
 
   return {
     basePetXp: base,

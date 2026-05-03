@@ -18,6 +18,31 @@
           </div>
         </div>
 
+        <section class="panel compact auth-panel">
+          <h2>League Sign In</h2>
+          <label>
+            Method
+            <select id="authMethodInput" class="field">
+              <option value="email_magic_link">Email magic link</option>
+              <option value="passkey">Passkey</option>
+              <option value="league_oauth">League OAuth</option>
+            </select>
+          </label>
+          <label>
+            Identifier
+            <input id="authIdentifierInput" class="field" value="local@example.test" maxlength="80" />
+          </label>
+          <div class="button-row">
+            <button id="authChallengeButton" class="secondary-button">Challenge</button>
+            <button id="authVerifyButton" class="primary-button">Verify</button>
+          </div>
+          <label>
+            Code
+            <input id="authCodeInput" class="field" maxlength="16" />
+          </label>
+          <p id="authHint" class="muted">Sign in to use League actions.</p>
+        </section>
+
         <section class="panel compact">
           <h2>Active Pet</h2>
           <select id="petSelect" class="field"></select>

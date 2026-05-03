@@ -106,4 +106,18 @@ test("Training Report award respects report count and XP caps", () => {
   assert.equal(noPetSlot.petEligible, false);
   assert.equal(noPetSlot.petXpApplied, 0);
   assert.equal(noPetSlot.styleXpApplied, 120);
+
+  const weeklyCapped = calculateTrainingAward({
+    reportType: "milestone",
+    isFirstDailyReport: false,
+    counters: {
+      petDaily: 700,
+      trainingDaily: 400,
+      styleDaily: 100,
+      styleWeekly: XP_CAPS.styleWeekly - 5,
+      trainingReportsUsed: 3,
+    },
+  });
+  assert.equal(weeklyCapped.petXpApplied, 0);
+  assert.equal(weeklyCapped.styleXpApplied, 5);
 });

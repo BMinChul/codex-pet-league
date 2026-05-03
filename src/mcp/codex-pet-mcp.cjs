@@ -2,11 +2,12 @@
 
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { randomUUID } = require("node:crypto");
+const { createHmac, randomUUID } = require("node:crypto");
 
 const baseUrl = (process.env.CODEX_PET_LEAGUE_URL || "http://localhost:4317").replace(/\/$/, "");
 const accountId = process.env.CODEX_PET_ACCOUNT_ID || "acct_demo";
 const sessionToken = process.env.CODEX_PET_SESSION_TOKEN || process.env.LEAGUE_SESSION_TOKEN || "";
+const bridgeSecret = process.env.CODEX_PET_BRIDGE_SECRET || "";
 
 const tools = [
   {
@@ -173,6 +174,8 @@ const tools = [
         battle_id: { type: "string" },
         kind: { type: "string", enum: ["strike", "guard", "focus", "skill"] },
         skill_id: { type: "string" },
+        turn_index: { type: "number" },
+        turn_nonce: { type: "string" },
       },
       required: ["battle_id"],
       additionalProperties: false,
@@ -427,9 +430,12 @@ async function callTool(name, args) {
 
   if (name === "battle_action") {
     if (!args.battle_id) throw new Error("battle_id is required.");
+    const current = await apiGet(`/api/battles/${args.battle_id}`);
     return apiPost(`/api/battles/${args.battle_id}/actions`, {
       kind: args.kind ?? "strike",
       skill_id: args.skill_id,
+      turn_index: args.turn_index ?? current.battle.turn_index,
+      turn_nonce: args.turn_nonce ?? current.battle.turn_nonce,
     });
   }
 
@@ -502,15 +508,19 @@ async function apiPut(route, body) {
 
 async function request(method, route, body) {
   const headers = { "content-type": "application/json" };
+  const bodyText = body ? JSON.stringify(body) : undefined;
   if (sessionToken) {
     headers["x-league-session-token"] = sessionToken;
   } else {
     headers["x-league-account-id"] = accountId;
   }
+  if (bridgeSecret && bodyText) {
+    headers["x-league-bridge-signature"] = createHmac("sha256", bridgeSecret).update(bodyText).digest("hex");
+  }
   const response = await fetch(`${baseUrl}${route}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: bodyText,
   });
   const payload = await response.json();
   if (!response.ok) {

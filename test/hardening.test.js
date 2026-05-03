@@ -7,10 +7,13 @@ import {
   createPetAsset,
   getTurnBattle,
   getAccountBySession,
+  requireAdmin,
   startTurnBattle,
   submitTrainingReport,
+  submitTurnBattleAction,
   updatePetLoadout,
   verifyAuthChallenge,
+  joinMatchmakingQueue,
 } from "../src/domain/state.js";
 import { createDefaultState } from "../src/storage/jsonStore.js";
 
@@ -69,6 +72,39 @@ test("risky Training Reports are held without XP", () => {
   assert.equal(state.riskEvents[0].type, "training.report_held");
 });
 
+test("untrusted high-value Training Reports are held without XP", () => {
+  const { state, pet } = createPetFixture();
+  const forged = submitTrainingReport(state, "acct_demo", pet.id, {
+    client_report_id: "forged-high-value",
+    signals: {
+      implementationActivity: true,
+      verificationActivity: true,
+      milestone: true,
+      testsRun: 3,
+      filesChangedBucket: "large",
+    },
+  });
+
+  assert.equal(forged.report.status, "review");
+  assert.equal(forged.report.pet_xp_delta, 0);
+  assert.equal(forged.report.risk_flags.includes("untrusted_high_value_report"), true);
+
+  const trusted = submitTrainingReport(state, "acct_demo", pet.id, {
+    client_report_id: "trusted-high-value",
+    server_trust: { trusted: true, reason: "test_signature_valid" },
+    signals: {
+      implementationActivity: true,
+      verificationActivity: true,
+      milestone: true,
+      testsRun: 3,
+      filesChangedBucket: "large",
+    },
+  });
+
+  assert.equal(trusted.report.status, "approved");
+  assert.ok(trusted.report.pet_xp_delta > 0);
+});
+
 test("expired active battles are advanced before availability checks", () => {
   const { state, pet } = createPetFixture();
   const started = startTurnBattle(state, "acct_demo", pet.id, { mode: "casual" });
@@ -82,6 +118,75 @@ test("expired active battles are advanced before availability checks", () => {
   assert.equal(room.status, "finished");
   const next = startTurnBattle(state, "acct_demo", pet.id, { mode: "training" });
   assert.equal(next.battle.status, "in_progress");
+});
+
+test("player battle actions require current turn freshness", () => {
+  const { state, pet } = createPetFixture();
+  const started = startTurnBattle(state, "acct_demo", pet.id, { mode: "casual" });
+
+  assert.throws(
+    () => submitTurnBattleAction(state, "acct_demo", started.battle.id, { kind: "strike" }),
+    /current turn index/,
+  );
+  assert.throws(
+    () =>
+      submitTurnBattleAction(state, "acct_demo", started.battle.id, {
+        kind: "strike",
+        turn_index: started.battle.turn_index,
+        turn_nonce: "stale",
+      }),
+    /turn nonce/,
+  );
+});
+
+test("stale matchmaking tickets are cancelled before matching", () => {
+  const state = createDefaultState();
+  const demoAsset = createPetAsset(state, "acct_demo", {});
+  const rivalAsset = createPetAsset(state, "acct_rival", {});
+  const demoPet = createPet(state, "acct_demo", {
+    name: "Queued Pet",
+    pet_asset_id: demoAsset.id,
+    primary_element: "Forge",
+    secondary_element: "Trace",
+  });
+  const rivalPet = createPet(state, "acct_rival", {
+    name: "Rival Pet",
+    pet_asset_id: rivalAsset.id,
+    primary_element: "Logic",
+    secondary_element: "Pulse",
+  });
+
+  const waiting = joinMatchmakingQueue(state, "acct_demo", demoPet.id, { mode: "ranked" });
+  assert.equal(waiting.status, "waiting");
+  demoPet.rating.lp = 2000;
+
+  const result = joinMatchmakingQueue(state, "acct_rival", rivalPet.id, { mode: "ranked" });
+  assert.equal(result.status, "waiting");
+  assert.equal(state.matchTickets.find((ticket) => ticket.id === waiting.ticket.id).status, "cancelled");
+});
+
+test("admin actions require admin role", () => {
+  const state = createDefaultState();
+
+  assert.equal(requireAdmin(state, "acct_demo").id, "acct_demo");
+  assert.throws(() => requireAdmin(state, "acct_rival"), /admin League account/);
+});
+
+test("asset validation rejects invalid atlas uploads", () => {
+  const state = createDefaultState();
+
+  assert.throws(
+    () => createPetAsset(state, "acct_demo", { atlas_data_url: "data:image/png;base64,bm90LXBuZw==" }),
+    /valid PNG/,
+  );
+  assert.throws(
+    () => createPetAsset(state, "acct_demo", { atlas_data_url: pngDataUrl(128, 64) }),
+    /1536x1872/,
+  );
+
+  const asset = createPetAsset(state, "acct_demo", { atlas_data_url: pngDataUrl(1536, 1872) });
+  assert.equal(asset.width, 1536);
+  assert.match(asset.atlas_sha256, /^[a-f0-9]{64}$/);
 });
 
 test("audit reports no high integrity findings for a clean state", () => {
@@ -102,4 +207,12 @@ function createPetFixture() {
     secondary_element: "Trace",
   });
   return { state, pet };
+}
+
+function pngDataUrl(width, height) {
+  const bytes = Buffer.alloc(24);
+  Buffer.from("89504e470d0a1a0a", "hex").copy(bytes, 0);
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return `data:image/png;base64,${bytes.toString("base64")}`;
 }
