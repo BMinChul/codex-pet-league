@@ -57,6 +57,8 @@ The client may send only user intent, such as selected battle action. The server
 
 The design goal is not merely to make cheating difficult. The goal is to make local manipulation unable to affect ranked outcomes.
 
+Detailed anti-cheat design lives in `2026-05-02-codex-pet-league-anti-cheat-threat-model.md`. That threat model is part of the core product design, not a later moderation add-on.
+
 ## Pet Identity And Asset Registry
 
 Users should be able to use the pet appearance they created with Codex hatch. This is a major identity and attachment feature.

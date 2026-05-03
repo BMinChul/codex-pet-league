@@ -2,7 +2,10 @@
 
 Date: 2026-05-02
 Status: Draft
-Depends on: `2026-05-02-codex-pet-league-design.md`
+Depends on:
+
+- `2026-05-02-codex-pet-league-design.md`
+- `2026-05-02-codex-pet-league-anti-cheat-threat-model.md`
 
 ## Goal
 
@@ -24,6 +27,8 @@ Recommended initial architecture:
   - Redis or equivalent for matchmaking queues, active room state, connection presence, short TTL locks.
 
 Postgres remains the source of truth. Redis may speed up active gameplay, but final ranked results and replay logs must be durably written by the server.
+
+Anti-cheat is defined as a core architecture layer in `2026-05-02-codex-pet-league-anti-cheat-threat-model.md`. Server implementation must treat that document as a required security contract for accounts, assets, Training Reports, battles, XP, LP, ledgers, admin actions, and leaderboard integrity.
 
 ## Trust Boundaries
 
@@ -818,6 +823,8 @@ Errors sent over WebSocket should include a user-safe message and a machine-read
 
 ## Audit And Abuse Detection
 
+The complete abuse model is defined in `2026-05-02-codex-pet-league-anti-cheat-threat-model.md`.
+
 Record enough to investigate suspicious play:
 
 - session id
@@ -917,3 +924,4 @@ Security tests:
 - Ranked season entry uses five placement matches from a neutral 1500 hidden seed.
 - Ranked LP changes use fixed base results, opponent LP modifiers, and per-battle clamps.
 - Battle, XP, LP, and ranked outcomes are server-authoritative.
+- Anti-cheat threat modeling is a core architecture requirement and is tracked in `2026-05-02-codex-pet-league-anti-cheat-threat-model.md`.
