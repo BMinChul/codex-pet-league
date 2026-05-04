@@ -324,6 +324,42 @@ npm run backup -- runs/backups/manual-before-upgrade
 
 The backup script copies the JSON state, SQLite database files, WAL/SHM files when present, atlas assets, and a Postgres state snapshot when `CODEX_PET_STORAGE_DRIVER=postgres`.
 
+For Render one-off jobs, backup output is written to the job's ephemeral filesystem. Use that only to prove the backup command can read production state unless the artifact is retrieved immediately. The official shared server should rely on Render Postgres managed backups for durable database recovery, and any future exported state backup should go to a separate private backup bucket with no public custom domain. Do not store League state backups in the public R2 asset bucket.
+
+## Cost Guard And Incident Packs
+
+```bash
+npm run cost:check
+npm run cost:check -- --json
+npm run incident:pack
+npm run incident:pack -- runs/incidents/incident-YYYYMMDD-HHMM
+```
+
+`npm run cost:check` reads League state and flags usage patterns that can turn into cost or abuse problems: email-code challenge spikes, asset upload/storage growth, open asset reports, and open abuse alerts. It exits nonzero only at `critical` thresholds so it can be used in one-off jobs or monitors without failing on early warnings.
+
+`npm run incident:pack` writes a redacted local bundle with `/api/health`, `/api/metrics`, state summary counts, open review/alert summaries, and cost guard output. Set `CODEX_PET_INCIDENT_BASE_URL=https://league.<domain>` when collecting against the official shared server. It does not include raw state snapshots, secrets, API keys, session tokens, or full user content.
+
+Production ops threshold defaults:
+
+```bash
+CODEX_PET_INCIDENT_BASE_URL=https://league.<domain>
+CODEX_PET_INCIDENT_FETCH_TIMEOUT_MS=5000
+CODEX_PET_COST_AUTH_CHALLENGES_HOURLY_WARN=10
+CODEX_PET_COST_AUTH_CHALLENGES_HOURLY_CRITICAL=30
+CODEX_PET_COST_AUTH_CHALLENGES_DAILY_WARN=50
+CODEX_PET_COST_AUTH_CHALLENGES_DAILY_CRITICAL=150
+CODEX_PET_COST_ASSET_UPLOADS_DAILY_WARN=25
+CODEX_PET_COST_ASSET_UPLOADS_DAILY_CRITICAL=100
+CODEX_PET_COST_ASSET_BYTES_TOTAL_WARN=536870912
+CODEX_PET_COST_ASSET_BYTES_TOTAL_CRITICAL=1073741824
+CODEX_PET_COST_OPEN_ABUSE_ALERTS_WARN=25
+CODEX_PET_COST_OPEN_ABUSE_ALERTS_CRITICAL=100
+CODEX_PET_COST_OPEN_ASSET_REPORTS_WARN=25
+CODEX_PET_COST_OPEN_ASSET_REPORTS_CRITICAL=100
+```
+
+Keep Resend pay-as-you-go overages disabled during alpha. If cost guard warns on auth challenges, inspect Resend and Render logs before raising limits. If storage thresholds warn, inspect recent assets and moderation state before changing R2/CDN exposure.
+
 ## User-Owned Setup Kept For Last
 
 These cannot be completed locally without your accounts or provider choices:

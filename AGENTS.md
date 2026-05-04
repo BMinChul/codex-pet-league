@@ -20,14 +20,14 @@ Do not turn the product into a web-only game. Web can play, but Codex App plus C
 
 Latest verified repo baseline:
 
-- Commit: `9e4321a` (`Tighten auth email rate limit`).
-- Working tree after that commit was clean before the R2 handoff update.
+- Commit: `5603cf6` (`Document owner-only admin and live multiplayer check`).
+- Working tree after that commit was clean before the backup/cost/incident routine update.
 - Verification passed at that baseline:
-  - `npm test` with 83 passing tests.
+  - `npm test` with 84 passing tests.
   - `npm run prod:check` in local mode.
   - Live Render deploy reached `live`.
-  - Live `/api/health` and `/api/metrics` returned 200.
-  - Live auth email challenge rate limit was verified as first request 201, second same-IP request 429.
+  - Live multiplayer ranked smoke passed with disposable account cleanup.
+  - Owner-only admin allowlist was verified against the live Render service.
 
 Implemented local product surface:
 
@@ -144,7 +144,10 @@ Official shared server launch checklist:
   - [x] Render one-off job `job-d7sgumegvqtc73buhf80` confirmed a non-owner `role=admin` account is rejected with `ADMIN_NOT_ALLOWED` while the owner admin session is accepted.
 - [x] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
   - [x] Render one-off job `job-d7sgvt1j2pic73f9vplg` created disposable verified player sessions, uploaded hatch-pet atlas assets through the live API, created pets, submitted a Training Report, matched ranked PvP, resolved a turn battle, verified XP/LP/replay/profile, exercised asset report plus admin moderation, then cleaned the test accounts/pets/battles from Postgres state.
-- [ ] 9. Add backup/log/cost-alert/incident routines.
+- [x] 9. Add backup/log/cost-alert/incident routines.
+  - [x] `npm run backup` is documented for manual snapshots before risky changes; Render one-off backup output is explicitly treated as ephemeral unless retrieved.
+  - [x] `npm run cost:check` checks email-code challenge volume, asset upload/storage growth, open asset reports, and open abuse alerts against configurable warning/critical thresholds.
+  - [x] `npm run incident:pack` collects `/api/health`, `/api/metrics`, redacted state summaries, and cost guard output without dumping secrets, session tokens, API keys, or full state.
 - [ ] 10. Publish official server URL and user setup docs.
 
 Current live shared-server status:
@@ -161,6 +164,7 @@ Current live shared-server status:
 - Owner account `skskcb@gmail.com` is verified and server-side `role=admin`; the production owner bootstrap demoted local `@codexpet.local` demo admin access. Production admin access must stay owner-only unless the owner explicitly authorizes another email.
 - `CODEX_PET_ADMIN_EMAIL_ALLOWLIST` is set to `skskcb@gmail.com`, and non-owner `role=admin` accounts are rejected by admin endpoints.
 - Live multiplayer ranked smoke passed on 2026-05-04, and disposable test accounts/pets/assets/battles were cleaned from Postgres state afterward.
+- Backup/log/cost-alert/incident routines are implemented as local/one-off ops commands: `npm run backup`, `npm run cost:check`, and `npm run incident:pack`. Durable exported backups must use a separate private backup bucket if added later, not the public R2 asset bucket.
 - 2026-05-04 real integration checks passed:
   - Resend auth challenge through `https://league.codexpetz.com` returned 201 with Resend delivery and no exposed dev code.
   - Render one-off job `job-d7sg9fjeo5us73ahopmg` verified Postgres snapshot load/save persistence.
@@ -633,7 +637,7 @@ Production work not yet done:
 - Redis and S3-compatible code paths have real provider credential runtime verification.
 - OpenAI moderation is the chosen provider and has runtime verification; the production review runbook still needs completion.
 - The first verified owner account has been bootstrapped to server-side `role=admin`.
-- Backup/log/cost-alert/incident routines still need completion.
+- Backup/log/cost-alert/incident routines are implemented; external scheduling/alert delivery can be added later if the official server needs proactive notifications.
 - Docker is not required for local verification right now; revisit it only if the selected deployment target needs container packaging.
 
 ## Verification Expectations

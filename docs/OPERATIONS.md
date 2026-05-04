@@ -52,6 +52,7 @@ During operations, admin role changes should be rare and auditable. The official
 
 ```bash
 npm run ops:check
+npm run cost:check
 npm run test:abuse
 npm run test:storage
 npm run test:load
@@ -75,3 +76,71 @@ For more than one server instance, set `CODEX_PET_REALTIME_BUS=redis`, `CODEX_PE
 Run `npm run backup` before upgrades or risky maintenance.
 
 The admin console shows open review cases, audit findings, active abuse alerts, recent risk events, enforcement history, and asset moderation history. Audit-driven alerts are review-only signals; ranked locks stay manual to avoid false-positive punishment. Audit also recomputes pet XP, level, stats, Battle Class, Style XP, and ranked LP from server ledgers so direct state tampering is visible before ops sign-off.
+
+## Backup Loop
+
+Run a manual backup before risky deploys, schema work, provider changes, or moderation cleanups:
+
+```bash
+npm run backup -- runs/backups/manual-YYYYMMDD-HHMM
+```
+
+The script copies JSON/SQLite state, local atlas objects, and a Postgres state snapshot when the process is pointed at a Postgres runtime. On Render one-off jobs, files are written to the job's ephemeral filesystem, so treat that as a smoke check unless the artifact is retrieved immediately. For the official shared server, keep Render Postgres managed backups enabled and use a separate private backup bucket if durable exported snapshots are later added. Do not put state backups in the public R2 asset bucket or under `assets.codexpetz.com`.
+
+## Cost Guard Loop
+
+Run the cost guard daily during alpha and after any traffic spike:
+
+```bash
+npm run cost:check
+npm run cost:check -- --json
+```
+
+This is not provider billing data. It is a local sentinel over League state for the costs we can cause directly: email-code challenges, asset uploads/storage growth, open abuse alerts, and open asset reports. The command exits nonzero only on `critical` thresholds, while `warning` means review dashboards and usage before raising quotas or enabling overages.
+
+Default thresholds are controlled by:
+
+```bash
+CODEX_PET_COST_AUTH_CHALLENGES_HOURLY_WARN=10
+CODEX_PET_COST_AUTH_CHALLENGES_HOURLY_CRITICAL=30
+CODEX_PET_COST_AUTH_CHALLENGES_DAILY_WARN=50
+CODEX_PET_COST_AUTH_CHALLENGES_DAILY_CRITICAL=150
+CODEX_PET_COST_ASSET_UPLOADS_DAILY_WARN=25
+CODEX_PET_COST_ASSET_UPLOADS_DAILY_CRITICAL=100
+CODEX_PET_COST_ASSET_BYTES_TOTAL_WARN=536870912
+CODEX_PET_COST_ASSET_BYTES_TOTAL_CRITICAL=1073741824
+CODEX_PET_COST_OPEN_ABUSE_ALERTS_WARN=25
+CODEX_PET_COST_OPEN_ABUSE_ALERTS_CRITICAL=100
+CODEX_PET_COST_OPEN_ASSET_REPORTS_WARN=25
+CODEX_PET_COST_OPEN_ASSET_REPORTS_CRITICAL=100
+```
+
+If email challenges cross warning, keep Resend overages disabled, confirm the 10-minute IP rate limit is active, and inspect `/api/metrics` plus provider logs. If asset storage crosses warning, inspect recent uploads and moderation queue before increasing R2 or CDN exposure.
+
+## Incident Loop
+
+When the site is down, slow, under abuse, or behaving oddly, collect a redacted pack first:
+
+```bash
+npm run incident:pack
+npm run incident:pack -- runs/incidents/incident-YYYYMMDD-HHMM
+```
+
+Set `CODEX_PET_INCIDENT_BASE_URL=https://league.codexpetz.com` when collecting from the official shared server. The pack writes:
+
+- `health.json` from `/api/health`.
+- `metrics.txt` from `/api/metrics`.
+- `state-summary.json` with redacted counts, queues, recent event metadata, open reviews, and open abuse alerts.
+- `cost-guard.json` with the same usage threshold view as `npm run cost:check`.
+- `manifest.json` describing what was collected.
+
+The pack intentionally does not dump full state, session tokens, API keys, provider credentials, raw source code, or full user report contents.
+
+Triage order:
+
+1. Confirm `/api/health`, `/api/metrics`, and Render service/deploy status.
+2. Run `npm run prod:check` and `npm run cost:check` in the same runtime environment.
+3. Check Postgres, Redis, Resend, R2, and OpenAI provider dashboards for outages or quota limits.
+4. If auth email usage spikes, keep overages off and temporarily pause public login links if needed.
+5. If assets or moderation spike, quarantine suspicious assets manually; do not auto-punish accounts from risk scores alone.
+6. Roll back the latest Render deploy if the incident began immediately after a deploy.
