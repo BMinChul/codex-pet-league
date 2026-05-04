@@ -129,7 +129,7 @@ Official shared server launch checklist:
   - [x] OpenAI API project key for moderation.
   - [x] Cloudflare DNS zone or domain for `league.<domain>` and `assets.<domain>`.
 - [x] 2. Wire Render environment variables without committing secrets.
-- [ ] 3. Run Postgres migrations and schema checks against the real Render Postgres URL.
+- [x] 3. Run Postgres migrations and schema checks against the real Render Postgres URL.
 - [x] 4. Deploy the Render Web Service and verify `/api/health` plus `/api/metrics`.
 - [x] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
 - [ ] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
@@ -147,7 +147,8 @@ Current live shared-server status:
 - R2 bucket `codex-pet-league-assets` is configured and `assets.codexpetz.com` serves the tiny `ops-probe/r2-write-read-probe.png` object with 200 `image/png`.
 - `CODEX_PET_PUBLIC_BASE_URL` and `CODEX_PET_LEAGUE_URL` are set to `https://league.codexpetz.com`.
 - `CODEX_PET_ASSET_CDN_BASE_URL` is set to `https://assets.codexpetz.com`.
-- Postgres migration/schema check remains pending because only the Render internal database URL is currently available from the web service network.
+- Render one-off job `job-d7sfmi3eo5us73ah26l0` applied `001_initial_postgres_schema.sql` to the real Render Postgres database.
+- Render one-off job `job-d7sfmmjrjlhs73bspa70` passed schema check with `1 migration, 25 tables`.
 
 Current provider recommendation as of 2026-05-04:
 
