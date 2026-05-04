@@ -70,12 +70,18 @@ CODEX_PET_REQUEST_GUARD=redis
 CODEX_PET_DISTRIBUTED_LOCK=redis
 CODEX_PET_REDIS_URL=<render-key-value-redis-url>
 CODEX_PET_ASSET_STORAGE=s3_compatible
+CODEX_PET_S3_ENDPOINT=https://<cloudflare-account-id>.r2.cloudflarestorage.com
+CODEX_PET_S3_BUCKET=<r2-bucket-name>
+CODEX_PET_S3_REGION=auto
+CODEX_PET_S3_ACCESS_KEY_ID=<r2-access-key-id>
+CODEX_PET_S3_SECRET_ACCESS_KEY=<r2-secret-access-key>
+CODEX_PET_ASSET_CDN_BASE_URL=https://assets.<league-domain>
 CODEX_PET_BRIDGE_SECRET=<strong-secret>
 CODEX_PET_BRIDGE_ATTESTATION_SECRET=<strong-secret>
 CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
 ```
 
-Do not send real users to the Render service until the remaining provider choices are configured: Auth, Render Postgres, Render Key Value, object storage/CDN, moderation, domain/HTTPS, and admin access policy.
+Do not send real users to the Render service until the real provider credentials and remaining policies are configured: Clerk, Render Postgres, Render Key Value, Cloudflare R2/custom domain, moderation, domain/HTTPS, and admin access policy.
 
 ## Render Postgres Target
 
@@ -137,6 +143,33 @@ Notes:
 - Keep external Key Value access disabled unless a specific admin/debug workflow needs it, and disable it again afterward.
 - `codexpet doctor`, MCP `league_doctor`, and `/api/health` expose redacted Redis connection status for troubleshooting.
 
+## Cloudflare R2 Asset Storage Target
+
+The official shared League server object storage provider is Cloudflare R2 with a custom domain for public pet atlas URLs.
+
+Use R2 as an S3-compatible private write target for canonical atlas objects. Use the custom domain only as the public read surface for assets that League policy allows to be public. Do not rely on the Cloudflare-managed `r2.dev` URL for production traffic.
+
+Production runtime values:
+
+```bash
+CODEX_PET_ASSET_STORAGE=s3_compatible
+CODEX_PET_S3_ENDPOINT=https://<cloudflare-account-id>.r2.cloudflarestorage.com
+CODEX_PET_S3_BUCKET=<r2-bucket-name>
+CODEX_PET_S3_REGION=auto
+CODEX_PET_S3_ACCESS_KEY_ID=<r2-access-key-id>
+CODEX_PET_S3_SECRET_ACCESS_KEY=<r2-secret-access-key>
+CODEX_PET_ASSET_CDN_BASE_URL=https://assets.<league-domain>
+```
+
+R2 setup notes:
+
+- Create the R2 bucket in the same Cloudflare account that manages the League domain zone.
+- Create an R2 S3 API token with object read/write access scoped to the League bucket only.
+- Point `CODEX_PET_S3_ENDPOINT` at the account-level S3 API endpoint. The runtime uses path-style object URLs of the form `/bucket/key` and signs requests with `CODEX_PET_S3_REGION=auto`.
+- Connect a custom domain such as `assets.<league-domain>` to the bucket and set that value as `CODEX_PET_ASSET_CDN_BASE_URL`.
+- Keep the public development `r2.dev` URL disabled for production. Use the custom domain so Cloudflare cache, access controls, WAF rules, and bot controls can be applied.
+- The server should only emit CDN URLs for visible public assets. If a previously public asset is later quarantined, blocked, or made private, delete or overwrite the public object or purge/disable the custom-domain path as part of the moderation action.
+
 ## Clerk Auth Target
 
 The official shared League server auth provider is Clerk.
@@ -175,7 +208,7 @@ Before production traffic, test all three auth methods through `codexpet auth pr
 Use persistent storage for:
 
 - `CODEX_PET_POSTGRES_URL`
-- `CODEX_PET_ASSET_ROOT`
+- `CODEX_PET_ASSET_ROOT` for local filesystem storage only
 - backups from `npm run backup`
 
 The Docker compose file maps `./data` to `/app/data`, so local containers keep state between restarts.

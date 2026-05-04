@@ -100,15 +100,11 @@ Public GitHub baseline:
 - First pushed branch: `master`.
 - Public release prep commit: `a51e13b` (`Prepare public GitHub release`).
 
-Later official shared League server decisions still needed from the user:
+Remaining official shared League server decisions still needed from the user:
 
-- Auth provider for passkey, email magic link, and OAuth.
-- Managed Postgres provider.
-- Redis provider for realtime bus, request guard, and distributed locks.
-- Object storage provider for pet atlas assets, such as S3-compatible storage or Cloudflare R2.
-- CDN or public asset URL strategy.
 - Image/text moderation provider and review policy.
-- Hosting/deployment target and domain.
+- Domain, HTTPS, secure cookie, and admin access strategy.
+- Real provider credential values for Render, Clerk, Cloudflare R2, and the final domain.
 
 Official shared League server provider decision track:
 
@@ -117,7 +113,7 @@ Official shared League server provider decision track:
 - [x] Confirm Auth provider for passkeys, email links, and OAuth: Clerk.
 - [x] Confirm managed Postgres provider: Render Postgres.
 - [x] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks: Render Key Value.
-- [ ] Confirm object storage and public asset URL/CDN strategy.
+- [x] Confirm object storage and public asset URL/CDN strategy: Cloudflare R2 with a custom domain.
 - [ ] Confirm image/text moderation provider and review policy.
 - [ ] Confirm domain, HTTPS, cookie, and admin access strategy.
 - [ ] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
