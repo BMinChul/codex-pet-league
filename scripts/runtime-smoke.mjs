@@ -122,6 +122,7 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       assert(metrics.includes("codex_pet_uptime_seconds"), "metrics endpoint did not expose uptime");
 
       runCli("session", baseUrl, sessionA.session_token);
+      runCli(["setup", "--root", tempRoot, "--yes"], baseUrl, sessionA.session_token);
       runCli(["pet", "discover-hatch", "--root", tempRoot], baseUrl, sessionA.session_token);
       runCli(["pet", "import-hatch", "--root", tempRoot, "--primary", "Patch", "--secondary", "Logic"], baseUrl, sessionA.session_token);
       runCli("home", baseUrl, sessionA.session_token);

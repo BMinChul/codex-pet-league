@@ -34,6 +34,7 @@
     "privacyPolicyURL": "https://github.com/local/codex-pet-league",
     "termsOfServiceURL": "https://github.com/local/codex-pet-league",
     "defaultPrompt": [
+      "처음 시작 세팅해줘",
       "내 펫 상태와 오늘 남은 XP 보여줘",
       "훈련 리포트 초안을 만들고 제출 준비해줘",
       "랜덤 매칭을 시작하고 배틀 액션을 추천해줘"

@@ -42,6 +42,7 @@ const els = queryElements({
   sessionLabel: "#sessionLabel",
   leagueLabel: "#leagueLabel",
   petSelect: "#petSelect",
+  activePetLockHint: "#activePetLockHint",
   seedPetButton: "#seedPetButton",
   petNameInput: "#petNameInput",
   primaryElementInput: "#primaryElementInput",
@@ -356,6 +357,11 @@ function renderPetSelect() {
       : [{ value: "", label: "No pets yet" }],
     state.activePetId ?? "",
   );
+  if (els.activePetLockHint) {
+    els.activePetLockHint.textContent = state.activePetSelectionLocked
+      ? "Official active pet is locked for this League account."
+      : "First active League pet selection is permanent.";
+  }
 }
 
 function renderActivePet() {
@@ -842,12 +848,13 @@ function renderBattle(battle) {
   const arena = document.createElement("div");
   arena.className = "battle-arena";
   arena.dataset.status = battle.status ?? "unknown";
+  const skillsById = new Map(asArray(state.rules.skills).map((skill) => [skill.id, skill]));
 
   const combatants = document.createElement("div");
   combatants.className = "battle-combatants";
-  if (player) combatants.append(battleSide(player.is_you ? "You" : player.name, player));
+  if (player) combatants.append(battleSide(player.is_you ? "You" : player.name, player, skillsById));
   combatants.append(battleCenter(battle, secondsLeft));
-  if (opponent) combatants.append(battleSide(opponent.is_you ? "You" : opponent.name, opponent));
+  if (opponent) combatants.append(battleSide(opponent.is_you ? "You" : opponent.name, opponent, skillsById));
   arena.append(combatants);
 
   const recommendation = battleRecommendation(battle);
@@ -881,7 +888,7 @@ function updateBattleTimerText() {
   timer.dataset.urgent = secondsLeft !== null && secondsLeft <= 8 ? "true" : "false";
 }
 
-function battleSide(label, side) {
+function battleSide(label, side, skillsById = new Map()) {
   const wrapper = document.createElement("div");
   wrapper.className = "battle-side";
   if (side.is_you) wrapper.classList.add("is-you");
@@ -902,7 +909,9 @@ function battleSide(label, side) {
   const skillRow = document.createElement("div");
   skillRow.className = "battle-skill-row";
   for (const skillId of asArray(side.skills).slice(0, 4)) {
-    appendText(skillRow, "span", side.skill_aliases?.[skillId] ?? skillId);
+    const official = skillsById.get(skillId)?.officialName ?? skillId;
+    const alias = side.skill_aliases?.[skillId];
+    appendText(skillRow, "span", alias ? `${alias} · ${official}` : official);
   }
   wrapper.append(skillRow);
   return wrapper;
@@ -972,9 +981,10 @@ function battleRecommendation(battle) {
     return { label: "Action Locked", reason: "Your action is submitted for this turn." };
   }
   const hpRatio = Number(side?.hp ?? 0) / Math.max(1, Number(side?.max_hp ?? 1));
-  if (hpRatio <= 0.32) return { label: "Recommended · Guard", reason: "Low HP. Guard reduces incoming damage and gains energy." };
-  if (Number(side?.energy ?? 0) < 2) return { label: "Recommended · Focus", reason: "Low energy. Focus builds enough energy for skill turns." };
-  return { label: "Recommended · Strike", reason: "Stable state. Strike gives reliable damage and gains energy." };
+  const deadline = "Submit before 30s; no action auto-guards, third miss is AFK.";
+  if (hpRatio <= 0.32) return { label: "Recommended · Guard", reason: `Low HP. Guard reduces incoming damage and gains energy. ${deadline}` };
+  if (Number(side?.energy ?? 0) < 2) return { label: "Recommended · Focus", reason: `Low energy. Focus builds enough energy for skill turns. ${deadline}` };
+  return { label: "Recommended · Strike", reason: `Stable state. Strike gives reliable damage and gains energy. ${deadline}` };
 }
 
 function renderMatchmaking(result) {

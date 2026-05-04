@@ -48,6 +48,11 @@ async function main(args) {
     return;
   }
 
+  if (area === "setup") {
+    await setupLeague(client, parsed.flags);
+    return;
+  }
+
   if (area === "next" || area === "play") {
     const home = await buildLeagueHome(client, parsed.flags.pet);
     printNextAction(home);
@@ -327,7 +332,8 @@ async function buildLeagueHome(client, petId = null) {
     optional(client.get("/api/leaderboard"), { leaderboard: [] }),
   ]);
   const pets = petsResult?.pets ?? [];
-  const pet = petId ? pets.find((entry) => entry.id === petId) : pets[0];
+  const activePet = activePetFromResult(petsResult);
+  const pet = petId ? pets.find((entry) => entry.id === petId) : activePet;
   if (petId && !pet) throw new Error(`Pet not found: ${petId}`);
   const [xpStatus, matchmaking] = await Promise.all([
     pet ? optional(client.get(`/api/pets/${pet.id}/xp-status`)) : null,
@@ -342,6 +348,92 @@ async function buildLeagueHome(client, petId = null) {
     matchmaking,
     leaderboard: boardResult?.leaderboard ?? [],
   };
+}
+
+async function setupLeague(client, flags = {}) {
+  const [session, petsResult] = await Promise.all([
+    optional(client.get("/api/session")),
+    optional(client.get("/api/pets"), { pets: [] }),
+  ]);
+  const activePet = activePetFromResult(petsResult);
+  console.log("Codex Pet League setup");
+  printIdentityPolicy();
+  console.log(`League account: ${session?.account?.display_name ?? session?.account?.email ?? session?.account?.id ?? "development fallback"}`);
+
+  if (activePet) {
+    console.log(`Official active pet is already locked: ${activePet.name} (${activePet.id})`);
+    console.log(`Rank: ${activePet.rating.label} ${activePet.rating.lp} LP · Class ${activePet.battle_class} · Lv ${activePet.level}`);
+    const home = await buildLeagueHome(client, activePet.id);
+    const next = recommendedNextAction(home);
+    console.log(`Next: ${next.command}`);
+    return;
+  }
+
+  const hatchPath = flags.path ?? flags.package ?? flags.hatch ?? flags.hatchDir;
+  let selectedPath = hatchPath ? String(hatchPath) : null;
+  let selectedPackage = null;
+
+  if (!selectedPath) {
+    const packages = await discoverHatchPetPackages({ root: flags.root });
+    if (!packages.length) {
+      console.log("No local hatch-pet packages were found.");
+      console.log("Next: create a pet with the official hatch-pet skill, then run codexpet setup --path <package-dir> --yes");
+      return;
+    }
+    if (packages.length > 1) {
+      console.log("Multiple hatch-pet candidates found. Choose explicitly because the first League pet selection is permanent.");
+      printHatchCandidates(packages);
+      if (!input.isTTY || !output.isTTY) {
+        console.log("Next: codexpet setup --path <package-dir> --yes");
+        return;
+      }
+      const choice = await promptChoice(packages);
+      if (!choice) return;
+      selectedPackage = choice;
+      selectedPath = choice.package_dir;
+    } else {
+      selectedPackage = packages[0];
+      selectedPath = packages[0].package_dir;
+    }
+  }
+
+  console.log(`Selected hatch package: ${selectedPackage?.manifest?.displayName ?? selectedPath}`);
+  console.log("Permanent lock: this account can use only the first active League pet for official play.");
+  const confirmed = await confirmPermanentSelection(flags);
+  if (!confirmed) {
+    console.log("Setup paused before permanent League pet selection.");
+    console.log(`Run again with: codexpet setup --path ${quotePath(selectedPath)} --yes`);
+    return;
+  }
+
+  const hatch = await loadHatchPetPackage(selectedPath, { root: flags.root });
+  const asset = await client.post("/api/pet-assets/uploads", {
+    appearance: hatch.appearance,
+    atlas_data_url: hatch.data_url,
+    hatch_pet_manifest: hatch.manifest,
+    hatch_source: "openai_hatch_pet",
+  });
+  const result = await client.post("/api/pets", {
+    name: flags.name ?? hatch.manifest.displayName,
+    pet_asset_id: asset.asset.id,
+    primary_element: flags.primary ?? "Forge",
+    secondary_element: flags.secondary ?? "Trace",
+  });
+
+  console.log(`Official pet registered: ${result.pet.name}`);
+  if (result.pet.is_active) {
+    console.log(`Active selection locked: ${result.active_pet_id}`);
+  } else {
+    console.log(`Imported but not active. Existing active pet remains: ${result.active_pet_id ?? "unknown"}`);
+  }
+  console.log(`Class ${result.pet.battle_class} · Lv ${result.pet.level} · ${result.pet.rating.label} ${result.pet.rating.lp} LP`);
+  console.log("Loadout: 4 official skills ready. Skill nicknames are cosmetic only.");
+  console.log(`Next: codexpet home --pet ${result.active_pet_id ?? result.pet.id}`);
+}
+
+function activePetFromResult(petsResult) {
+  const pets = petsResult?.pets ?? [];
+  return pets.find((entry) => entry.id === petsResult?.active_pet_id) ?? pets.find((entry) => entry.is_active) ?? null;
 }
 
 async function resolveBattleId(client, flags = {}) {
@@ -386,6 +478,51 @@ async function discoverHatchPets(flags = {}) {
   });
 }
 
+function printHatchCandidates(packages) {
+  packages.forEach((entry, index) => {
+    console.log(`${index + 1}. ${entry.manifest.displayName} (${entry.manifest.id})`);
+    console.log(`   ${entry.package_dir}`);
+    console.log(`   ${entry.image.format} · updated ${entry.updated_at}`);
+  });
+}
+
+async function promptChoice(packages) {
+  const rl = createInterface({ input, output });
+  try {
+    const answer = (await rl.question("Permanent League pet package number > ")).trim();
+    const index = Number(answer) - 1;
+    if (!Number.isInteger(index) || !packages[index]) {
+      console.log("No package selected.");
+      return null;
+    }
+    return packages[index];
+  } finally {
+    rl.close();
+  }
+}
+
+async function confirmPermanentSelection(flags) {
+  if (flags.yes || flags.confirmPermanent) return true;
+  if (!input.isTTY || !output.isTTY) return false;
+  const rl = createInterface({ input, output });
+  try {
+    const answer = (await rl.question("Lock this as the permanent official League pet? Type YES > ")).trim();
+    return answer === "YES";
+  } finally {
+    rl.close();
+  }
+}
+
+function printIdentityPolicy() {
+  console.log("Codex login: ChatGPT sign-in can run Codex, but it is not a verifiable League account token.");
+  console.log("League login: use passkey, email magic link, or League OAuth session for official ownership.");
+}
+
+function quotePath(value) {
+  const text = String(value ?? "");
+  return /\s/.test(text) ? `"${text}"` : text;
+}
+
 async function createPet(client, flags, options = {}) {
   const hatchPath = flags.hatch ?? flags.hatchDir ?? flags.path ?? flags.package;
   if (options.importHatch || hatchPath) {
@@ -405,6 +542,11 @@ async function createPet(client, flags, options = {}) {
       secondary_element: flags.secondary ?? "Trace",
     });
     console.log(`Imported hatch-pet ${hatch.manifest.displayName}`);
+    console.log(
+      pet.pet.is_active
+        ? "This pet is now the permanent official active League pet."
+        : `Active selection is already locked to ${pet.active_pet_id ?? "another pet"}; this import stays inactive.`,
+    );
     printObject({
       pet_id: pet.pet.id,
       asset_id: asset.asset.id,
@@ -412,6 +554,8 @@ async function createPet(client, flags, options = {}) {
       spritesheet: hatch.spritesheet_path,
       format: hatch.image.format,
       active: Boolean(pet.pet.is_active),
+      active_pet_id: pet.active_pet_id ?? null,
+      active_pet_selection_locked: Boolean(pet.active_pet_selection_locked),
       level: pet.pet.level,
       battle_class: pet.pet.battle_class,
       rank: `${pet.pet.rating.label} ${pet.pet.rating.lp} LP`,
@@ -848,17 +992,21 @@ function printTerminalBattle(battle, rules = null) {
   const ownSide = viewerSide(battle);
   const otherSide = battle.viewer_side === "opponent" ? battle.sides.player : battle.sides.opponent;
   const recommendation = recommendBattleAction(battle, rules);
+  const timeLeft = secondsLeft(battle.turn_deadline_at);
   console.log("=".repeat(72));
   console.log(`Codex Pet Battle · ${battle.id}`);
   console.log(`${battle.mode} · ${battle.status} · turn ${battle.turn_index}/${battle.max_turns}`);
   if (battle.status === "in_progress") {
-    console.log(`Timer: ${secondsLeft(battle.turn_deadline_at)}s · ${pendingLine(battle)}`);
+    console.log(`Timer: ${timeLeft}s ${bar(timeLeft, 30, 14)} · ${pendingLine(battle)}`);
+    console.log("Timeout rule: no action -> Guard; third consecutive miss -> AFK loss.");
   } else {
     console.log(`Result: ${battle.result?.result ?? battle.status} · ${battle.result?.reason ?? "complete"}`);
   }
   console.log("-".repeat(72));
   console.log(sideConsoleLine("YOU", ownSide));
+  console.log(skillConsoleLine("YOU", ownSide, rules));
   console.log(sideConsoleLine("FOE", otherSide));
+  console.log(skillConsoleLine("FOE", otherSide, rules));
   console.log("-".repeat(72));
   console.log(`Recommended: ${recommendation.kind}${recommendation.skillId ? ` ${recommendation.skillId}` : ""}`);
   console.log(`Reason: ${recommendation.reason}`);
@@ -880,11 +1028,26 @@ function viewerSide(battle) {
 function sideConsoleLine(label, side) {
   const hp = `${side.hp}/${side.max_hp}`;
   const energy = `${Number(side.energy ?? 0)}/6`;
-  return `${label.padEnd(3)} ${String(side.name ?? "Unknown").padEnd(18)} HP ${hp.padEnd(9)} ${bar(side.hp, side.max_hp)}  EN ${energy}  AFK ${side.timeout_count ?? 0}/3`;
+  const statuses = Object.keys(side.statuses ?? {}).filter((key) => side.statuses?.[key]).join(",") || "clear";
+  return `${label.padEnd(3)} ${String(side.name ?? "Unknown").padEnd(18)} HP ${hp.padEnd(9)} ${bar(side.hp, side.max_hp)}  EN ${energy}  AFK ${side.timeout_count ?? 0}/3  ${statuses}`;
+}
+
+function skillConsoleLine(label, side, rules = null) {
+  const skillsById = new Map((rules?.skills ?? []).map((skill) => [skill.id, skill]));
+  const skills = (side.skills ?? []).slice(0, 4).map((skillId) => {
+    const skill = skillsById.get(skillId) ?? inferSkillFromId(skillId);
+    const alias = side.skill_aliases?.[skillId];
+    const official = skill?.officialName ?? skillId;
+    const cost = skillCost(skill?.role);
+    const ready = Number(side.energy ?? 0) >= cost ? "ready" : `needs ${cost}`;
+    return alias ? `${alias}/${official}(${ready})` : `${official}(${ready})`;
+  });
+  return `${" ".repeat(4)}${label} skills: ${skills.join(" · ") || "none"}`;
 }
 
 function bar(value, cap, width = 18) {
-  const filled = cap > 0 ? Math.round((Math.max(0, value) / cap) * width) : 0;
+  const numeric = Number(value);
+  const filled = cap > 0 && Number.isFinite(numeric) ? Math.round((Math.max(0, numeric) / cap) * width) : 0;
   return `[${"#".repeat(Math.min(width, filled))}${".".repeat(Math.max(0, width - filled))}]`;
 }
 
@@ -1010,6 +1173,7 @@ function printHelp() {
   console.log(`Codex Pet League CLI
 
 Usage:
+  codexpet setup [--path C:\\Users\\you\\.codex\\pets\\pebble] [--yes] --primary Forge --secondary Trace
   codexpet home
   codexpet next
   codexpet daily [--pet pet_id]

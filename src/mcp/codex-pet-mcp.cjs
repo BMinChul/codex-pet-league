@@ -40,6 +40,23 @@ const tools = [
     },
   },
   {
+    name: "league_setup",
+    title: "League Setup",
+    description: "Runs the Codex App onboarding loop: verify League session, discover hatch-pet candidates, require permanent-selection confirmation, import the first official pet, and return the next play action.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        package_path: { type: "string" },
+        root_path: { type: "string" },
+        confirm_permanent: { type: "boolean" },
+        name: { type: "string" },
+        primary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
+        secondary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "league_home",
     title: "League Home",
     description: "Returns a combined League account, active pet, daily XP, matchmaking, and leaderboard snapshot.",
@@ -450,6 +467,10 @@ async function callTool(name, args) {
     });
   }
 
+  if (name === "league_setup") {
+    return leagueSetup(args);
+  }
+
   if (name === "league_home") {
     return buildLeagueHome(args.pet_id);
   }
@@ -649,7 +670,8 @@ async function buildLeagueHome(petId = null) {
     optional(apiGet("/api/leaderboard"), { leaderboard: [] }),
   ]);
   const pets = petsResult?.pets ?? [];
-  const pet = petId ? pets.find((entry) => entry.id === petId) : pets[0];
+  const activePet = activePetFromResult(petsResult);
+  const pet = petId ? pets.find((entry) => entry.id === petId) : activePet;
   if (petId && !pet) throw new Error(`Pet not found: ${petId}`);
   const [xpStatus, matchmaking] = await Promise.all([
     pet ? optional(apiGet(`/api/pets/${pet.id}/xp-status`)) : null,
@@ -673,6 +695,94 @@ async function buildLeagueHome(petId = null) {
     leaderboard_top: (boardResult?.leaderboard ?? []).slice(0, 5),
     next_action: next,
   };
+}
+
+async function leagueSetup(args = {}) {
+  const [session, petsResult] = await Promise.all([
+    optional(apiGet("/api/session")),
+    optional(apiGet("/api/pets"), { pets: [] }),
+  ]);
+  const identityPolicy = {
+    codex_chatgpt_login: "Codex CLI/App can sign in with ChatGPT, but no public server-verifiable OpenAI identity claim is exposed to this League server.",
+    league_account: "Use League passkey, email magic link, or League OAuth session for official ownership.",
+  };
+  const activePet = activePetFromResult(petsResult);
+  if (activePet) {
+    const home = await buildLeagueHome(activePet.id);
+    return {
+      state: "ready",
+      identity_policy: identityPolicy,
+      account: session?.account ?? null,
+      active_pet_locked: true,
+      pet: summarizePet(activePet),
+      next_action: home.next_action,
+    };
+  }
+
+  let packagePath = args.package_path;
+  const packages = await discoverHatchPetPackages({ root: args.root_path });
+  if (!packagePath) {
+    if (packages.length === 0) {
+      return {
+        state: "needs_hatch_package",
+        identity_policy: identityPolicy,
+        message: "No local hatch-pet packages were found. Create one with the official OpenAI hatch-pet skill, then run setup again.",
+        packages: [],
+      };
+    }
+    if (packages.length > 1) {
+      return {
+        state: "needs_package_choice",
+        identity_policy: identityPolicy,
+        message: "Multiple hatch-pet candidates were found. Choose package_path explicitly because the first active League pet is permanent.",
+        packages: packages.map(summarizeHatchPackage),
+      };
+    }
+    packagePath = packages[0].package_dir;
+  }
+
+  const selected = packages.find((entry) => entry.package_dir === packagePath || entry.manifest.id === packagePath) ?? null;
+  if (!args.confirm_permanent) {
+    return {
+      state: "needs_confirmation",
+      identity_policy: identityPolicy,
+      message: "Confirm that this hatch-pet package should become the permanent official active League pet for this account.",
+      selected_package: selected ? summarizeHatchPackage(selected) : { package_dir: packagePath },
+      confirm_with: { confirm_permanent: true, package_path: packagePath },
+    };
+  }
+
+  const hatch = await loadHatchPetPackage(packagePath, {
+    root: args.root_path,
+  });
+  const asset = await apiPost("/api/pet-assets/uploads", {
+    appearance: hatch.appearance,
+    atlas_data_url: hatch.data_url,
+    hatch_pet_manifest: hatch.manifest,
+    hatch_source: "openai_hatch_pet",
+  });
+  const created = await apiPost("/api/pets", {
+    name: args.name ?? hatch.manifest.displayName,
+    pet_asset_id: asset.asset.id,
+    primary_element: args.primary_element ?? "Forge",
+    secondary_element: args.secondary_element ?? "Trace",
+  });
+  const home = await buildLeagueHome(created.active_pet_id ?? created.pet.id);
+  return {
+    state: created.pet.is_active ? "ready" : "imported_inactive",
+    identity_policy: identityPolicy,
+    account: session?.account ?? null,
+    pet: summarizePet(created.pet),
+    asset: { id: asset.asset.id, hatch_pet_id: hatch.manifest.id },
+    active_pet_id: created.active_pet_id ?? null,
+    active_pet_locked: Boolean(created.active_pet_selection_locked),
+    next_action: home.next_action,
+  };
+}
+
+function activePetFromResult(petsResult) {
+  const pets = petsResult?.pets ?? [];
+  return pets.find((entry) => entry.id === petsResult?.active_pet_id) ?? pets.find((entry) => entry.is_active) ?? null;
 }
 
 async function resolvePet(petId) {

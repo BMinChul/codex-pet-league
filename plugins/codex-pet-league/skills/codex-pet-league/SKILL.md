@@ -13,6 +13,7 @@ Use this skill when the user asks about their Codex pet, official `hatch-pet` pa
 - Treat OpenAI `hatch-pet` output as the primary pet asset source. The expected package is `${CODEX_HOME:-~/.codex}/pets/<pet-id>/pet.json` plus `spritesheet.webp`.
 - Users can have multiple local `hatch-pet` packages, but League play uses one permanent active official pet per account. Do not switch it after the first League selection.
 - Public Codex App documentation does not currently expose a verifiable "currently selected active pet" API to the League server. Treat local package discovery as candidate input, not proof of official League identity.
+- Codex CLI/App can sign in with ChatGPT for Codex access, but that does not currently give this League server a verified OpenAI account identity token.
 - Treat the League server as authoritative. Do not infer XP, LP, rank, battle results, or replay outcomes locally.
 - Prefer MCP tools when available. Use CLI commands as the fallback bridge.
 - Official actions require `CODEX_PET_SESSION_TOKEN` or a League session cookie. `CODEX_PET_ACCOUNT_ID` is only a local development fallback.
@@ -22,22 +23,24 @@ Use this skill when the user asks about their Codex pet, official `hatch-pet` pa
 
 ## Common MCP Flow
 
-1. `league_home` for a combined account, active pet, XP, queue, and leaderboard snapshot.
-2. `next_action` when the user asks what to do next.
-3. `pet_discover_hatch` if the user has not provided a package path.
-4. `pet_import_hatch` with `package_path`, or no path when discovery finds exactly one package, to register an official pet.
-5. `pet_activate` only before the first permanent League selection, or idempotently for the already active pet.
-6. `pet_create` with `atlas_path` only for direct PNG/WebP spritesheet uploads.
-7. `league_play` for the Codex App loop: inspect active state, optionally join queue, optionally submit the recommended turn.
-8. `training_report_draft`, then `training_report_submit` after user approval.
-9. `matchmaking_join` for random ranked or casual queue.
-10. `friend_invite_create` and `friend_invite_accept` for invite-code battles.
-11. `battle_get`, `battle_action_options`, then `battle_action` for active turns.
+1. `league_setup` for first-run onboarding. It checks League session, discovers hatch packages, requires permanent-selection confirmation, imports the official pet, and returns the next action.
+2. `league_home` for a combined account, active pet, XP, queue, and leaderboard snapshot.
+3. `next_action` when the user asks what to do next.
+4. `pet_discover_hatch` if the user has not provided a package path.
+5. `pet_import_hatch` with `package_path`, or no path when discovery finds exactly one package, to register an official pet.
+6. `pet_activate` only before the first permanent League selection, or idempotently for the already active pet.
+7. `pet_create` with `atlas_path` only for direct PNG/WebP spritesheet uploads.
+8. `league_play` for the Codex App loop: inspect active state, optionally join queue, optionally submit the recommended turn.
+9. `training_report_draft`, then `training_report_submit` after user approval.
+10. `matchmaking_join` for random ranked or casual queue.
+11. `friend_invite_create` and `friend_invite_accept` for invite-code battles.
+12. `battle_get`, `battle_action_options`, then `battle_action` for active turns.
 
 ## CLI Fallbacks
 
 ```powershell
 npm run cli -- home
+npm run cli -- setup --path C:\Users\you\.codex\pets\pebble --yes --primary Forge --secondary Trace
 npm run cli -- next
 npm run cli -- daily
 npm run cli -- pet discover-hatch
@@ -59,6 +62,7 @@ npm run cli -- battle action --battle battle_room_id --kind strike
 ## User-Facing Trigger Phrases
 
 - "내 펫 상태 보여줘" -> `league_home`
+- "처음 시작 세팅해줘" -> `league_setup`
 - "내 hatch-pet 펫 찾아줘" -> `pet_discover_hatch`
 - "내 hatch-pet 펫 서버에 올려줘" -> `pet_import_hatch`
 - "처음 선택한 펫을 공식으로 확정할래" -> `pet_activate`

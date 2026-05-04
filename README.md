@@ -71,6 +71,8 @@ Codex App and Codex CLI are the primary play surfaces. The web UI remains useful
 
 OpenAI's public `hatch-pet` contract documents local packages under `${CODEX_HOME:-~/.codex}/pets/<pet-id>` with `pet.json` and `spritesheet.webp`. Public Codex App documentation does not currently document a verifiable API or signed claim for reading the user's currently selected active Codex pet. Until OpenAI exposes that, Codex Pet League treats local discovery as candidate input only and makes the League server's first active pet selection authoritative and permanent per account.
 
+Official Codex docs say Codex CLI/App can be used after signing in with ChatGPT, but that is Codex product access, not a League-verifiable account token. League login remains passkey, email magic link, or League OAuth until OpenAI documents a signed identity claim for third-party League servers.
+
 ## Scripts
 
 ```bash
@@ -101,6 +103,7 @@ Set `CODEX_PET_STORAGE_DRIVER=postgres` with `CODEX_PET_POSTGRES_URL` to use the
 The CLI is the local bridge that Codex App slash commands or natural-language tool triggers can call.
 
 ```bash
+npm run cli -- setup --path C:\Users\you\.codex\pets\pebble --yes --primary Forge --secondary Trace
 npm run cli -- home
 npm run cli -- next
 npm run cli -- daily
@@ -146,6 +149,7 @@ Natural-language trigger mapping:
 오늘 작업 pet XP로 제출해줘 -> codexpet report submit
 펫 XP 상태 보여줘 -> codexpet xp status
 내 hatch-pet 펫 찾아줘 -> codexpet pet discover-hatch
+처음 시작 세팅해줘 -> codexpet setup --path <hatch-pet-folder> --yes
 내 hatch-pet 펫 서버에 올려줘 -> codexpet pet import-hatch --path <hatch-pet-folder>
 처음 선택한 펫을 공식으로 확정할래 -> codexpet pet activate --pet <pet-id>
 내 펫 서버에 올려줘 -> codexpet pet create --atlas <path.png|path.webp>
@@ -224,6 +228,7 @@ The MCP bridge exposes the same product actions as tools:
 
 - `auth_challenge`
 - `auth_verify`
+- `league_setup`
 - `league_home`
 - `next_action`
 - `league_play`

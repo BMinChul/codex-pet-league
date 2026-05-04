@@ -41,6 +41,19 @@ Untrusted:
 - Modified plugins or direct API callers.
 - User-provided report type, battle result, or reward claims.
 
+## Codex Sign-In And Setup Boundary
+
+Codex CLI/App can be used after ChatGPT sign-in, but the current public Codex documentation does not expose a League-verifiable OpenAI account token, signed ID claim, or active pet claim to third-party League servers. Treat that sign-in as Codex product access only.
+
+League setup therefore follows this boundary:
+
+- League ownership requires a League verified session from passkey, email magic link, or League OAuth.
+- Local `hatch-pet` package discovery is candidate input only.
+- The first server-created active League pet is permanent for the account.
+- Multiple local hatch packages require an explicit package path; do not auto-select the latest package.
+- Setup flows must show or return a permanent-selection confirmation before importing the first official pet.
+- After selection, switching active pet is blocked and should be logged as a rejected mutation, not silently ignored.
+
 ## Golden Rules
 
 - Clients submit intent, assets, and report summaries. They never submit official outcomes.

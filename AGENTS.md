@@ -16,6 +16,14 @@ Primary surfaces:
 
 Do not turn the product into a web-only game. Web can play, but Codex App plus CLI are priority one.
 
+Official Codex sign-in docs:
+
+- https://developers.openai.com/codex/app
+- https://developers.openai.com/codex/cli
+- https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan
+
+Codex CLI/App can sign in with ChatGPT for Codex access. That still does not give this League server a public, signed, server-verifiable OpenAI account identity claim. Keep League account auth separate until OpenAI documents such a claim/API.
+
 ## Official OpenAI Hatch Pet Compatibility
 
 Official pet source link:
@@ -484,6 +492,7 @@ node --check public/app.js
 ## Do Not Break These Decisions
 
 - Do not rely on a Codex App active pet API unless OpenAI officially documents a server-verifiable claim/API.
+- Do not treat ChatGPT sign-in to Codex as League login. It is Codex access only unless OpenAI provides a verified identity handoff.
 - Do not allow active League pet switching after first selection.
 - Do not add pet trading or account-to-account pet transfer.
 - Do not let Style XP affect combat power.

@@ -37,6 +37,7 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
     [
       "auth_challenge",
       "auth_verify",
+      "league_setup",
       "league_home",
       "next_action",
       "league_play",
@@ -133,6 +134,10 @@ test("MCP bridge calls League tools against a strict temp server", async () => {
 
     const next = await client.callTool("next_action", { pet_id: petId });
     assert.ok(next.structuredContent.command);
+
+    const setupReady = await client.callTool("league_setup", {});
+    assert.equal(setupReady.structuredContent.state, "ready");
+    assert.equal(setupReady.structuredContent.pet.id, petId);
 
     const discovered = await client.callTool("pet_discover_hatch", {
       root_path: hatch.root,
