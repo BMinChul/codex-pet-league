@@ -12,8 +12,56 @@ const HATCH_ATLAS_CONTRACT = Object.freeze({
   states: ["idle", "running-right", "running-left", "waving", "jumping", "failed", "waiting", "running", "review"],
 });
 
-async function loadHatchPetPackage(inputPath) {
-  const packageDir = await resolveHatchPetDir(inputPath);
+async function loadHatchPetPackage(inputPath, options = {}) {
+  const packageDir = await resolveHatchPetDir(inputPath, options);
+  const summary = await readHatchPetSummary(packageDir);
+  const bytes = await fs.readFile(summary.spritesheet_path);
+
+  return {
+    ...summary,
+    atlas_contract: { ...HATCH_ATLAS_CONTRACT },
+    data_url: `data:${summary.image.content_type};base64,${bytes.toString("base64")}`,
+    appearance: {
+      source: "openai_hatch_pet",
+      package_id: summary.manifest.id,
+      manifest_file: "pet.json",
+      spritesheet_file: path.basename(summary.spritesheet_path),
+      pet_json: summary.manifest,
+      atlas_contract: { ...HATCH_ATLAS_CONTRACT },
+    },
+  };
+}
+
+async function discoverHatchPetPackages(options = {}) {
+  const root = path.resolve(expandHome(options.root ?? path.join(codexHome(), "pets")));
+  let entries;
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+
+  const packages = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const packageDir = path.join(root, entry.name);
+    try {
+      packages.push(await readHatchPetSummary(packageDir));
+    } catch (error) {
+      if (options.includeInvalid) {
+        packages.push({
+          package_dir: packageDir,
+          status: "invalid",
+          error: error.message,
+        });
+      }
+    }
+  }
+  return packages.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
+}
+
+async function readHatchPetSummary(packageDir) {
   const manifestPath = path.join(packageDir, "pet.json");
   const manifest = sanitizeHatchManifest(JSON.parse(await fs.readFile(manifestPath, "utf8")));
   const spriteRelativePath = manifest.spritesheetPath || "spritesheet.webp";
@@ -37,32 +85,35 @@ async function loadHatchPetPackage(inputPath) {
     manifest_path: manifestPath,
     spritesheet_path: spritesheetPath,
     manifest,
-    atlas_contract: { ...HATCH_ATLAS_CONTRACT },
-    data_url: `data:${image.content_type};base64,${bytes.toString("base64")}`,
     image,
-    appearance: {
-      source: "openai_hatch_pet",
-      package_id: manifest.id,
-      manifest_file: "pet.json",
-      spritesheet_file: path.basename(spritesheetPath),
-      pet_json: manifest,
-      atlas_contract: { ...HATCH_ATLAS_CONTRACT },
-    },
+    updated_at: await packageUpdatedAt(manifestPath, spritesheetPath),
   };
 }
 
-async function resolveHatchPetDir(inputPath) {
-  if (!inputPath) throw new Error("Pass a hatch-pet package folder or package id.");
+async function resolveHatchPetDir(inputPath, options = {}) {
+  if (!inputPath) return resolveDiscoveredHatchPetDir(options);
   const expanded = expandHome(String(inputPath).trim());
   const direct = path.resolve(expanded);
   if (await isDirectory(direct)) return direct;
 
   if (!path.isAbsolute(expanded) && !expanded.includes("/") && !expanded.includes("\\")) {
-    const codexPetDir = path.join(codexHome(), "pets", expanded);
+    const searchRoot = options.root ? path.resolve(expandHome(options.root)) : path.join(codexHome(), "pets");
+    const codexPetDir = path.join(searchRoot, expanded);
     if (await isDirectory(codexPetDir)) return codexPetDir;
   }
 
   throw new Error(`hatch-pet package not found: ${inputPath}`);
+}
+
+async function resolveDiscoveredHatchPetDir(options) {
+  const candidates = await discoverHatchPetPackages({ root: options.root });
+  if (candidates.length === 0) {
+    const root = path.resolve(expandHome(options.root ?? path.join(codexHome(), "pets")));
+    throw new Error(`No hatch-pet packages were found under ${root}.`);
+  }
+  if (candidates.length === 1 || options.preferLatest) return candidates[0].package_dir;
+  const names = candidates.map((candidate) => `${candidate.manifest.displayName} (${candidate.manifest.id}) -> ${candidate.package_dir}`).join("\n");
+  throw new Error(`Multiple hatch-pet packages were found. Pass --path or --latest.\n${names}`);
 }
 
 function sanitizeHatchManifest(manifest) {
@@ -163,6 +214,11 @@ async function isDirectory(value) {
   }
 }
 
+async function packageUpdatedAt(...filePaths) {
+  const stats = await Promise.all(filePaths.map((filePath) => fs.stat(filePath)));
+  return new Date(Math.max(...stats.map((stat) => stat.mtimeMs))).toISOString();
+}
+
 function codexHome() {
   return path.resolve(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
 }
@@ -189,6 +245,7 @@ function sanitizeText(value, maxLength) {
 
 module.exports = {
   HATCH_ATLAS_CONTRACT,
+  discoverHatchPetPackages,
   inspectHatchSpritesheet,
   loadHatchPetPackage,
 };

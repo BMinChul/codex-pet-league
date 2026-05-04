@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   acceptFriendInvite,
+  activatePet,
   adminAudit,
   adminConsole,
   cancelMatchmakingTicket,
@@ -19,6 +20,7 @@ import {
   verifyAuthChallenge,
   joinMatchmakingQueue,
   moderateAsset,
+  publicPetView,
   reportPetAsset,
   reviewTrainingReport,
   runServerAuthorityJob,
@@ -65,6 +67,33 @@ test("loadout updates enforce four official skills and aliases", () => {
     () => updatePetLoadout(state, "acct_demo", pet.id, { skills: ["logic_offense"] }),
     /exactly four skills/,
   );
+});
+
+test("one account has one active League pet selection", () => {
+  const state = createDefaultState();
+  const firstAsset = createPetAsset(state, "acct_demo", {});
+  const secondAsset = createPetAsset(state, "acct_demo", { appearance: { variant: "second" } });
+  const first = createPet(state, "acct_demo", {
+    name: "First Pet",
+    pet_asset_id: firstAsset.id,
+    primary_element: "Forge",
+    secondary_element: "Trace",
+  });
+  assert.equal(state.accounts.find((account) => account.id === "acct_demo").active_pet_id, first.id);
+
+  const second = createPet(state, "acct_demo", {
+    name: "Second Pet",
+    pet_asset_id: secondAsset.id,
+    primary_element: "Logic",
+    secondary_element: "Patch",
+  });
+  assert.equal(state.accounts.find((account) => account.id === "acct_demo").active_pet_id, second.id);
+  assert.equal(publicPetView(state, first).is_active, false);
+  assert.equal(publicPetView(state, second).is_active, true);
+
+  const activated = activatePet(state, "acct_demo", first.id);
+  assert.equal(activated.active_pet_id, first.id);
+  assert.equal(publicPetView(state, first).is_active, true);
 });
 
 test("risky Training Reports are held without XP", () => {

@@ -25,6 +25,7 @@ http://localhost:4317
 - League demo account session.
 - Public pet asset registration with server-side manifest validation.
 - Official `hatch-pet` package import: `pet.json` plus `spritesheet.webp` from `${CODEX_HOME:-~/.codex}/pets/<pet-id>`.
+- Multiple local `hatch-pet` packages can be discovered, but each League account has one active official pet selection.
 - Optional Codex hatch spritesheet PNG/WebP upload, with server-side dimension, MIME, and hash validation.
 - Local filesystem atlas storage and public atlas URLs for visible active pets.
 - Official pet creation with primary and secondary elements.
@@ -104,7 +105,9 @@ npm run cli -- session list
 npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
 npm run cli -- auth verify --challenge auth_challenge_id --code 123456
 npm run cli -- league
+npm run cli -- pet discover-hatch
 npm run cli -- pet import-hatch --path C:\Users\you\.codex\pets\pebble --primary Forge --secondary Trace
+npm run cli -- pet activate --pet pet_id
 npm run cli -- pet create --name Pebble --primary Forge --secondary Trace
 npm run cli -- pet profile
 npm run cli -- pet loadout --skills forge_offense,forge_defense,forge_status,trace_offense --aliases forge_offense=Hammer
@@ -138,7 +141,9 @@ Natural-language trigger mapping:
 펫 훈련 리포트 만들어줘 -> codexpet report draft
 오늘 작업 pet XP로 제출해줘 -> codexpet report submit
 펫 XP 상태 보여줘 -> codexpet xp status
+내 hatch-pet 펫 찾아줘 -> codexpet pet discover-hatch
 내 hatch-pet 펫 서버에 올려줘 -> codexpet pet import-hatch --path <hatch-pet-folder>
+이 펫을 공식으로 쓸래 -> codexpet pet activate --pet <pet-id>
 내 펫 서버에 올려줘 -> codexpet pet create --atlas <path.png|path.webp>
 지금 배틀 액션 뭐 가능해 -> codexpet battle actions --battle <id>
 터미널에서 배틀판 보여줘 -> codexpet battle watch --battle <id>
@@ -220,7 +225,9 @@ The MCP bridge exposes the same product actions as tools:
 - `league_play`
 - `pet_status`
 - `pet_create`
+- `pet_discover_hatch`
 - `pet_import_hatch`
+- `pet_activate`
 - `league_status`
 - `pet_profile`
 - `pet_loadout_update`

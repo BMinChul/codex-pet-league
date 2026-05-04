@@ -12,7 +12,7 @@ const DEFAULT_ACCOUNT_ID = process.env.CODEX_PET_ACCOUNT_ID ?? "acct_demo";
 const DEFAULT_SESSION_TOKEN = process.env.CODEX_PET_SESSION_TOKEN ?? process.env.LEAGUE_SESSION_TOKEN ?? "";
 const DEFAULT_BRIDGE_SECRET = process.env.CODEX_PET_BRIDGE_SECRET ?? "";
 const DEFAULT_BRIDGE_ATTESTATION_SECRET = process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET ?? "";
-const { loadHatchPetPackage } = hatchPackage;
+const { discoverHatchPetPackages, loadHatchPetPackage } = hatchPackage;
 
 const [, , ...argv] = process.argv;
 
@@ -121,8 +121,22 @@ async function main(args) {
     return;
   }
 
+  if (area === "pet" && action === "discover-hatch") {
+    await discoverHatchPets(parsed.flags);
+    return;
+  }
+
   if (area === "pet" && (action === "create" || action === "import-hatch")) {
-    await createPet(client, parsed.flags);
+    await createPet(client, parsed.flags, { importHatch: action === "import-hatch" });
+    return;
+  }
+
+  if (area === "pet" && action === "activate") {
+    const petId = parsed.flags.pet ?? parsed.flags.id;
+    if (!petId) throw new Error("Pass --pet pet_id");
+    const result = await client.post(`/api/pets/${petId}/activate`, {});
+    console.log(`Active pet: ${result.pet.name}`);
+    printObject({ active_pet_id: result.active_pet_id, pet: summarizePet(result.pet) });
     return;
   }
 
@@ -343,18 +357,42 @@ async function resolveBattleId(client, flags = {}) {
 async function listPets(client) {
   const result = await client.get("/api/pets");
   if (result.pets.length === 0) {
-    console.log("No pets registered. Run: codexpet pet import-hatch --path <hatch-pet-folder>");
+    console.log("No pets registered. Run: codexpet pet import-hatch");
     return;
   }
   for (const pet of result.pets) {
-    console.log(`${pet.id}  ${pet.name}  Lv ${pet.level}  ${pet.battle_class}  ${pet.rating.label} ${pet.rating.lp} LP`);
+    const marker = pet.is_active ? "*" : " ";
+    console.log(`${marker} ${pet.id}  ${pet.name}  Lv ${pet.level}  ${pet.battle_class}  ${pet.rating.label} ${pet.rating.lp} LP`);
   }
 }
 
-async function createPet(client, flags) {
+async function discoverHatchPets(flags = {}) {
+  const packages = await discoverHatchPetPackages({ root: flags.root ?? flags.path });
+  if (!packages.length) {
+    console.log("No hatch-pet packages found.");
+    return;
+  }
+  printObject({
+    count: packages.length,
+    packages: packages.map((entry) => ({
+      id: entry.manifest.id,
+      display_name: entry.manifest.displayName,
+      description: entry.manifest.description,
+      package_dir: entry.package_dir,
+      spritesheet: entry.spritesheet_path,
+      format: entry.image.format,
+      updated_at: entry.updated_at,
+    })),
+  });
+}
+
+async function createPet(client, flags, options = {}) {
   const hatchPath = flags.hatch ?? flags.hatchDir ?? flags.path ?? flags.package;
-  if (hatchPath) {
-    const hatch = await loadHatchPetPackage(hatchPath);
+  if (options.importHatch || hatchPath) {
+    const hatch = await loadHatchPetPackage(hatchPath, {
+      root: flags.root,
+      preferLatest: Boolean(flags.latest),
+    });
     const asset = await client.post("/api/pet-assets/uploads", {
       appearance: hatch.appearance,
       atlas_data_url: hatch.data_url,
@@ -412,8 +450,8 @@ async function resolvePet(client, petId) {
     if (!pet) throw new Error(`Pet not found: ${petId}`);
     return pet;
   }
-  if (!result.pets[0]) throw new Error("No pets registered. Run: codexpet pet import-hatch --path <hatch-pet-folder>");
-  return result.pets[0];
+  if (!result.pets[0]) throw new Error("No pets registered. Run: codexpet pet import-hatch");
+  return result.pets.find((entry) => entry.id === result.active_pet_id) ?? result.pets.find((entry) => entry.is_active) ?? result.pets[0];
 }
 
 function createApiClient(baseUrl, auth) {
@@ -514,7 +552,7 @@ function printLeagueHome(home) {
   }
   if (!home.pet) {
     console.log("Pet: none registered");
-    console.log("Next: codexpet pet import-hatch --path <hatch-pet-folder> --primary Forge --secondary Trace");
+    console.log("Next: codexpet pet import-hatch --primary Forge --secondary Trace");
     return;
   }
   console.log(
@@ -601,7 +639,7 @@ function recommendedNextAction(home) {
     return {
       title: "Create your first official pet",
       reason: "Official League actions need a server-registered pet.",
-      command: "codexpet pet import-hatch --path <hatch-pet-folder> --primary Forge --secondary Trace",
+      command: "codexpet pet import-hatch --primary Forge --secondary Trace",
     };
   }
   const battle = home.matchmaking?.active_battles?.[0];
@@ -983,8 +1021,10 @@ Usage:
   codexpet league
   codexpet rules
   codexpet pets
-  codexpet pet import-hatch --path C:\\Users\\you\\.codex\\pets\\pebble --primary Forge --secondary Trace
+  codexpet pet discover-hatch
+  codexpet pet import-hatch [--path C:\\Users\\you\\.codex\\pets\\pebble] [--latest] --primary Forge --secondary Trace
   codexpet pet create --name Pebble --primary Forge --secondary Trace [--atlas path.png|path.webp]
+  codexpet pet activate --pet pet_id
   codexpet pet profile [--pet pet_id]
   codexpet pet loadout --skills skill1,skill2,skill3,skill4 [--aliases skill_id=Alias]
   codexpet pet replays [--pet pet_id]

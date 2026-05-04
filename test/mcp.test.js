@@ -42,7 +42,9 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
       "league_play",
       "pet_status",
       "pet_create",
+      "pet_discover_hatch",
       "pet_import_hatch",
+      "pet_activate",
       "league_status",
       "pet_profile",
       "pet_loadout_update",
@@ -132,12 +134,22 @@ test("MCP bridge calls League tools against a strict temp server", async () => {
     const next = await client.callTool("next_action", { pet_id: petId });
     assert.ok(next.structuredContent.command);
 
+    const discovered = await client.callTool("pet_discover_hatch", {
+      root_path: hatch.root,
+    });
+    assert.equal(discovered.structuredContent.count, 1);
+    assert.equal(discovered.structuredContent.packages[0].id, "mcp-hatch");
+
     const imported = await client.callTool("pet_import_hatch", {
-      package_path: hatch.dir,
+      root_path: hatch.root,
       primary_element: "Patch",
       secondary_element: "Logic",
     });
     assert.equal(imported.structuredContent.pet.name, "MCP Hatch");
+    assert.equal(imported.structuredContent.pet.is_active, true);
+
+    const reactivated = await client.callTool("pet_activate", { pet_id: petId });
+    assert.equal(reactivated.structuredContent.active_pet_id, petId);
 
     const loop = await client.callTool("league_play", { pet_id: petId });
     assert.equal(loop.structuredContent.state, "idle");
@@ -242,7 +254,8 @@ async function startTempServer() {
 }
 
 async function makeHatchPackage() {
-  const dir = await mkdtemp(join(tmpdir(), "codexpet-hatch-"));
+  const root = await mkdtemp(join(tmpdir(), "codexpet-hatch-root-"));
+  const dir = join(root, "mcp-hatch");
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, "pet.json"),
@@ -259,8 +272,9 @@ async function makeHatchPackage() {
   );
   await writeFile(join(dir, "spritesheet.webp"), webpHeader(1536, 1872));
   return {
+    root,
     dir,
-    close: () => rm(dir, { recursive: true, force: true }),
+    close: () => rm(root, { recursive: true, force: true }),
   };
 }
 

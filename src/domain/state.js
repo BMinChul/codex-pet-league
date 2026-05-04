@@ -246,6 +246,7 @@ export function createPetAsset(state, accountId, input = {}) {
 export function createPet(state, accountId, input = {}) {
   const asset = state.assets.find((entry) => entry.id === input.pet_asset_id && entry.owner_account_id === accountId);
   if (!asset) throw httpError(404, "ASSET_NOT_FOUND", "Register a pet asset before creating a pet.");
+  const account = getAccount(state, accountId);
   const season = activeSeason(state);
 
   const primaryElement = input.primary_element && ELEMENTS.includes(input.primary_element) ? input.primary_element : "Forge";
@@ -289,8 +290,28 @@ export function createPet(state, accountId, input = {}) {
   };
   syncCosmeticRewards(pet);
   state.pets.push(pet);
+  if (!account.active_pet_id || input.make_active !== false) {
+    account.active_pet_id = pet.id;
+    account.active_pet_selected_at = now;
+  }
   logEvent(state, "pet.created", accountId, { pet_id: pet.id, asset_id: asset.id });
   return pet;
+}
+
+export function activatePet(state, accountId, petId) {
+  const account = getAccount(state, accountId);
+  const pet = ownedPet(state, accountId, petId);
+  advanceAllBattleRooms(state);
+  const activeBattle = (state.battleRooms ?? []).find((room) => room.status === "in_progress" && sideKeyForAccount(room, accountId));
+  if (activeBattle) {
+    throw httpError(409, "ACTIVE_BATTLE_LOCKS_PET_SELECTION", "Finish the active battle before switching your League pet.");
+  }
+  const now = new Date().toISOString();
+  account.active_pet_id = pet.id;
+  account.active_pet_selected_at = now;
+  pet.last_selected_at = now;
+  logEvent(state, "pet.activated", accountId, { pet_id: pet.id });
+  return { pet: publicPetView(state, pet), active_pet_id: pet.id };
 }
 
 export function updatePetLoadout(state, accountId, petId, input = {}) {
@@ -1152,8 +1173,10 @@ export function petAsset(state, pet) {
 export function publicPetView(state, pet) {
   const asset = petAsset(state, pet);
   const isVisible = Boolean(asset && asset.visibility !== "private" && asset.safety_status !== "blocked");
+  const account = state.accounts?.find((entry) => entry.id === pet.owner_account_id);
   return {
     ...pet,
+    is_active: account?.active_pet_id === pet.id,
     asset: {
       ...asset,
       is_visible: isVisible,

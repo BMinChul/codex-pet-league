@@ -169,6 +169,12 @@ async function runSilentRefresh() {
 function bindEvents() {
   els.petSelect?.addEventListener("change", async () => {
     state.activePetId = els.petSelect.value || null;
+    if (state.activePetId) {
+      await api(`/api/pets/${encodeURIComponent(state.activePetId)}/activate`, {
+        method: "POST",
+        body: {},
+      });
+    }
     await loadActivePetDetails();
     renderApp();
   });
@@ -217,7 +223,7 @@ async function refresh() {
     state.adminConsole = await loadOptional("/api/admin/console", "Admin console could not be loaded.");
   }
   if (!state.pets.some((pet) => pet.id === state.activePetId)) {
-    state.activePetId = state.pets[0]?.id ?? null;
+    state.activePetId = petsResult?.active_pet_id ?? state.pets.find((pet) => pet.is_active)?.id ?? state.pets[0]?.id ?? null;
   }
   await loadActivePetDetails();
   await loadActiveBattle();

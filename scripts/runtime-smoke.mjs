@@ -55,7 +55,7 @@ async function runOfficialRuntimeSmoke(tempRoot) {
 
       const petA = await createSmokePet(baseUrl, headersA, "Smoke Alpha", "Forge", "Pulse");
       const petB = await createSmokePet(baseUrl, headersB, "Smoke Beta", "Forge", "Pulse");
-      const hatchPackage = await makeHatchPackage(tempRoot);
+      await makeHatchPackage(tempRoot);
 
       const loadout = await putJson(
         baseUrl,
@@ -122,7 +122,8 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       assert(metrics.includes("codex_pet_uptime_seconds"), "metrics endpoint did not expose uptime");
 
       runCli("session", baseUrl, sessionA.session_token);
-      runCli(["pet", "import-hatch", "--path", hatchPackage, "--primary", "Patch", "--secondary", "Logic"], baseUrl, sessionA.session_token);
+      runCli(["pet", "discover-hatch", "--root", tempRoot], baseUrl, sessionA.session_token);
+      runCli(["pet", "import-hatch", "--root", tempRoot, "--primary", "Patch", "--secondary", "Logic"], baseUrl, sessionA.session_token);
       runCli("home", baseUrl, sessionA.session_token);
       runCli("daily", baseUrl, sessionA.session_token);
       runCli("next", baseUrl, sessionA.session_token);

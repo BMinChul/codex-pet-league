@@ -14,6 +14,7 @@ import { authProviderStatus } from "../domain/authConfig.js";
 import {
   adminAudit,
   adminConsole,
+  activatePet,
   cancelMatchmakingTicket,
   createAuthChallenge,
   createPet,
@@ -256,8 +257,9 @@ async function handleApi(req, res, url) {
 
   if (req.method === "GET" && path === "/api/pets") {
     const state = await loadState();
-    getAccount(state, accountId);
+    const account = getAccount(state, accountId);
     sendJson(res, 200, {
+      active_pet_id: account.active_pet_id ?? null,
       pets: state.pets.filter((pet) => pet.owner_account_id === accountId).map((pet) => publicPetView(state, pet)),
     });
     return;
@@ -279,9 +281,13 @@ async function handleApi(req, res, url) {
     const result = await mutate("pet.created", async (state) => {
       await applyRequestGuard(state, req, "pet.create", accountId, body);
       getAccount(state, accountId);
-      return createPet(state, accountId, body);
+      const pet = createPet(state, accountId, body);
+      return {
+        pet: publicPetView(state, pet),
+        active_pet_id: getAccount(state, accountId).active_pet_id ?? null,
+      };
     });
-    sendJson(res, 201, { pet: result });
+    sendJson(res, 201, result);
     return;
   }
 
@@ -490,6 +496,15 @@ async function handlePetApi(req, res, accountId, petId, subpath, body) {
       await applyRequestGuard(state, req, "battle.simulate", accountId, body);
       getAccount(state, accountId);
       return simulateBattle(state, accountId, petId, body);
+    });
+    sendJson(res, 201, result);
+    return;
+  }
+
+  if (req.method === "POST" && subpath === "activate") {
+    const result = await mutate("pet.activated", async (state) => {
+      await applyRequestGuard(state, req, "pet.activate", accountId, body);
+      return activatePet(state, accountId, petId);
     });
     sendJson(res, 201, result);
     return;

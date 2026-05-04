@@ -3,7 +3,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { createHmac, randomUUID } = require("node:crypto");
-const { loadHatchPetPackage } = require("../hatchPackage.cjs");
+const { discoverHatchPetPackages, loadHatchPetPackage } = require("../hatchPackage.cjs");
 
 const baseUrl = (process.env.CODEX_PET_LEAGUE_URL || "http://localhost:4317").replace(/\/$/, "");
 const accountId = process.env.CODEX_PET_ACCOUNT_ID || "acct_demo";
@@ -109,6 +109,18 @@ const tools = [
     },
   },
   {
+    name: "pet_discover_hatch",
+    title: "Discover hatch-pet Packages",
+    description: "Scans the local Codex pets folder for official hatch-pet packages that can be imported into League.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        root_path: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "pet_import_hatch",
     title: "Import hatch-pet Package",
     description: "Imports an official hatch-pet package folder containing pet.json and spritesheet.webp, then creates the League pet.",
@@ -116,11 +128,25 @@ const tools = [
       type: "object",
       properties: {
         package_path: { type: "string" },
+        root_path: { type: "string" },
+        latest: { type: "boolean" },
         name: { type: "string" },
         primary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
         secondary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
       },
-      required: ["package_path"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "pet_activate",
+    title: "Activate League Pet",
+    description: "Sets the one official active League pet for this account. Switching is blocked while a battle is active.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pet_id: { type: "string" },
+      },
+      required: ["pet_id"],
       additionalProperties: false,
     },
   },
@@ -465,8 +491,19 @@ async function callTool(name, args) {
     });
   }
 
+  if (name === "pet_discover_hatch") {
+    const packages = await discoverHatchPetPackages({ root: args.root_path });
+    return {
+      count: packages.length,
+      packages: packages.map(summarizeHatchPackage),
+    };
+  }
+
   if (name === "pet_import_hatch") {
-    const hatch = await loadHatchPetPackage(args.package_path);
+    const hatch = await loadHatchPetPackage(args.package_path, {
+      root: args.root_path,
+      preferLatest: Boolean(args.latest),
+    });
     const asset = await apiPost("/api/pet-assets/uploads", {
       appearance: hatch.appearance,
       atlas_data_url: hatch.data_url,
@@ -479,6 +516,11 @@ async function callTool(name, args) {
       primary_element: args.primary_element ?? "Forge",
       secondary_element: args.secondary_element ?? "Trace",
     });
+  }
+
+  if (name === "pet_activate") {
+    if (!args.pet_id) throw new Error("pet_id is required.");
+    return apiPost(`/api/pets/${args.pet_id}/activate`, {});
   }
 
   if (name === "league_status") {
@@ -642,8 +684,8 @@ async function resolvePet(petId) {
     if (!pet) throw new Error(`Pet not found: ${petId}`);
     return pet;
   }
-  if (!result.pets[0]) throw new Error("No pets registered. Create one with pet_create first.");
-  return result.pets[0];
+  if (!result.pets[0]) throw new Error("No pets registered. Import one with pet_import_hatch first.");
+  return result.pets.find((entry) => entry.id === result.active_pet_id) ?? result.pets.find((entry) => entry.is_active) ?? result.pets[0];
 }
 
 async function leaguePlay(args = {}) {
@@ -888,6 +930,7 @@ function summarizePet(pet) {
   return {
     id: pet.id,
     name: pet.name,
+    is_active: Boolean(pet.is_active),
     level: pet.level,
     battle_class: pet.battle_class,
     primary_element: pet.primary_element,
@@ -895,6 +938,18 @@ function summarizePet(pet) {
     rank: pet.rating?.label,
     lp: pet.rating?.lp,
     stats_total: pet.stats?.total,
+  };
+}
+
+function summarizeHatchPackage(entry) {
+  return {
+    id: entry.manifest.id,
+    display_name: entry.manifest.displayName,
+    description: entry.manifest.description,
+    package_dir: entry.package_dir,
+    spritesheet: entry.spritesheet_path,
+    format: entry.image.format,
+    updated_at: entry.updated_at,
   };
 }
 
