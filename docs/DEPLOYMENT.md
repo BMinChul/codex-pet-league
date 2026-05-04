@@ -77,6 +77,35 @@ CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
 
 Do not send real users to the Render service until the remaining provider choices are configured: Auth, Render Postgres, Render Key Value, object storage/CDN, moderation, domain/HTTPS, and admin access policy.
 
+## Render Postgres Target
+
+The official shared League server managed database provider is Render Postgres.
+
+Create the database in the same Render account and region as the Web Service. Use the Render Postgres internal database URL for `CODEX_PET_POSTGRES_URL` whenever the League server runs on Render. Keep the external URL for local admin tools only, and restrict or disable external access after initial setup.
+
+Initial database setup:
+
+```bash
+CODEX_PET_POSTGRES_URL=<render-internal-postgres-url> npm run db:postgres:migrate
+```
+
+Production runtime values:
+
+```bash
+CODEX_PET_STORAGE_DRIVER=postgres
+CODEX_PET_POSTGRES_URL=<render-internal-postgres-url>
+CODEX_PET_POSTGRES_SSL=false
+CODEX_PET_POSTGRES_SSL_REJECT_UNAUTHORIZED=true
+CODEX_PET_POSTGRES_SNAPSHOT_RETENTION=500
+```
+
+Notes:
+
+- Render Postgres provides internal and external URLs. The internal URL minimizes latency through Render private networking.
+- Render's external Postgres connections use TLS. If connecting from local admin tools with the external URL, keep TLS support enabled in the client.
+- The current runtime writes authoritative snapshots to `league_state_snapshots`; table-specific write-through can be added after the production database is live.
+- Consider Render PgBouncer only if connection pressure appears in metrics or logs. The current single Web Service can start with direct internal connections.
+
 ## Clerk Auth Target
 
 The official shared League server auth provider is Clerk.
