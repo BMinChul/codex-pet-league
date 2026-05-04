@@ -35,7 +35,7 @@ Before launch:
 npm run admin:bootstrap -- --email=owner@example.com
 ```
 
-Use `--dry-run` first when checking the target account. The script refuses local demo accounts unless `--allow-local` is explicitly provided, requires the account to already exist, and requires `verified: true`.
+Use `--dry-run` first when checking the target account. The script promotes only the exact email passed with `--email`, refuses local demo accounts unless `--allow-local` is explicitly provided, requires the account to already exist, and requires `verified: true`. During the real production bootstrap, local demo admin accounts ending in `@codexpet.local` are demoted so the owner email is the first real admin.
 3. Confirm `/api/admin/audit` rejects normal players and accepts only the promoted admin session.
 4. Confirm `CODEX_PET_AUTH_DEV_CODE=false`, `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false`, `CODEX_PET_PUBLIC_BASE_URL=https://league.<domain>`, and `CODEX_PET_COOKIE_SECURE=true`.
 

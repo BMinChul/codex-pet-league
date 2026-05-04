@@ -2,12 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { closeStorage, updateState } from "../src/storage/jsonStore.js";
 
 const options = parseArgs(process.argv.slice(2));
-const email = normalizeEmail(options.email ?? process.env.CODEX_PET_ADMIN_EMAIL);
+const email = normalizeEmail(options.email ?? process.env.CODEX_PET_OWNER_EMAIL ?? process.env.CODEX_PET_ADMIN_EMAIL);
 const dryRun = options.dryRun || process.env.CODEX_PET_ADMIN_BOOTSTRAP_DRY_RUN === "true";
 const allowLocal = options.allowLocal || process.env.CODEX_PET_ADMIN_BOOTSTRAP_ALLOW_LOCAL === "true";
 
 if (!email) {
-  console.error("error: provide --email=<verified-owner-email> or CODEX_PET_ADMIN_EMAIL.");
+  console.error("error: provide --email=<verified-owner-email> or CODEX_PET_OWNER_EMAIL.");
   process.exitCode = 1;
 } else if (!allowLocal && email.endsWith("@codexpet.local")) {
   console.error("error: refusing to promote local demo accounts without --allow-local.");
@@ -22,9 +22,13 @@ if (!email) {
 }
 
 function bootstrapAdmin(state, input) {
-  const account = (state.accounts ?? []).find(
+  const matches = (state.accounts ?? []).filter(
     (entry) => normalizeEmail(entry.email) === input.email || normalizeEmail(entry.identifier) === input.email,
   );
+  if (matches.length > 1) {
+    throw opsError("ADMIN_ACCOUNT_AMBIGUOUS", `Multiple League accounts match ${input.email}; refusing bootstrap.`);
+  }
+  const account = matches[0];
   if (!account) {
     throw opsError(
       "ADMIN_ACCOUNT_NOT_FOUND",
@@ -36,6 +40,9 @@ function bootstrapAdmin(state, input) {
   }
 
   const previousRole = account.role ?? "player";
+  const localAdmins = (state.accounts ?? []).filter(
+    (entry) => entry.id !== account.id && (entry.role ?? "player") === "admin" && isLocalDemoAccount(entry),
+  );
   if (!input.dryRun && previousRole !== "admin") {
     account.role = "admin";
     account.admin_bootstrapped_at ??= new Date().toISOString();
@@ -50,10 +57,26 @@ function bootstrapAdmin(state, input) {
       },
     });
   }
+  if (!input.dryRun) {
+    for (const localAdmin of localAdmins) {
+      localAdmin.role = "player";
+      localAdmin.admin_demoted_at = new Date().toISOString();
+      localAdmin.admin_demote_reason = "production_owner_bootstrap";
+      appendOpsEvent(state, {
+        type: "admin.local_demo_demoted",
+        accountId: localAdmin.id,
+        payload: {
+          new_role: "player",
+          reason: "production_owner_bootstrap",
+        },
+      });
+    }
+  }
 
   return {
     ok: true,
     dry_run: input.dryRun,
+    promoted_exact_email_only: true,
     account: {
       id: account.id,
       email: account.email ?? null,
@@ -63,6 +86,8 @@ function bootstrapAdmin(state, input) {
       role: input.dryRun ? previousRole : account.role,
       admin_bootstrapped_at: account.admin_bootstrapped_at ?? null,
     },
+    local_demo_admins_demoted: input.dryRun ? 0 : localAdmins.length,
+    local_demo_admins_that_would_be_demoted: input.dryRun ? localAdmins.map((entry) => entry.id) : [],
   };
 }
 
@@ -93,6 +118,10 @@ function parseArgs(args) {
 
 function normalizeEmail(value) {
   return String(value ?? "").trim().toLowerCase();
+}
+
+function isLocalDemoAccount(account) {
+  return [account.email, account.identifier].some((value) => normalizeEmail(value).endsWith("@codexpet.local"));
 }
 
 function hashText(value) {

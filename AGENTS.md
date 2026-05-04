@@ -135,6 +135,8 @@ Official shared server launch checklist:
 - [x] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
 - [ ] 7. Bootstrap the first verified owner account to server-side `role=admin`.
   - [x] Add controlled ops script: `npm run admin:bootstrap -- --email=<verified-owner-email>`.
+  - [x] The bootstrap script promotes only the exact owner email passed to `--email`; it does not promote every verified account.
+  - [x] The bootstrap script demotes local demo admins ending in `@codexpet.local` during the real production owner bootstrap.
   - [ ] User must sign in once through Resend email-code login on the live server.
   - [ ] Run the Render one-off admin promotion for that verified owner email.
   - [ ] Confirm admin-only endpoints reject normal players and accept the promoted owner session.
