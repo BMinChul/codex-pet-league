@@ -133,13 +133,13 @@ Official shared server launch checklist:
 - [x] 4. Deploy the Render Web Service and verify `/api/health` plus `/api/metrics`.
 - [x] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
 - [x] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
-- [ ] 7. Bootstrap the first verified owner account to server-side `role=admin`.
+- [x] 7. Bootstrap the first verified owner account to server-side `role=admin`.
   - [x] Add controlled ops script: `npm run admin:bootstrap -- --email=<verified-owner-email>`.
   - [x] The bootstrap script promotes only the exact owner email passed to `--email`; it does not promote every verified account.
   - [x] The bootstrap script demotes local demo admins ending in `@codexpet.local` during the real production owner bootstrap.
-  - [ ] User must sign in once through Resend email-code login on the live server.
-  - [ ] Run the Render one-off admin promotion for that verified owner email.
-  - [ ] Confirm admin-only endpoints reject normal players and accept the promoted owner session.
+  - [x] Owner email `skskcb@gmail.com` signed in through Resend email-code login on the live server.
+  - [x] Render one-off job `job-d7sgr49j2pic73f9q0s0` promoted only `skskcb@gmail.com` from `player` to `admin` and demoted one local demo admin.
+  - [x] Render one-off job `job-d7sgrgfavr4c73b5qujg` confirmed admin-only endpoint access: unauthenticated rejected, normal player rejected, promoted owner accepted.
 - [ ] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
 - [ ] 9. Add backup/log/cost-alert/incident routines.
 - [ ] 10. Publish official server URL and user setup docs.
@@ -155,6 +155,7 @@ Current live shared-server status:
 - `CODEX_PET_ASSET_CDN_BASE_URL` is set to `https://assets.codexpetz.com`.
 - Render one-off job `job-d7sfmi3eo5us73ah26l0` applied `001_initial_postgres_schema.sql` to the real Render Postgres database.
 - Render one-off job `job-d7sfmmjrjlhs73bspa70` passed schema check with `1 migration, 25 tables`.
+- Owner account `skskcb@gmail.com` is verified and server-side `role=admin`; the production owner bootstrap demoted local `@codexpet.local` demo admin access.
 - 2026-05-04 real integration checks passed:
   - Resend auth challenge through `https://league.codexpetz.com` returned 201 with Resend delivery and no exposed dev code.
   - Render one-off job `job-d7sg9fjeo5us73ahopmg` verified Postgres snapshot load/save persistence.
@@ -626,7 +627,7 @@ Production work not yet done:
 - Real Render Postgres migrations, schema checks, and snapshot persistence have passed.
 - Redis and S3-compatible code paths have real provider credential runtime verification.
 - OpenAI moderation is the chosen provider and has runtime verification; the production review runbook still needs completion.
-- The first verified owner account still needs email-code login, then a controlled one-off server-side `role=admin` bootstrap through `scripts/bootstrap-admin.mjs`.
+- The first verified owner account has been bootstrapped to server-side `role=admin`.
 - A small live multiplayer test and backup/log/cost-alert/incident routines still need completion.
 - Docker is not required for local verification right now; revisit it only if the selected deployment target needs container packaging.
 
