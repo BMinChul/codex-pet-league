@@ -11,6 +11,7 @@ Use this skill when the user asks about their Codex pet, official `hatch-pet` pa
 
 - Treat Codex App and CLI as the primary play surfaces. The web UI is a companion surface for profiles, leaderboards, replays, visual inspection, and operations.
 - Treat OpenAI `hatch-pet` output as the primary pet asset source. The expected package is `${CODEX_HOME:-~/.codex}/pets/<pet-id>/pet.json` plus `spritesheet.webp`.
+- Use package inspection/discovery before import when the user is unsure. Official imports expose manifest sha256, spritesheet sha256, package fingerprint, and server source fingerprint.
 - Users can have multiple local `hatch-pet` packages, but League play uses one permanent active official pet per account. Do not switch it after the first League selection.
 - Public Codex App documentation does not currently expose a verifiable "currently selected active pet" API to the League server. Treat local package discovery as candidate input, not proof of official League identity.
 - Codex CLI/App can sign in with ChatGPT for Codex access, but that does not currently give this League server a verified OpenAI account identity token.
@@ -27,23 +28,27 @@ Use this skill when the user asks about their Codex pet, official `hatch-pet` pa
 2. `league_home` for a combined account, active pet, XP, queue, and leaderboard snapshot.
 3. `next_action` when the user asks what to do next.
 4. `pet_discover_hatch` if the user has not provided a package path.
-5. `pet_import_hatch` with `package_path`, or no path when discovery finds exactly one package, to register an official pet.
-6. `pet_activate` only before the first permanent League selection, or idempotently for the already active pet.
-7. `pet_create` with `atlas_path` only for direct PNG/WebP spritesheet uploads.
-8. `league_play` for the Codex App loop: inspect active state, optionally join queue, optionally submit the recommended turn.
-9. `training_report_draft`, then `training_report_submit` after user approval.
-10. `matchmaking_join` for random ranked or casual queue.
-11. `friend_invite_create` and `friend_invite_accept` for invite-code battles.
-12. `battle_get`, `battle_action_options`, then `battle_action` for active turns.
+5. `pet_inspect_hatch` to validate a chosen package before upload.
+6. `pet_import_hatch` with `package_path`, or no path when discovery finds exactly one package, to register an official pet.
+7. `pet_activate` only before the first permanent League selection, or idempotently for the already active pet.
+8. `pet_create` with `atlas_path` only for direct PNG/WebP spritesheet uploads.
+9. `league_play` for the Codex App loop: inspect active state, optionally join queue, optionally submit the recommended turn.
+10. `training_report_draft`, then `training_report_submit` after user approval.
+11. `matchmaking_join` for random ranked or casual queue.
+12. `friend_invite_create` and `friend_invite_accept` for invite-code battles.
+13. `battle_get`, `battle_action_options`, then `battle_action` for active turns.
+14. `league_doctor` when the user asks whether the local League server, auth, bridge, or runtime configuration is healthy.
 
 ## CLI Fallbacks
 
 ```powershell
+npm run cli -- doctor
 npm run cli -- home
 npm run cli -- setup --path C:\Users\you\.codex\pets\pebble --yes --primary Forge --secondary Trace
 npm run cli -- next
 npm run cli -- daily
 npm run cli -- pet discover-hatch
+npm run cli -- pet inspect-hatch --path C:\Users\you\.codex\pets\pebble
 npm run cli -- pet import-hatch --path C:\Users\you\.codex\pets\pebble --primary Forge --secondary Trace
 npm run cli -- pet activate --pet pet_id
 npm run cli -- pet create --name Pebble --primary Forge --secondary Trace --atlas C:\path\spritesheet.webp
@@ -62,8 +67,10 @@ npm run cli -- battle action --battle battle_room_id --kind strike
 ## User-Facing Trigger Phrases
 
 - "내 펫 상태 보여줘" -> `league_home`
+- "리그 상태 점검해줘" -> `league_doctor` or `codexpet doctor`
 - "처음 시작 세팅해줘" -> `league_setup`
 - "내 hatch-pet 펫 찾아줘" -> `pet_discover_hatch`
+- "이 hatch-pet 파일 검증해줘" -> `codexpet pet inspect-hatch --path <folder>` or `pet_discover_hatch` if no path is known
 - "내 hatch-pet 펫 서버에 올려줘" -> `pet_import_hatch`
 - "처음 선택한 펫을 공식으로 확정할래" -> `pet_activate`
 - "오늘 XP 얼마나 남았어" -> `pet_status` or `daily`

@@ -2,12 +2,18 @@ import { createBattleRoomSnapshot, resolveTurnIfReady, submitAction } from "../s
 import { deriveStats, ELEMENTS, OFFICIAL_SKILLS } from "../src/domain/rules.js";
 
 const levels = [1, 25, 50, 100];
+const timingScenarios = [
+  { playerOffset: 0, opponentOffset: 1 },
+  { playerOffset: 1, opponentOffset: 0 },
+];
 const results = [];
 
 for (const level of levels) {
   for (const playerElement of ELEMENTS) {
     for (const opponentElement of ELEMENTS) {
-      results.push(simulateMatch({ level, playerElement, opponentElement }));
+      for (const timing of timingScenarios) {
+        results.push(simulateMatch({ level, playerElement, opponentElement, ...timing }));
+      }
     }
   }
 }
@@ -42,6 +48,7 @@ const maxScoreRate = Math.max(...rates);
 const minScoreRate = Math.min(...rates);
 const output = {
   levels,
+  timingScenarios,
   matches: results.length,
   maxScoreRateSpread: Math.round(spread * 1000) / 1000,
   maxScoreRate,
@@ -52,11 +59,11 @@ const output = {
 
 console.log(JSON.stringify(output, null, 2));
 
-if (spread > 0.95 || maxScoreRate > 0.98 || minScoreRate < 0.02) {
+if (spread > 0.8 || maxScoreRate > 0.95 || minScoreRate < 0.05) {
   throw new Error(`Element score-rate spread too wide: ${spread}`);
 }
 
-function simulateMatch({ level, playerElement, opponentElement }) {
+function simulateMatch({ level, playerElement, opponentElement, playerOffset = 0, opponentOffset = 1 }) {
   const playerPet = petFor("player", playerElement, level);
   const opponentPet = petFor("opponent", opponentElement, level);
   const room = createBattleRoomSnapshot({
@@ -85,8 +92,18 @@ function simulateMatch({ level, playerElement, opponentElement }) {
 
   for (let turn = 1; turn <= room.max_turns && room.status === "in_progress"; turn += 1) {
     const turnInput = { turn_index: room.turn_index, turn_nonce: room.turn_nonce };
-    submitAction(room, "player", { ...actionFor(room.sides.player, turn), ...turnInput }, new Date(Date.UTC(2026, 4, 3, 0, 0, turn)).toISOString());
-    submitAction(room, "opponent", { ...actionFor(room.sides.opponent, turn + 1), ...turnInput }, new Date(Date.UTC(2026, 4, 3, 0, 0, turn)).toISOString());
+    submitAction(
+      room,
+      "player",
+      { ...actionFor(room.sides.player, turn + playerOffset), ...turnInput },
+      new Date(Date.UTC(2026, 4, 3, 0, 0, turn)).toISOString(),
+    );
+    submitAction(
+      room,
+      "opponent",
+      { ...actionFor(room.sides.opponent, turn + opponentOffset), ...turnInput },
+      new Date(Date.UTC(2026, 4, 3, 0, 0, turn)).toISOString(),
+    );
     resolveTurnIfReady(room, new Date(Date.UTC(2026, 4, 3, 0, 0, turn)).toISOString());
   }
 
@@ -94,6 +111,8 @@ function simulateMatch({ level, playerElement, opponentElement }) {
     level,
     playerElement,
     opponentElement,
+    playerOffset,
+    opponentOffset,
     result: room.result?.result ?? "unfinished",
     turns: room.log.length,
   };

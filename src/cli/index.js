@@ -35,6 +35,11 @@ async function main(args) {
     sessionToken: parsed.flags.sessionToken ?? DEFAULT_SESSION_TOKEN,
   });
 
+  if (area === "doctor" || area === "check") {
+    await printDoctor(client);
+    return;
+  }
+
   if (area === "home" || area === "status") {
     const home = await buildLeagueHome(client, parsed.flags.pet);
     printLeagueHome(home);
@@ -83,6 +88,16 @@ async function main(args) {
     return;
   }
 
+  if (area === "auth" && action === "providers") {
+    printObject(await client.get("/api/auth/providers"));
+    return;
+  }
+
+  if (area === "bridge" && action === "status") {
+    printObject(await client.get("/api/bridge/status"));
+    return;
+  }
+
   if (area === "session") {
     if (action === "list") {
       const sessions = await client.get("/api/sessions");
@@ -128,6 +143,11 @@ async function main(args) {
 
   if (area === "pet" && action === "discover-hatch") {
     await discoverHatchPets(parsed.flags);
+    return;
+  }
+
+  if (area === "pet" && action === "inspect-hatch") {
+    await inspectHatchPet(parsed.flags);
     return;
   }
 
@@ -350,6 +370,55 @@ async function buildLeagueHome(client, petId = null) {
   };
 }
 
+async function printDoctor(client) {
+  const [health, providers, bridge, rules] = await Promise.all([
+    optional(client.get("/api/health")),
+    optional(client.get("/api/auth/providers")),
+    optional(client.get("/api/bridge/status")),
+    optional(client.get("/api/rules")),
+  ]);
+  console.log("Codex Pet League doctor");
+  console.log(`Server: ${health?.status ?? "unreachable"}${health?.uptime_seconds != null ? ` · uptime ${health.uptime_seconds}s` : ""}`);
+  console.log(`Storage: ${health?.storage?.driver ?? "unknown"}`);
+  console.log(`Realtime: ${health?.realtime?.provider ?? "unknown"}`);
+  console.log(`Request guard: ${health?.request_guard?.provider ?? "unknown"}`);
+  console.log(`Locks: ${health?.locks?.provider ?? "unknown"}`);
+  console.log(`Auth provider: ${providers?.provider ?? health?.auth_provider?.provider ?? "unknown"}`);
+  console.log(`Bridge secret: ${bridge?.hmac_bridge_secret ?? "unknown"}`);
+  console.log(`Codex app attestation: ${bridge?.codex_app_attestation_secret ?? "unknown"}`);
+  console.log(`OpenAI identity: ${bridge?.official_openai_identity ?? "unconfirmed"}`);
+  console.log(`Rules: ${rules?.elements?.length ?? 0} elements, ${rules?.skills?.length ?? 0} skills`);
+  const counts = health?.counts;
+  if (counts) {
+    console.log(
+      `Counts: accounts ${counts.accounts}, pets ${counts.pets}, active battles ${counts.active_battles}, waiting tickets ${counts.match_tickets}`,
+    );
+  }
+  const warnings = doctorWarnings({ health, providers, bridge });
+  if (warnings.length) {
+    console.log("Warnings:");
+    for (const warning of warnings) console.log(`  - ${warning}`);
+  } else {
+    console.log("Warnings: none for this local runtime.");
+  }
+}
+
+function doctorWarnings({ health, providers, bridge }) {
+  const warnings = [];
+  if (!health || health.status !== "ok") warnings.push("server health is not ok");
+  if ((providers?.provider ?? health?.auth_provider?.provider) === "local_dev") {
+    warnings.push("auth is local_dev; configure real passkey, email, or OAuth before production");
+  }
+  if (bridge?.hmac_bridge_secret === "missing") warnings.push("CODEX_PET_BRIDGE_SECRET is missing");
+  if (bridge?.codex_app_attestation_secret === "missing") warnings.push("CODEX_PET_BRIDGE_ATTESTATION_SECRET is missing");
+  if (bridge?.replay_signing_secret === "local_dev") warnings.push("CODEX_PET_REPLAY_SIGNING_SECRET is using the local dev fallback");
+  if (health?.storage?.driver === "json") warnings.push("JSON storage is for local development; keep Postgres for production last");
+  if (health?.realtime?.provider === "local") warnings.push("local realtime bus is single-instance only");
+  if (health?.request_guard?.provider === "local") warnings.push("local request guard does not share rate limits across server instances");
+  if (health?.locks?.provider === "local") warnings.push("local locks do not serialize multiple server instances");
+  return warnings;
+}
+
 async function setupLeague(client, flags = {}) {
   const [session, petsResult] = await Promise.all([
     optional(client.get("/api/session")),
@@ -462,19 +531,37 @@ async function discoverHatchPets(flags = {}) {
   const packages = await discoverHatchPetPackages({ root: flags.root ?? flags.path });
   if (!packages.length) {
     console.log("No hatch-pet packages found.");
+    console.log("Expected: %CODEX_HOME%\\pets\\<pet-id>\\pet.json and spritesheet.webp");
     return;
   }
   printObject({
     count: packages.length,
-    packages: packages.map((entry) => ({
-      id: entry.manifest.id,
-      display_name: entry.manifest.displayName,
-      description: entry.manifest.description,
-      package_dir: entry.package_dir,
-      spritesheet: entry.spritesheet_path,
-      format: entry.image.format,
-      updated_at: entry.updated_at,
-    })),
+    packages: packages.map(summarizeHatchPackage),
+    next:
+      packages.length === 1
+        ? `codexpet setup --path ${quotePath(packages[0].package_dir)} --yes`
+        : "codexpet setup --path <package-dir> --yes",
+  });
+}
+
+async function inspectHatchPet(flags = {}) {
+  const hatch = await loadHatchPetPackage(flags.path ?? flags.package ?? flags.hatch, {
+    root: flags.root,
+  });
+  printObject({
+    id: hatch.manifest.id,
+    display_name: hatch.manifest.displayName,
+    description: hatch.manifest.description,
+    package_dir: hatch.package_dir,
+    spritesheet: hatch.spritesheet_path,
+    format: hatch.image.format,
+    dimensions: `${hatch.image.width}x${hatch.image.height}`,
+    contract: hatch.atlas_contract,
+    manifest_sha256: hatch.manifest_sha256,
+    spritesheet_sha256: hatch.spritesheet_sha256,
+    package_fingerprint: hatch.package_fingerprint,
+    server_source: "openai_hatch_pet",
+    next: `codexpet pet import-hatch --path ${quotePath(hatch.package_dir)} --primary Forge --secondary Trace`,
   });
 }
 
@@ -482,7 +569,8 @@ function printHatchCandidates(packages) {
   packages.forEach((entry, index) => {
     console.log(`${index + 1}. ${entry.manifest.displayName} (${entry.manifest.id})`);
     console.log(`   ${entry.package_dir}`);
-    console.log(`   ${entry.image.format} · updated ${entry.updated_at}`);
+    console.log(`   ${entry.image.format} · ${entry.image.width}x${entry.image.height} · updated ${entry.updated_at}`);
+    console.log(`   fingerprint ${entry.package_fingerprint.slice(0, 16)}...`);
   });
 }
 
@@ -553,6 +641,10 @@ async function createPet(client, flags, options = {}) {
       hatch_pet_id: hatch.manifest.id,
       spritesheet: hatch.spritesheet_path,
       format: hatch.image.format,
+      atlas_sha256: asset.asset.atlas_sha256,
+      hatch_manifest_sha256: asset.asset.hatch_manifest_sha256,
+      source_fingerprint: asset.asset.source_fingerprint,
+      duplicate_source_accounts: asset.asset.duplicate_source_accounts ?? [],
       active: Boolean(pet.pet.is_active),
       active_pet_id: pet.active_pet_id ?? null,
       active_pet_selection_locked: Boolean(pet.active_pet_selection_locked),
@@ -829,7 +921,9 @@ function printTurnBattle(battle) {
   const otherSide = battle.viewer_side === "opponent" ? battle.sides.player : battle.sides.opponent;
   console.log(`${battle.id} · ${battle.mode} · ${battle.status} · turn ${battle.turn_index}`);
   console.log(`You: ${ownSide.hp}/${ownSide.max_hp} HP, energy ${ownSide.energy}, AFK ${ownSide.timeout_count}/3`);
+  console.log(`You asset: ${assetConsoleLine(ownSide)}`);
   console.log(`${otherSide.name}: ${otherSide.hp}/${otherSide.max_hp} HP, energy ${otherSide.energy}`);
+  console.log(`${otherSide.name} asset: ${assetConsoleLine(otherSide)}`);
   if (battle.status === "in_progress") {
     console.log(`Deadline: ${new Date(battle.turn_deadline_at).toLocaleTimeString()}`);
     console.log("Action: codexpet battle action --battle <id> --kind strike");
@@ -1004,8 +1098,10 @@ function printTerminalBattle(battle, rules = null) {
   }
   console.log("-".repeat(72));
   console.log(sideConsoleLine("YOU", ownSide));
+  console.log(assetConsoleLine(ownSide, "    YOU asset"));
   console.log(skillConsoleLine("YOU", ownSide, rules));
   console.log(sideConsoleLine("FOE", otherSide));
+  console.log(assetConsoleLine(otherSide, "    FOE asset"));
   console.log(skillConsoleLine("FOE", otherSide, rules));
   console.log("-".repeat(72));
   console.log(`Recommended: ${recommendation.kind}${recommendation.skillId ? ` ${recommendation.skillId}` : ""}`);
@@ -1030,6 +1126,15 @@ function sideConsoleLine(label, side) {
   const energy = `${Number(side.energy ?? 0)}/6`;
   const statuses = Object.keys(side.statuses ?? {}).filter((key) => side.statuses?.[key]).join(",") || "clear";
   return `${label.padEnd(3)} ${String(side.name ?? "Unknown").padEnd(18)} HP ${hp.padEnd(9)} ${bar(side.hp, side.max_hp)}  EN ${energy}  AFK ${side.timeout_count ?? 0}/3  ${statuses}`;
+}
+
+function assetConsoleLine(side, prefix = "") {
+  const asset = side?.asset;
+  const source = asset?.source ?? "unknown";
+  const hatchId = asset?.hatch_pet_id ? ` · hatch ${asset.hatch_pet_id}` : "";
+  const hash = asset?.source_fingerprint ?? asset?.atlas_sha256 ?? asset?.hash;
+  const text = `${source}${hatchId}${hash ? ` · ${shortHash(hash)}` : ""}`;
+  return prefix ? `${prefix}: ${text}` : text;
 }
 
 function skillConsoleLine(label, side, rules = null) {
@@ -1148,6 +1253,28 @@ function summarizePet(pet) {
   };
 }
 
+function summarizeHatchPackage(entry) {
+  return {
+    id: entry.manifest.id,
+    display_name: entry.manifest.displayName,
+    description: entry.manifest.description,
+    package_dir: entry.package_dir,
+    spritesheet: entry.spritesheet_path,
+    format: entry.image.format,
+    dimensions: `${entry.image.width}x${entry.image.height}`,
+    manifest_sha256: entry.manifest_sha256,
+    spritesheet_sha256: entry.spritesheet_sha256,
+    package_fingerprint: entry.package_fingerprint,
+    updated_at: entry.updated_at,
+  };
+}
+
+function shortHash(value) {
+  const text = String(value ?? "-");
+  if (text.length <= 16) return text;
+  return `${text.slice(0, 10)}...`;
+}
+
 function printObject(value) {
   console.log(JSON.stringify(value, null, 2));
 }
@@ -1174,6 +1301,7 @@ function printHelp() {
 
 Usage:
   codexpet setup [--path C:\\Users\\you\\.codex\\pets\\pebble] [--yes] --primary Forge --secondary Trace
+  codexpet doctor
   codexpet home
   codexpet next
   codexpet daily [--pet pet_id]
@@ -1182,10 +1310,13 @@ Usage:
   codexpet session revoke --session session_id|--token league_session_token
   codexpet auth challenge --method email_magic_link --identifier you@example.com
   codexpet auth verify --challenge auth_challenge_id --code 123456
+  codexpet auth providers
+  codexpet bridge status
   codexpet league
   codexpet rules
   codexpet pets
   codexpet pet discover-hatch
+  codexpet pet inspect-hatch [--path C:\\Users\\you\\.codex\\pets\\pebble]
   codexpet pet import-hatch [--path C:\\Users\\you\\.codex\\pets\\pebble] --primary Forge --secondary Trace
   codexpet pet create --name Pebble --primary Forge --secondary Trace [--atlas path.png|path.webp]
   codexpet pet activate --pet pet_id

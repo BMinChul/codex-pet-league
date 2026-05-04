@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import { XP_CAPS } from "./rules.js";
+import { battleClassForTotalStats, DEFAULT_SEASON, deriveStats, progressionFromXp, XP_CAPS } from "./rules.js";
 import { resultForSide } from "./battleEngine.js";
 
 export function hashLedgerEntry(entry) {
@@ -76,7 +76,9 @@ export function auditState(state) {
   }
 
   verifyMatchmakingIntegrity(state, { accountIds, activePetIds, petById }, findings);
+  verifyPetDerivedState(state, findings);
   verifyReviewAndReportIntegrity(state, { accountIds, petById }, findings);
+  verifyAssetIntegrity(state, findings);
   verifyBattleSettlementIntegrity(state, findings);
 
   return {
@@ -99,6 +101,111 @@ export function auditState(state) {
     },
     checked_at: new Date().toISOString(),
   };
+}
+
+function verifyPetDerivedState(state, findings) {
+  const xpByPet = new Map();
+  for (const entry of state.xpLedger ?? []) {
+    const bucket = xpByPet.get(entry.pet_id) ?? { pet: 0, style: 0 };
+    bucket.pet += Number(entry.pet_xp_delta ?? 0);
+    bucket.style += Number(entry.style_xp_delta ?? 0);
+    xpByPet.set(entry.pet_id, bucket);
+  }
+
+  const lpByPetSeason = new Map();
+  for (const entry of state.lpLedger ?? []) {
+    if (!entry.pet_id || !entry.season_id) continue;
+    lpByPetSeason.set(`${entry.pet_id}:${entry.season_id}`, Number(entry.lp_after ?? 0));
+  }
+
+  for (const pet of state.pets ?? []) {
+    if (pet.status !== "active") continue;
+    const expectedXp = xpByPet.get(pet.id) ?? { pet: 0, style: 0 };
+    if (Number(pet.xp ?? 0) !== expectedXp.pet) {
+      findings.push(finding("pet_xp_state_mismatch", "high", `Pet ${pet.id} XP does not match the XP ledger.`));
+    }
+    if (Number(pet.style_xp ?? 0) !== expectedXp.style) {
+      findings.push(finding("pet_style_xp_state_mismatch", "medium", `Pet ${pet.id} Style XP does not match the XP ledger.`));
+    }
+
+    const progression = progressionFromXp(expectedXp.pet);
+    if (Number(pet.level ?? 0) !== progression.level || Number(pet.mastery_level ?? 0) !== progression.masteryLevel) {
+      findings.push(finding("pet_level_state_mismatch", "high", `Pet ${pet.id} level does not match ledger-derived XP.`));
+    }
+    const expectedStats = deriveStats({
+      primaryElement: pet.primary_element,
+      secondaryElement: pet.secondary_element,
+      level: progression.level,
+    });
+    if (!statsEqual(pet.stats, expectedStats)) {
+      findings.push(finding("pet_stats_state_mismatch", "high", `Pet ${pet.id} stats do not match ledger-derived level and elements.`));
+    }
+    const expectedClass = battleClassForTotalStats(expectedStats.total);
+    if (pet.battle_class !== expectedClass) {
+      findings.push(finding("pet_battle_class_state_mismatch", "high", `Pet ${pet.id} Battle Class does not match ledger-derived stats.`));
+    }
+
+    const seasonId = pet.rating?.season_id ?? state.activeSeasonId ?? DEFAULT_SEASON.id;
+    const season = (state.seasons ?? []).find((entry) => entry.id === seasonId) ?? DEFAULT_SEASON;
+    const ledgerLp = lpByPetSeason.get(`${pet.id}:${seasonId}`);
+    const expectedLp = ledgerLp ?? Number(season.ranked_seed_lp ?? DEFAULT_SEASON.ranked_seed_lp);
+    if (Number(pet.rating?.lp ?? 0) !== expectedLp) {
+      findings.push(finding("pet_lp_state_mismatch", "high", `Pet ${pet.id} LP does not match ranked LP ledger state.`));
+    }
+  }
+}
+
+function statsEqual(left = {}, right = {}) {
+  for (const key of ["power", "guard", "speed", "focus", "recovery", "insight", "total"]) {
+    if (Number(left[key] ?? 0) !== Number(right[key] ?? 0)) return false;
+  }
+  return true;
+}
+
+function verifyAssetIntegrity(state, findings) {
+  const sourceBuckets = new Map();
+  for (const asset of state.assets ?? []) {
+    if (asset.hatch_source === "openai_hatch_pet" && !asset.hatch_pet_json) {
+      findings.push(finding("hatch_asset_missing_manifest", "high", `Asset ${asset.id} is marked hatch-pet without pet.json metadata.`));
+    }
+    if (asset.hatch_pet_json && !asset.atlas_sha256) {
+      findings.push(finding("hatch_asset_missing_atlas_hash", "high", `Asset ${asset.id} has hatch metadata without an atlas hash.`));
+    }
+    const extension = String(asset.hatch_pet_json?.spritesheetPath ?? "").split(".").at(-1).toLowerCase();
+    if (extension && asset.atlas_format && extension !== asset.atlas_format) {
+      findings.push(finding("hatch_asset_extension_mismatch", "high", `Asset ${asset.id} hatch manifest extension does not match atlas format.`));
+    }
+    if (asset.provenance?.atlas_sha256 && asset.atlas_sha256 && asset.provenance.atlas_sha256 !== asset.atlas_sha256) {
+      findings.push(finding("asset_provenance_atlas_hash_mismatch", "critical", `Asset ${asset.id} provenance atlas hash was tampered.`));
+    }
+    if (
+      asset.provenance?.source_fingerprint &&
+      asset.source_fingerprint &&
+      asset.provenance.source_fingerprint !== asset.source_fingerprint
+    ) {
+      findings.push(finding("asset_provenance_fingerprint_mismatch", "critical", `Asset ${asset.id} provenance fingerprint was tampered.`));
+    }
+    if (asset.hatch_source === "openai_hatch_pet" && asset.official_contract !== "openai-hatch-pet@8x9-192x208-v1") {
+      findings.push(finding("hatch_asset_contract_missing", "medium", `Asset ${asset.id} is missing the official hatch-pet contract marker.`));
+    }
+    if (asset.source_fingerprint && asset.asset_status === "active" && asset.safety_status === "clear") {
+      const bucket = sourceBuckets.get(asset.source_fingerprint) ?? { accounts: new Set(), assetIds: [] };
+      bucket.accounts.add(asset.owner_account_id);
+      bucket.assetIds.push(asset.id);
+      sourceBuckets.set(asset.source_fingerprint, bucket);
+    }
+  }
+
+  for (const [fingerprint, bucket] of sourceBuckets) {
+    if (bucket.accounts.size <= 1) continue;
+    findings.push(
+      finding(
+        "asset_cross_account_duplicate_source",
+        "medium",
+        `Source fingerprint ${fingerprint.slice(0, 12)} appears on ${bucket.accounts.size} accounts (${bucket.assetIds.slice(0, 4).join(", ")}).`,
+      ),
+    );
+  }
 }
 
 function verifyMatchmakingIntegrity(state, context, findings) {

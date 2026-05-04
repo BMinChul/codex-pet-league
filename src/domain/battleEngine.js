@@ -34,6 +34,7 @@ export function createBattleRoomSnapshot(input) {
         accountId: input.accountId,
         pet: input.pet,
         assetHash: input.assetHash,
+        asset: input.asset,
       }),
       opponent: createOpponentSnapshot(input.opponent),
     },
@@ -206,7 +207,7 @@ export function maxHpForStats(stats) {
   );
 }
 
-function createSideSnapshot({ side, accountId, pet, assetHash }) {
+function createSideSnapshot({ side, accountId, pet, assetHash, asset }) {
   const maxHp = maxHpForStats(pet.stats);
   return {
     side,
@@ -222,6 +223,7 @@ function createSideSnapshot({ side, accountId, pet, assetHash }) {
     skills: pet.skills,
     skill_aliases: { ...(pet.skill_aliases ?? {}) },
     asset_hash: assetHash,
+    asset: sanitizeAssetSnapshot(asset, assetHash),
     max_hp: maxHp,
     hp: maxHp,
     energy: 1,
@@ -248,6 +250,7 @@ function createOpponentSnapshot(opponent) {
     skills: opponent.skills,
     skill_aliases: { ...(opponent.skill_aliases ?? {}) },
     asset_hash: opponent.asset_hash ?? null,
+    asset: sanitizeAssetSnapshot(opponent.asset, opponent.asset_hash ?? null),
     max_hp: maxHp,
     hp: maxHp,
     energy: 1,
@@ -271,12 +274,28 @@ function publicSide(side, viewerAccountId) {
     stats: side.stats,
     skills: side.skills,
     skill_aliases: side.skill_aliases ?? {},
+    asset: side.asset ?? null,
     max_hp: side.max_hp,
     hp: side.hp,
     energy: side.energy,
     focus_stack: side.focus_stack,
     vulnerable_turns: side.vulnerable_turns,
     timeout_count: side.timeout_count,
+  };
+}
+
+function sanitizeAssetSnapshot(asset, fallbackHash = null) {
+  if (!asset || typeof asset !== "object" || Array.isArray(asset)) {
+    return fallbackHash ? { hash: fallbackHash } : null;
+  }
+  return {
+    id: asset.id ?? null,
+    hash: asset.hash ?? fallbackHash ?? null,
+    atlas_sha256: asset.atlas_sha256 ?? null,
+    atlas_url: asset.atlas_url ?? null,
+    source: asset.source ?? null,
+    hatch_pet_id: asset.hatch_pet_id ?? null,
+    source_fingerprint: asset.source_fingerprint ?? null,
   };
 }
 

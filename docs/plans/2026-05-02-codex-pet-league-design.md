@@ -65,9 +65,10 @@ Users should be able to use the pet appearance they created with Codex hatch. Th
 
 The server does not redesign user pets. It validates and stores the submitted asset as the official canonical copy.
 
-Expected hatch asset shape, based on observed Codex pet hatch output:
+Expected hatch asset shape, based on the official OpenAI `hatch-pet` package contract:
 
-- PNG sprite atlas
+- `pet.json`
+- `spritesheet.webp` by default, with PNG/WebP accepted by the League importer
 - 8 columns x 9 rows
 - cell size 192 x 208
 - full atlas size 1536 x 1872
@@ -85,15 +86,21 @@ Expected hatch asset shape, based on observed Codex pet hatch output:
 
 Registration flow:
 
-1. User hatches or selects a Codex pet in the Codex App.
-2. User submits the pet atlas and manifest to the League server.
-3. Server validates dimensions, row layout, frame structure, image format, file size, and chroma key rules.
-4. If format validation passes, the asset becomes active immediately.
-5. Server normalizes the asset and computes a canonical hash.
-6. Server stores the canonical asset and issues a `pet_asset_id`.
-7. Async safety checks and user reports can later quarantine or remove abusive assets.
-8. The asset is immutable after registration.
-9. Changes create a new asset revision instead of mutating the existing asset.
+1. User hatches a Codex pet with the official OpenAI `hatch-pet` skill.
+2. Codex App MCP or CLI discovers local package candidates under `${CODEX_HOME:-~/.codex}/pets`.
+3. Codex App MCP `pet_inspect_hatch` or CLI `pet inspect-hatch` validates the package before the user confirms it.
+4. If multiple packages exist, the user explicitly selects `package_path`; the League never auto-picks the latest pet.
+5. User confirms this package as the permanent active League pet for the account.
+6. Client submits the pet atlas and manifest to the League server.
+7. Server validates dimensions, row layout, frame structure, image format, file size, safe relative paths, and manifest shape.
+8. If format validation passes, the asset becomes active immediately.
+9. Server computes atlas sha256, manifest sha256, source fingerprint, and canonical hash.
+10. Server stores the canonical asset and issues a `pet_asset_id`.
+11. Async safety checks and user reports can later flag, quarantine, hide, or remove abusive assets.
+12. The asset is immutable after registration.
+13. Changes create a new asset revision instead of mutating the existing asset.
+
+Cross-account reuse of the same source fingerprint is review evidence, not an automatic ban or ranked lock. This avoids punishing false positives while still surfacing copied-package abuse.
 
 Ranked battles use only server-registered assets. If a user modifies a local image, it has no ranked effect.
 
@@ -101,7 +108,7 @@ There is no manual pre-approval queue for normal pet usage. Users should be able
 
 Active official pet assets are public by default. Other players can see the pet's appearance in profiles, battle screens, friend rooms, replays, and other League surfaces where pets are shown. Seeing other users' pets is a core part of the platform's social and collection appeal.
 
-Private-by-default pet assets are not part of the main League experience. The server may still hide, quarantine, or remove assets for safety, moderation, legal, or account enforcement reasons.
+Private-by-default pet assets are not part of the main League experience. The server may still set assets private, quarantine, or remove assets for safety, moderation, legal, or account enforcement reasons. Private or review-state assets cannot enter ranked; blocked assets cannot enter any battle. Private visibility controls public display and atlas serving, not non-ranked battle authority by itself.
 
 Official pets are permanently account-bound. Users cannot trade, sell, gift, or transfer official pets, pet progression, stats, LP history, titles, mastery, or registered competitive identity to another account.
 

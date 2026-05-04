@@ -93,8 +93,9 @@ League setup therefore follows this boundary:
 | Matchmaking abuse | Queue dodge until desired opponent | dodge penalty, queue cooldown, randomized search windows | repeated cancels, same-target timing | cooldown, lower priority, ranked lock |
 | Battle Class abuse | Stay low level to dominate lower class | placement volatility, fast LP correction, win streak correction | high win rates at low class, account skill mismatch | faster tier adjustment, review |
 | Asset upload | Broken atlas, payload image, hidden frames | strict dimensions, image decode sandbox, canonical re-encode, full-frame validation | decoder errors, unusual entropy, repeated rejects | reject asset, account warning |
+| Hatch package import | Path traversal, extension spoofing, copied package, manifest tamper | safe relative path checks, realpath containment, PNG/WebP MIME verification, atlas contract validation, server recomputed hashes | source fingerprint reuse, manifest/hash mismatch, repeated invalid imports | reject invalid, flag duplicate source for review |
 | Asset mutation | Replace local file after registration | canonical hash, immutable server asset, battle snapshot | asset hash mismatch | ignore local changes, require revision |
-| Moderation evasion | Offensive image/name/nickname | automated safety scan, reports, quarantine, filters | repeated reports, safety flags | hide, quarantine, rename, suspend |
+| Moderation evasion | Offensive image/name/nickname | automated safety scan, reports, quarantine, filters | repeated reports, safety flags | set private, quarantine, rename, suspend |
 | Replay/log tampering | Client displays fake result or replay | server-signed replay, state hash per turn, append-only battle log | replay hash mismatch | reject replay, use server record |
 | Leaderboard race | Duplicate result updates LP twice | battle_result unique constraint, transaction locks, derived snapshots | ledger replay mismatch, duplicate battle id | rebuild leaderboard, rollback duplicate |
 | Economy abuse | Event/cosmetic reward repeated claims | reward ledger, claim idempotency, season caps | duplicate claim keys, rapid claims | reject, rollback, cooldown |
@@ -109,17 +110,19 @@ League setup therefore follows this boundary:
 Pet asset upload:
 
 1. League session is required.
-2. Client requests upload intent.
-3. Server returns a short-lived signed upload URL and upload id.
-4. Client uploads atlas and manifest.
-5. Client completes upload.
-6. Server decodes image in a sandbox.
-7. Server validates dimensions, row count, frame size, file size, manifest shape, and chroma-key expectations.
-8. Server canonicalizes and re-encodes the image.
-9. Server computes canonical hash.
-10. Server stores immutable asset and revision records.
-11. Asset becomes active and public if validation passes.
-12. Async safety scan may later hide, quarantine, or remove the asset.
+2. Codex App MCP or CLI discovers local `hatch-pet` packages under `${CODEX_HOME:-~/.codex}/pets`.
+3. If multiple packages exist, the user must explicitly select `package_path`; the first active League pet is permanent.
+4. Importer validates `pet.json`, safe relative `spritesheetPath`, realpath containment, PNG/WebP type, and the official `1536x1872` atlas contract.
+5. Client submits the atlas bytes and manifest to the League server.
+6. Server decodes the image, validates dimensions, row count, frame size, file size, MIME, and manifest shape again.
+7. Server computes canonical hash, atlas sha256, manifest sha256, and source fingerprint.
+8. Server stores immutable asset and provenance records.
+9. Asset becomes active and public if validation passes.
+10. Cross-account source fingerprint reuse creates review evidence, not automatic punishment.
+11. Async safety scan or user reports may later flag, set private, quarantine, or remove the asset.
+12. Private or moderation-review assets cannot enter ranked. Blocked assets cannot enter any battle.
+
+Production can later split steps 5-8 into signed upload intents and object-store callbacks. The security invariant is the same: server recomputation is authoritative.
 
 Server never uses client-provided asset hashes as authority. Client hashes are hints only.
 
@@ -336,6 +339,8 @@ Unit tests:
 - Battle Class boundary checks
 - action deadline validation
 - asset dimension validation
+- hatch package path, manifest, hash, and atlas validation
+- asset review and private visibility block ranked while blocked assets block all battles
 - nickname and pet name moderation states
 
 Property tests:
@@ -343,6 +348,7 @@ Property tests:
 - XP caps cannot be exceeded under parallel submission.
 - LP cannot change without one battle result.
 - Replaying ledgers produces the same derived state.
+- Fake stored XP, level, stats, Battle Class, Style XP, or LP cannot pass audit if ledgers disagree.
 - A quarantined asset cannot enter ranked.
 - Style XP never changes level or stats.
 - Battle results are applied at most once.

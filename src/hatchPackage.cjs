@@ -1,4 +1,5 @@
 const fs = require("node:fs/promises");
+const { createHash } = require("node:crypto");
 const os = require("node:os");
 const path = require("node:path");
 
@@ -28,6 +29,10 @@ async function loadHatchPetPackage(inputPath, options = {}) {
       spritesheet_file: path.basename(summary.spritesheet_path),
       pet_json: summary.manifest,
       atlas_contract: { ...HATCH_ATLAS_CONTRACT },
+      manifest_sha256: summary.manifest_sha256,
+      spritesheet_sha256: summary.spritesheet_sha256,
+      package_fingerprint: summary.package_fingerprint,
+      official_contract: "openai-hatch-pet@8x9-192x208-v1",
     },
   };
 }
@@ -63,31 +68,57 @@ async function discoverHatchPetPackages(options = {}) {
 
 async function readHatchPetSummary(packageDir) {
   const manifestPath = path.join(packageDir, "pet.json");
-  const manifest = sanitizeHatchManifest(JSON.parse(await fs.readFile(manifestPath, "utf8")));
+  const realPackageDir = await fs.realpath(packageDir);
+  const manifestRaw = await fs.readFile(manifestPath, "utf8");
+  const manifest = sanitizeHatchManifest(JSON.parse(manifestRaw));
   const spriteRelativePath = manifest.spritesheetPath || "spritesheet.webp";
   assertSafeRelativePath(spriteRelativePath);
   const spritesheetPath = path.resolve(packageDir, spriteRelativePath);
-  const packagePrefix = packageDir.endsWith(path.sep) ? packageDir : `${packageDir}${path.sep}`;
-  if (!spritesheetPath.startsWith(packagePrefix)) {
-    throw new Error("hatch-pet spritesheetPath must stay inside the pet package directory.");
-  }
+  assertPathInsidePackage(spritesheetPath, packageDir);
+  const realSpritesheetPath = await fs.realpath(spritesheetPath);
+  assertPathInsidePackage(realSpritesheetPath, realPackageDir);
 
-  const bytes = await fs.readFile(spritesheetPath);
+  const bytes = await fs.readFile(realSpritesheetPath);
   const image = inspectHatchSpritesheet(bytes);
+  if (image.extension !== path.extname(spriteRelativePath).slice(1).toLowerCase()) {
+    throw new Error("hatch-pet spritesheetPath extension must match the image format.");
+  }
   if (image.width !== HATCH_ATLAS_CONTRACT.width || image.height !== HATCH_ATLAS_CONTRACT.height) {
     throw new Error(
       `hatch-pet spritesheet must be ${HATCH_ATLAS_CONTRACT.width}x${HATCH_ATLAS_CONTRACT.height}; received ${image.width}x${image.height}.`,
     );
   }
 
+  const manifestSha256 = hashText(canonicalJson(manifest));
+  const spritesheetSha256 = hashBuffer(bytes);
+  const packageFingerprint = hashText(
+    canonicalJson({
+      manifest: manifestSha256,
+      spritesheet: spritesheetSha256,
+      contract: HATCH_ATLAS_CONTRACT,
+    }),
+  );
+
   return {
     package_dir: packageDir,
     manifest_path: manifestPath,
-    spritesheet_path: spritesheetPath,
+    spritesheet_path: realSpritesheetPath,
     manifest,
+    manifest_sha256: manifestSha256,
+    spritesheet_sha256: spritesheetSha256,
+    package_fingerprint: packageFingerprint,
     image,
-    updated_at: await packageUpdatedAt(manifestPath, spritesheetPath),
+    updated_at: await packageUpdatedAt(manifestPath, realSpritesheetPath),
   };
+}
+
+function assertPathInsidePackage(filePath, packageDir) {
+  const resolvedFile = path.resolve(filePath);
+  const resolvedPackage = path.resolve(packageDir);
+  const packagePrefix = resolvedPackage.endsWith(path.sep) ? resolvedPackage : `${resolvedPackage}${path.sep}`;
+  if (resolvedFile !== resolvedPackage && !resolvedFile.startsWith(packagePrefix)) {
+    throw new Error("hatch-pet spritesheetPath must stay inside the pet package directory.");
+  }
 }
 
 async function resolveHatchPetDir(inputPath, options = {}) {
@@ -127,6 +158,10 @@ function sanitizeHatchManifest(manifest) {
   if (!id) throw new Error("hatch-pet pet.json is missing a valid id.");
   if (!displayName) throw new Error("hatch-pet pet.json is missing displayName.");
   if (!description) throw new Error("hatch-pet pet.json is missing description.");
+  assertSafeRelativePath(spritesheetPath);
+  if (!/\.(png|webp)$/i.test(spritesheetPath)) {
+    throw new Error("hatch-pet spritesheetPath must point to a PNG or WebP file.");
+  }
   return {
     id,
     displayName,
@@ -201,7 +236,17 @@ function read24LE(buffer, offset) {
 
 function assertSafeRelativePath(value) {
   const normalized = String(value).replaceAll("\\", "/");
-  if (!normalized || normalized.startsWith("/") || normalized.includes("../") || normalized === "..") {
+  if (
+    !normalized ||
+    normalized.includes("\0") ||
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalized) ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    normalized.endsWith("/..")
+  ) {
     throw new Error("hatch-pet spritesheetPath must be a relative file path.");
   }
 }
@@ -241,6 +286,18 @@ function sanitizeSlug(value) {
 
 function sanitizeText(value, maxLength) {
   return String(value ?? "").trim().replace(/[<>]/g, "").slice(0, maxLength);
+}
+
+function hashBuffer(buffer) {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+function hashText(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function canonicalJson(value) {
+  return JSON.stringify(value);
 }
 
 module.exports = {

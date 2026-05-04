@@ -422,7 +422,9 @@ function renderPublicProfile() {
   const rows = [
     ["Record", `${record.wins ?? 0}-${record.losses ?? 0}-${record.draws ?? 0}`],
     ["Battles", record.battles ?? 0],
-    ["Asset", pet.asset?.is_visible ? "public" : "restricted"],
+    ["Asset", `${pet.asset?.is_visible ? "public" : "restricted"} · ${assetLabel(pet.asset)}`],
+    ["Hatch", pet.asset?.hatch_pet_json?.id ?? pet.asset?.provenance?.hatch_pet_id ?? EMPTY_LABEL],
+    ["Fingerprint", shortHash(pet.asset?.source_fingerprint ?? pet.asset?.atlas_sha256)],
     ["Rewards", asArray(pet.cosmetic_rewards).map((reward) => reward.name ?? reward.id).join(", ") || EMPTY_LABEL],
   ];
   for (const [label, value] of rows) {
@@ -873,6 +875,10 @@ function renderBattle(battle) {
     status: battle.status,
     turn: battle.turn_index,
     pending: battle.pending,
+    assets: {
+      player: battle.sides?.player?.asset ?? null,
+      opponent: battle.sides?.opponent?.asset ?? null,
+    },
     result: battle.result,
     latest_turn: asArray(battle.log).at(-1) ?? null,
     replay_hash: battle.replay_hash,
@@ -897,6 +903,19 @@ function battleSide(label, side, skillsById = new Map()) {
   appendText(header, "strong", safeText(label));
   appendText(header, "span", elementLine(side), "element-chip");
   wrapper.append(header);
+  const visual = document.createElement("div");
+  visual.className = "battle-pet-visual";
+  const img = document.createElement("img");
+  img.alt = "";
+  img.src = side.asset?.atlas_url || "/pet-placeholder.svg";
+  img.className = side.asset?.atlas_url ? "sprite-atlas" : "";
+  visual.append(img);
+  const assetMeta = document.createElement("div");
+  assetMeta.className = "battle-asset-meta";
+  appendText(assetMeta, "span", assetLabel(side.asset));
+  appendText(assetMeta, "span", shortHash(side.asset?.source_fingerprint ?? side.asset?.atlas_sha256 ?? side.asset?.hash));
+  visual.append(assetMeta);
+  wrapper.append(visual);
   wrapper.append(meter(Number(side.hp ?? 0), Number(side.max_hp ?? 1), "bar hp-bar"));
   const vitals = document.createElement("div");
   vitals.className = "battle-vitals";
@@ -1546,6 +1565,12 @@ function skillLabel(skillOrId) {
       : skillOrId ?? {};
   const official = skill.officialName ?? skill.skill_name ?? skill.id ?? "skill";
   return skill.alias ? `${skill.alias} (${official})` : official;
+}
+
+function assetLabel(asset) {
+  const source = asset?.source ?? asset?.hatch_source ?? asset?.asset_kind ?? "asset";
+  const hatchId = asset?.hatch_pet_id ?? asset?.hatch_pet_json?.id ?? asset?.provenance?.hatch_pet_id;
+  return hatchId ? `${source} · ${hatchId}` : source;
 }
 
 function actionLabel(action) {

@@ -880,7 +880,7 @@ function stateCounts(state) {
     accounts: (state.accounts ?? []).length,
     pets: (state.pets ?? []).length,
     assets: (state.assets ?? []).length,
-    active_battles: (state.battleRooms ?? []).filter((room) => room.status === "active").length,
+    active_battles: (state.battleRooms ?? []).filter((room) => room.status === "in_progress").length,
     match_tickets: (state.matchTickets ?? []).filter((ticket) => ticket.status === "waiting").length,
     held_training_reports: (state.trainingReports ?? []).filter((report) => report.status === "review").length,
     abuse_alerts: (state.abuseAlerts ?? []).filter((alert) => alert.status === "open").length,

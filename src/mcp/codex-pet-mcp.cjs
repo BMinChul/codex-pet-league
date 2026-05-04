@@ -13,6 +13,16 @@ const bridgeAttestationSecret = process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET 
 
 const tools = [
   {
+    name: "league_doctor",
+    title: "League Doctor",
+    description: "Checks server health, auth provider status, bridge attestation, storage, realtime, and rule counts for Codex App play.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
     name: "auth_challenge",
     title: "Create League Auth Challenge",
     description: "Starts a League account binding challenge for passkey, email magic link, or OAuth-shaped login.",
@@ -132,6 +142,19 @@ const tools = [
     inputSchema: {
       type: "object",
       properties: {
+        root_path: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "pet_inspect_hatch",
+    title: "Inspect hatch-pet Package",
+    description: "Validates one local official hatch-pet package and returns manifest, atlas dimensions, hashes, package fingerprint, and import guidance without uploading it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        package_path: { type: "string" },
         root_path: { type: "string" },
       },
       additionalProperties: false,
@@ -451,6 +474,30 @@ async function handleRequest(message) {
 }
 
 async function callTool(name, args) {
+  if (name === "league_doctor") {
+    const [health, providers, bridge, rules] = await Promise.all([
+      optional(apiGet("/api/health")),
+      optional(apiGet("/api/auth/providers")),
+      optional(apiGet("/api/bridge/status")),
+      optional(apiGet("/api/rules")),
+    ]);
+    return {
+      state: health?.status === "ok" ? "ok" : "review",
+      health,
+      auth_provider: providers ?? health?.auth_provider ?? null,
+      bridge,
+      rules: rules
+        ? {
+            elements: rules.elements,
+            skill_count: rules.skills?.length ?? 0,
+            level100_xp: rules.level100Xp,
+            fastest_days_at_cap: rules.level100FastestDaysAtCap,
+          }
+        : null,
+      warnings: doctorWarnings({ health, providers, bridge }),
+    };
+  }
+
   if (name === "auth_challenge") {
     return apiPost("/api/auth/challenge", {
       method: args.method ?? "email_magic_link",
@@ -519,6 +566,13 @@ async function callTool(name, args) {
     };
   }
 
+  if (name === "pet_inspect_hatch") {
+    const hatch = await loadHatchPetPackage(args.package_path, {
+      root: args.root_path,
+    });
+    return summarizeLoadedHatchPackage(hatch);
+  }
+
   if (name === "pet_import_hatch") {
     const hatch = await loadHatchPetPackage(args.package_path, {
       root: args.root_path,
@@ -529,12 +583,14 @@ async function callTool(name, args) {
       hatch_pet_manifest: hatch.manifest,
       hatch_source: "openai_hatch_pet",
     });
-    return apiPost("/api/pets", {
+    const created = await apiPost("/api/pets", {
       name: args.name ?? hatch.manifest.displayName,
       pet_asset_id: asset.asset.id,
       primary_element: args.primary_element ?? "Forge",
       secondary_element: args.secondary_element ?? "Trace",
     });
+    created.asset_import = summarizeAssetImport(asset.asset, hatch);
+    return created;
   }
 
   if (name === "pet_activate") {
@@ -773,7 +829,7 @@ async function leagueSetup(args = {}) {
     identity_policy: identityPolicy,
     account: session?.account ?? null,
     pet: summarizePet(created.pet),
-    asset: { id: asset.asset.id, hatch_pet_id: hatch.manifest.id },
+    asset: summarizeAssetImport(asset.asset, hatch),
     active_pet_id: created.active_pet_id ?? null,
     active_pet_locked: Boolean(created.active_pet_selection_locked),
     next_action: home.next_action,
@@ -1046,6 +1102,15 @@ function summarizePet(pet) {
     rank: pet.rating?.label,
     lp: pet.rating?.lp,
     stats_total: pet.stats?.total,
+    asset: pet.asset
+      ? {
+          id: pet.asset.id,
+          source: pet.asset.hatch_source ?? pet.asset.asset_kind ?? null,
+          hatch_pet_id: pet.asset.hatch_pet_json?.id ?? null,
+          source_fingerprint: pet.asset.source_fingerprint ?? null,
+          atlas_url: pet.asset.atlas_url ?? null,
+        }
+      : null,
   };
 }
 
@@ -1057,8 +1122,64 @@ function summarizeHatchPackage(entry) {
     package_dir: entry.package_dir,
     spritesheet: entry.spritesheet_path,
     format: entry.image.format,
+    dimensions: `${entry.image.width}x${entry.image.height}`,
+    manifest_sha256: entry.manifest_sha256,
+    spritesheet_sha256: entry.spritesheet_sha256,
+    package_fingerprint: entry.package_fingerprint,
     updated_at: entry.updated_at,
   };
+}
+
+function summarizeLoadedHatchPackage(hatch) {
+  return {
+    id: hatch.manifest.id,
+    display_name: hatch.manifest.displayName,
+    description: hatch.manifest.description,
+    package_dir: hatch.package_dir,
+    spritesheet: hatch.spritesheet_path,
+    format: hatch.image.format,
+    dimensions: `${hatch.image.width}x${hatch.image.height}`,
+    contract: hatch.atlas_contract,
+    manifest_sha256: hatch.manifest_sha256,
+    spritesheet_sha256: hatch.spritesheet_sha256,
+    package_fingerprint: hatch.package_fingerprint,
+    server_source: "openai_hatch_pet",
+    import_with: {
+      tool: "pet_import_hatch",
+      package_path: hatch.package_dir,
+      primary_element: "Forge",
+      secondary_element: "Trace",
+    },
+  };
+}
+
+function summarizeAssetImport(asset, hatch) {
+  return {
+    id: asset.id,
+    hatch_pet_id: hatch.manifest.id,
+    source: asset.hatch_source,
+    atlas_sha256: asset.atlas_sha256,
+    hatch_manifest_sha256: asset.hatch_manifest_sha256,
+    source_fingerprint: asset.source_fingerprint,
+    package_fingerprint: hatch.package_fingerprint,
+    duplicate_source_accounts: asset.duplicate_source_accounts ?? [],
+  };
+}
+
+function doctorWarnings({ health, providers, bridge }) {
+  const warnings = [];
+  if (!health || health.status !== "ok") warnings.push("server health is not ok");
+  if ((providers?.provider ?? health?.auth_provider?.provider) === "local_dev") {
+    warnings.push("auth is local_dev; configure real passkey, email, or OAuth before production");
+  }
+  if (bridge?.hmac_bridge_secret === "missing") warnings.push("CODEX_PET_BRIDGE_SECRET is missing");
+  if (bridge?.codex_app_attestation_secret === "missing") warnings.push("CODEX_PET_BRIDGE_ATTESTATION_SECRET is missing");
+  if (bridge?.replay_signing_secret === "local_dev") warnings.push("CODEX_PET_REPLAY_SIGNING_SECRET is using the local dev fallback");
+  if (health?.storage?.driver === "json") warnings.push("JSON storage is for local development; keep Postgres for production last");
+  if (health?.realtime?.provider === "local") warnings.push("local realtime bus is single-instance only");
+  if (health?.request_guard?.provider === "local") warnings.push("local request guard does not share rate limits across server instances");
+  if (health?.locks?.provider === "local") warnings.push("local locks do not serialize multiple server instances");
+  return warnings;
 }
 
 function summarizeMatchmaking(matchmaking) {

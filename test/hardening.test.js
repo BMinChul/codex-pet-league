@@ -200,8 +200,10 @@ test("expired active battles are advanced before availability checks", () => {
 });
 
 test("player battle actions require current turn freshness", () => {
-  const { state, pet } = createPetFixture();
+  const { state, pet, asset } = createPetFixture();
   const started = startTurnBattle(state, "acct_demo", pet.id, { mode: "casual" });
+  assert.equal(started.battle.sides.player.asset.id, asset.id);
+  assert.equal(started.battle.sides.player.asset.source, "codex_app");
 
   assert.throws(
     () => submitTurnBattleAction(state, "acct_demo", started.battle.id, { kind: "strike" }),
@@ -307,6 +309,59 @@ test("asset validation rejects invalid atlas uploads", () => {
   assert.equal(hatchAsset.atlas_content_type, "image/webp");
   assert.match(hatchAsset.atlas_object_key, /\.webp$/);
   assert.equal(hatchAsset.hatch_pet_json.id, "official-hatch");
+  assert.equal(hatchAsset.asset_kind, "official_hatch_pet");
+  assert.equal(hatchAsset.official_contract, "openai-hatch-pet@8x9-192x208-v1");
+  assert.match(hatchAsset.hatch_manifest_sha256, /^[a-f0-9]{64}$/);
+  assert.match(hatchAsset.source_fingerprint, /^[a-f0-9]{64}$/);
+  assert.equal(hatchAsset.provenance.hatch_pet_id, "official-hatch");
+
+  assert.throws(
+    () =>
+      createPetAsset(state, "acct_demo", {
+        atlas_data_url: webpDataUrl(1536, 1872),
+        hatch_source: "openai_hatch_pet",
+      }),
+    /pet\.json manifest/,
+  );
+  assert.throws(
+    () =>
+      createPetAsset(state, "acct_demo", {
+        atlas_data_url: webpDataUrl(1536, 1872),
+        hatch_pet_manifest: {
+          id: "spoofed-format",
+          displayName: "Spoofed Format",
+          description: "Mismatched extension should fail.",
+          spritesheetPath: "spritesheet.png",
+        },
+      }),
+    /extension must match/,
+  );
+});
+
+test("cross-account hatch asset reuse is allowed but flagged for review", () => {
+  const state = createDefaultState();
+  const manifest = {
+    id: "shared-hatch",
+    displayName: "Shared Hatch",
+    description: "Same local package uploaded by two accounts.",
+    spritesheetPath: "spritesheet.webp",
+  };
+  const first = createPetAsset(state, "acct_demo", {
+    atlas_data_url: webpDataUrl(1536, 1872),
+    hatch_pet_manifest: manifest,
+  });
+  const second = createPetAsset(state, "acct_rival", {
+    atlas_data_url: webpDataUrl(1536, 1872),
+    hatch_pet_manifest: manifest,
+  });
+
+  assert.notEqual(second.id, first.id);
+  assert.equal(second.source_fingerprint, first.source_fingerprint);
+  assert.deepEqual(second.duplicate_source_accounts, ["acct_demo"]);
+  assert.equal(state.riskEvents[0].type, "asset.cross_account_duplicate");
+  const audit = adminAudit(state);
+  assert.equal(audit.ok, true);
+  assert.equal(audit.findings.some((finding) => finding.code === "asset_cross_account_duplicate_source"), true);
 });
 
 test("request guards rate-limit abusive traffic and reject replayed mutation ids", () => {
@@ -398,6 +453,64 @@ test("manual enforcement workflow locks and unlocks ranked without risk-score au
   });
   const queued = joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" });
   assert.equal(queued.status, "waiting");
+});
+
+test("moderated assets block ranked first and hidden assets block all battles", () => {
+  const { state, pet, asset } = createPetFixture();
+  moderateAsset(state, "acct_demo", {
+    asset_id: asset.id,
+    action: "quarantine",
+    reason: "asset_review_pending",
+  });
+  assert.throws(() => joinMatchmakingQueue(state, "acct_demo", pet.id, { mode: "ranked" }), /under review/);
+  const training = startTurnBattle(state, "acct_demo", pet.id, { mode: "training" });
+  assert.equal(training.battle.status, "in_progress");
+
+  const privateOnly = createPetFixture();
+  privateOnly.asset.visibility = "private";
+  assert.throws(() => joinMatchmakingQueue(privateOnly.state, "acct_demo", privateOnly.pet.id, { mode: "ranked" }), /private/);
+  const privateTraining = startTurnBattle(privateOnly.state, "acct_demo", privateOnly.pet.id, { mode: "training" });
+  assert.equal(privateTraining.battle.status, "in_progress");
+
+  const blocked = createPetFixture();
+  moderateAsset(blocked.state, "acct_demo", {
+    asset_id: blocked.asset.id,
+    action: "hide",
+    reason: "confirmed_asset_violation",
+  });
+  assert.throws(() => startTurnBattle(blocked.state, "acct_demo", blocked.pet.id, { mode: "training" }), /hidden by moderation/);
+  assert.throws(() => joinMatchmakingQueue(blocked.state, "acct_demo", blocked.pet.id, { mode: "ranked" }), /hidden by moderation/);
+});
+
+test("audit flags forged XP, level, stat, and LP state", () => {
+  const { state, pet } = createPetFixture();
+  const signals = {
+    verificationActivity: true,
+    testsRun: 1,
+    filesChangedBucket: "small",
+  };
+  const draft = draftTrainingReport(state, "acct_demo", pet.id, { signals });
+  const approved = submitTrainingReport(state, "acct_demo", pet.id, {
+    client_report_id: "audit-derived-state",
+    draft_id: draft.id,
+    draft_nonce: draft.nonce,
+    signals,
+  });
+  assert.equal(approved.report.status, "approved");
+  assert.equal(adminAudit(state).ok, true);
+
+  pet.xp += 1000;
+  pet.level = 20;
+  pet.stats.total += 1;
+  pet.rating.lp += 400;
+
+  const audit = adminAudit(state);
+  assert.equal(audit.ok, false);
+  const codes = new Set(audit.findings.map((finding) => finding.code));
+  assert.equal(codes.has("pet_xp_state_mismatch"), true);
+  assert.equal(codes.has("pet_level_state_mismatch"), true);
+  assert.equal(codes.has("pet_stats_state_mismatch"), true);
+  assert.equal(codes.has("pet_lp_state_mismatch"), true);
 });
 
 test("admin can resolve held Training Reports and ops job records authority checks", () => {
@@ -533,7 +646,7 @@ function createPetFixture() {
     primary_element: "Forge",
     secondary_element: "Trace",
   });
-  return { state, pet };
+  return { state, pet, asset };
 }
 
 function pngDataUrl(width, height) {

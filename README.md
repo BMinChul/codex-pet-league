@@ -25,6 +25,7 @@ http://localhost:4317
 - League demo account session.
 - Public pet asset registration with server-side manifest validation.
 - Official `hatch-pet` package import: `pet.json` plus `spritesheet.webp` from `${CODEX_HOME:-~/.codex}/pets/<pet-id>`.
+- `hatch-pet` import provenance: manifest hash, spritesheet hash, package fingerprint, immutable server source fingerprint, and cross-account duplicate review signals.
 - Multiple local `hatch-pet` packages can be discovered, but each League account has one permanent active official pet selection. Switching is blocked after the first selection.
 - Optional Codex hatch spritesheet PNG/WebP upload, with server-side dimension, MIME, and hash validation.
 - Local filesystem atlas storage and public atlas URLs for visible active pets.
@@ -53,7 +54,7 @@ http://localhost:4317
 - Admin operations console for held Training Reports, moderation queue, risk cases, manual enforcement, and season operations.
 - Asset report/moderation flow with report threshold privacy protection.
 - Level cosmetic rewards and season reward generation for non-ranked and ranked loops.
-- Public pet profile, skill alias controls, replay timeline, and queue/invite status cards.
+- Public pet profile, skill alias controls, replay timeline, queue/invite status cards, and battle-side asset previews.
 - Sandbox battle simulation for result testing. It does not award official XP or ranked LP.
 - LP and tier/division updates only for official Ranked PvP matchmaking battles.
 - Leaderboard and server event log.
@@ -70,6 +71,8 @@ Codex App and Codex CLI are the primary play surfaces. The web UI remains useful
 ## Codex Active Pet Source
 
 OpenAI's public `hatch-pet` contract documents local packages under `${CODEX_HOME:-~/.codex}/pets/<pet-id>` with `pet.json` and `spritesheet.webp`. Public Codex App documentation does not currently document a verifiable API or signed claim for reading the user's currently selected active Codex pet. Until OpenAI exposes that, Codex Pet League treats local discovery as candidate input only and makes the League server's first active pet selection authoritative and permanent per account.
+
+The importer validates the local package before upload: `pet.json` must include `id`, `displayName`, `description`, and a safe relative `spritesheetPath`; the spritesheet must be PNG or WebP, match the official `1536x1872` atlas contract, and remain inside the package directory. The server recomputes hashes after upload and never trusts client-provided hashes as authority.
 
 Official Codex docs say Codex CLI/App can be used after signing in with ChatGPT, but that is Codex product access, not a League-verifiable account token. League login remains passkey, email magic link, or League OAuth until OpenAI documents a signed identity claim for third-party League servers.
 
@@ -104,6 +107,7 @@ The CLI is the local bridge that Codex App slash commands or natural-language to
 
 ```bash
 npm run cli -- setup --path C:\Users\you\.codex\pets\pebble --yes --primary Forge --secondary Trace
+npm run cli -- doctor
 npm run cli -- home
 npm run cli -- next
 npm run cli -- daily
@@ -111,8 +115,11 @@ npm run cli -- session
 npm run cli -- session list
 npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
 npm run cli -- auth verify --challenge auth_challenge_id --code 123456
+npm run cli -- auth providers
+npm run cli -- bridge status
 npm run cli -- league
 npm run cli -- pet discover-hatch
+npm run cli -- pet inspect-hatch --path C:\Users\you\.codex\pets\pebble
 npm run cli -- pet import-hatch --path C:\Users\you\.codex\pets\pebble --primary Forge --secondary Trace
 npm run cli -- pet activate --pet pet_id
 npm run cli -- pet create --name Pebble --primary Forge --secondary Trace
@@ -142,6 +149,7 @@ npm run cli -- leaderboard
 Natural-language trigger mapping:
 
 ```text
+리그 상태 점검해줘 -> codexpet doctor
 내 펫 홈 보여줘 -> codexpet home
 다음에 뭐 해야돼 -> codexpet next
 오늘 남은 XP 보여줘 -> codexpet daily
@@ -149,6 +157,7 @@ Natural-language trigger mapping:
 오늘 작업 pet XP로 제출해줘 -> codexpet report submit
 펫 XP 상태 보여줘 -> codexpet xp status
 내 hatch-pet 펫 찾아줘 -> codexpet pet discover-hatch
+이 hatch-pet 파일 검증해줘 -> codexpet pet inspect-hatch --path <hatch-pet-folder>
 처음 시작 세팅해줘 -> codexpet setup --path <hatch-pet-folder> --yes
 내 hatch-pet 펫 서버에 올려줘 -> codexpet pet import-hatch --path <hatch-pet-folder>
 처음 선택한 펫을 공식으로 확정할래 -> codexpet pet activate --pet <pet-id>
@@ -226,6 +235,7 @@ See `docs/OPERATIONS.md` for runtime operations and `docs/DEPLOYMENT.md` for con
 
 The MCP bridge exposes the same product actions as tools:
 
+- `league_doctor`
 - `auth_challenge`
 - `auth_verify`
 - `league_setup`
@@ -235,6 +245,7 @@ The MCP bridge exposes the same product actions as tools:
 - `pet_status`
 - `pet_create`
 - `pet_discover_hatch`
+- `pet_inspect_hatch`
 - `pet_import_hatch`
 - `pet_activate`
 - `league_status`

@@ -192,6 +192,15 @@ export function createPetAsset(state, accountId, input = {}) {
   const appearance = sanitizeAppearance(input.appearance ?? {});
   const hatchPetManifest = sanitizeHatchPetManifest(input.hatch_pet ?? input.hatch_pet_manifest ?? input.pet_json);
   const hatchSource = sanitizeHatchSource(input.hatch_source ?? (hatchPetManifest ? "openai_hatch_pet" : "codex_app"));
+  validateHatchAssetConsistency(hatchSource, hatchPetManifest, atlas);
+  const sourceFingerprint = assetSourceFingerprint({
+    manifest,
+    atlas,
+    hatchPetManifest,
+    hatchSource,
+  });
+  const hatchManifestSha256 = hatchPetManifest ? hashJson(hatchPetManifest) : null;
+  const appearanceSha256 = hashJson(appearance);
   const canonicalInput = {
     owner_account_id: accountId,
     manifest,
@@ -200,6 +209,7 @@ export function createPetAsset(state, accountId, input = {}) {
     atlas_format: atlas?.format ?? null,
     hatch_pet_manifest: hatchPetManifest,
     hatch_source: hatchSource,
+    source_fingerprint: sourceFingerprint,
   };
   const canonicalHash = hashJson(canonicalInput);
   state.assets ??= [];
@@ -213,10 +223,20 @@ export function createPetAsset(state, accountId, input = {}) {
   if (duplicate) return duplicate;
 
   const now = new Date().toISOString();
+  const crossAccountMatches = state.assets.filter(
+    (entry) =>
+      entry.owner_account_id !== accountId &&
+      entry.asset_status === "active" &&
+      entry.safety_status === "clear" &&
+      ((sourceFingerprint && entry.source_fingerprint === sourceFingerprint) ||
+        (atlas?.sha256 && entry.atlas_sha256 === atlas.sha256)),
+  );
   const asset = {
     id: `asset_${randomUUID()}`,
     owner_account_id: accountId,
     canonical_hash: canonicalHash,
+    source_fingerprint: sourceFingerprint,
+    asset_kind: hatchSource === "openai_hatch_pet" ? "official_hatch_pet" : "codex_pet_asset",
     atlas_object_key: `local-dev/${canonicalHash}.${atlas?.extension ?? "png"}`,
     atlas_sha256: atlas?.sha256 ?? null,
     atlas_byte_length: atlas?.byteLength ?? null,
@@ -224,7 +244,31 @@ export function createPetAsset(state, accountId, input = {}) {
     atlas_content_type: atlas?.contentType ?? "image/png",
     manifest_json: manifest,
     hatch_pet_json: hatchPetManifest,
+    hatch_manifest_sha256: hatchManifestSha256,
     hatch_source: hatchSource,
+    official_contract: hatchSource === "openai_hatch_pet" ? "openai-hatch-pet@8x9-192x208-v1" : null,
+    provenance: {
+      source: hatchSource,
+      source_fingerprint: sourceFingerprint,
+      uploaded_by_account_id: accountId,
+      server_received_at: now,
+      atlas_sha256: atlas?.sha256 ?? null,
+      atlas_format: atlas?.format ?? null,
+      manifest_sha256: hashJson(manifest),
+      hatch_manifest_sha256: hatchManifestSha256,
+      hatch_pet_id: hatchPetManifest?.id ?? null,
+      appearance_sha256: appearanceSha256,
+      client_package_fingerprint: sanitizeOptionalHash(
+        input.package_fingerprint ??
+          input.source_package_fingerprint ??
+          appearance.package_fingerprint ??
+          appearance.source_package_fingerprint,
+      ),
+      client_spritesheet_sha256: sanitizeOptionalHash(input.spritesheet_sha256 ?? appearance.spritesheet_sha256),
+      client_manifest_sha256: sanitizeOptionalHash(input.manifest_sha256 ?? appearance.manifest_sha256),
+    },
+    duplicate_source_asset_ids: crossAccountMatches.map((entry) => entry.id).slice(0, 20),
+    duplicate_source_accounts: [...new Set(crossAccountMatches.map((entry) => entry.owner_account_id))].slice(0, 20),
     width: manifest.width,
     height: manifest.height,
     cell_width: manifest.cell_width,
@@ -239,7 +283,27 @@ export function createPetAsset(state, accountId, input = {}) {
     activated_at: now,
   };
   state.assets.push(asset);
-  logEvent(state, "asset.active", accountId, { asset_id: asset.id, canonical_hash: canonicalHash });
+  if (crossAccountMatches.length > 0) {
+    appendRiskEvent(state, {
+      accountId,
+      type: "asset.cross_account_duplicate",
+      severity: "medium",
+      score: 35,
+      metadata: {
+        asset_id: asset.id,
+        source_fingerprint: sourceFingerprint,
+        duplicate_asset_ids: asset.duplicate_source_asset_ids,
+        duplicate_accounts: asset.duplicate_source_accounts,
+      },
+    });
+  }
+  logEvent(state, "asset.active", accountId, {
+    asset_id: asset.id,
+    canonical_hash: canonicalHash,
+    source_fingerprint: sourceFingerprint,
+    hatch_source: hatchSource,
+    hatch_pet_id: hatchPetManifest?.id ?? null,
+  });
   return asset;
 }
 
@@ -876,18 +940,20 @@ export function startTurnBattle(state, accountId, petId, input = {}) {
   if (mode === "ranked") {
     throw httpError(409, "RANKED_REQUIRES_MATCHMAKING", "Ranked battles must be created through random matchmaking.");
   }
-  assertPetAvailableForBattle(state, pet.id);
+  assertPetAvailableForBattle(state, pet.id, { mode });
   cancelWaitingTicketsForPet(state, pet.id, "direct_battle");
   cancelOpenInvitesForPet(state, pet.id, "direct_battle");
   const opponentLp = Number(input.opponent_lp ?? pet.rating.lp);
   const opponent = input.opponent ?? defaultTurnOpponentFor(pet, opponentLp);
+  const asset = petAsset(state, pet);
   const room = createBattleRoomSnapshot({
     id: `battle_room_${randomUUID()}`,
     accountId,
     pet,
     mode,
     opponent,
-    assetHash: petAsset(state, pet).canonical_hash,
+    assetHash: asset.canonical_hash,
+    asset: battleAssetSnapshot(asset),
   });
   submitBotActionIfNeeded(room, room.created_at);
   state.battleRooms ??= [];
@@ -941,7 +1007,7 @@ export function joinMatchmakingQueue(state, accountId, petId, input = {}) {
     assertRankedAllowed(state, accountId);
     ensureActiveSeasonRating(pet, season);
   }
-  assertPetAvailableForBattle(state, pet.id);
+  assertPetAvailableForBattle(state, pet.id, { mode });
   state.matchTickets ??= [];
 
   const existing = state.matchTickets.find(
@@ -1599,8 +1665,8 @@ function matchWaitingTicket(state, ticket) {
   if (!candidate) return null;
   const playerPet = ownedPet(state, candidate.account_id, candidate.pet_id);
   const opponentPet = ownedPet(state, ticket.account_id, ticket.pet_id);
-  assertPetAvailableForBattle(state, playerPet.id);
-  assertPetAvailableForBattle(state, opponentPet.id);
+  assertPetAvailableForBattle(state, playerPet.id, { mode: ticket.mode });
+  assertPetAvailableForBattle(state, opponentPet.id, { mode: ticket.mode });
   const room = createPvpBattleRoom(state, {
     mode: ticket.mode,
     source: "random_matchmaking",
@@ -1703,6 +1769,9 @@ function ticketStillCurrent(state, ticket) {
   if (pet.battle_class !== ticket.battle_class) return false;
   if (Number(pet.rating?.lp ?? 0) !== Number(ticket.lp ?? 0)) return false;
   if (ticket.mode === "ranked" && pet.rating?.season_id !== ticket.season_id) return false;
+  const asset = petAsset(state, pet);
+  if (!asset || asset.safety_status === "blocked") return false;
+  if (ticket.mode === "ranked" && (asset.safety_status !== "clear" || asset.visibility === "private")) return false;
   return true;
 }
 
@@ -1730,12 +1799,14 @@ function matchedResponse(state, room, ticket, opponentTicket, accountId) {
 }
 
 function createPvpBattleRoom(state, input) {
+  const playerAsset = petAsset(state, input.playerPet);
   const room = createBattleRoomSnapshot({
     id: `battle_room_${randomUUID()}`,
     accountId: input.playerAccountId,
     pet: input.playerPet,
     mode: input.mode,
-    assetHash: petAsset(state, input.playerPet).canonical_hash,
+    assetHash: playerAsset.canonical_hash,
+    asset: battleAssetSnapshot(playerAsset),
     opponent: opponentFromPet(state, input.opponentAccountId, input.opponentPet),
   });
   room.source = input.source;
@@ -1814,6 +1885,7 @@ function publicInvite(invite) {
 }
 
 function opponentFromPet(state, accountId, pet) {
+  const asset = petAsset(state, pet);
   return {
     kind: "player",
     account_id: accountId,
@@ -1827,15 +1899,41 @@ function opponentFromPet(state, accountId, pet) {
     stats: pet.stats,
     skills: pet.skills,
     skill_aliases: pet.skill_aliases ?? {},
-    asset_hash: petAsset(state, pet).canonical_hash,
+    asset_hash: asset.canonical_hash,
+    asset: battleAssetSnapshot(asset),
   };
 }
 
-function assertPetAvailableForBattle(state, petId) {
+function battleAssetSnapshot(asset) {
+  if (!asset) return null;
+  const isVisible = asset.visibility !== "private" && asset.safety_status !== "blocked";
+  return {
+    id: asset.id,
+    hash: asset.canonical_hash,
+    atlas_sha256: asset.atlas_sha256 ?? null,
+    atlas_url: isVisible && asset.atlas_sha256 ? atlasPublicUrl(asset) : null,
+    source: asset.hatch_source ?? asset.asset_kind ?? null,
+    hatch_pet_id: asset.hatch_pet_json?.id ?? null,
+    source_fingerprint: asset.source_fingerprint ?? null,
+  };
+}
+
+function assertPetAvailableForBattle(state, petId, options = {}) {
   advanceAllBattleRooms(state);
   const activeRoom = petHasActiveBattle(state, petId);
   if (activeRoom) {
     throw httpError(409, "PET_ALREADY_IN_BATTLE", "This pet already has an active battle room.");
+  }
+  const pet = state.pets.find((entry) => entry.id === petId);
+  const asset = pet ? petAsset(state, pet) : null;
+  if (!asset) {
+    throw httpError(409, "PET_ASSET_MISSING", "This pet has no registered battle asset.");
+  }
+  if (asset.safety_status === "blocked") {
+    throw httpError(403, "PET_ASSET_BLOCKED", "This pet asset is hidden by moderation and cannot enter battles.");
+  }
+  if (options.mode === "ranked" && (asset.safety_status !== "clear" || asset.visibility === "private")) {
+    throw httpError(403, "PET_ASSET_RANKED_REVIEW", "This pet asset is under review or private and cannot enter ranked matchmaking.");
   }
 }
 
@@ -2644,6 +2742,15 @@ function defaultTurnOpponentFor(pet, opponentLp) {
     stats,
     skills: defaultLoadout(primaryElement, secondaryElement),
     asset_hash: "server-bot-queue-rival",
+    asset: {
+      id: "server-bot-queue-rival",
+      hash: "server-bot-queue-rival",
+      atlas_sha256: null,
+      atlas_url: null,
+      source: "server_bot",
+      hatch_pet_id: null,
+      source_fingerprint: null,
+    },
   };
 }
 
@@ -2780,13 +2887,56 @@ function sanitizeHatchPetManifest(manifest) {
   if (!sanitized.id || !sanitized.displayName || !sanitized.description) {
     throw httpError(400, "HATCH_MANIFEST_INVALID", "hatch-pet pet.json requires id, displayName, and description.");
   }
-  if (sanitized.spritesheetPath.startsWith("/") || sanitized.spritesheetPath.includes("../") || sanitized.spritesheetPath === "..") {
+  if (
+    !sanitized.spritesheetPath ||
+    sanitized.spritesheetPath.includes("\0") ||
+    sanitized.spritesheetPath === "." ||
+    sanitized.spritesheetPath === ".." ||
+    sanitized.spritesheetPath.startsWith("/") ||
+    /^[A-Za-z]:\//.test(sanitized.spritesheetPath) ||
+    sanitized.spritesheetPath.startsWith("../") ||
+    sanitized.spritesheetPath.includes("/../") ||
+    sanitized.spritesheetPath.endsWith("/..")
+  ) {
     throw httpError(400, "HATCH_MANIFEST_INVALID", "hatch-pet spritesheetPath must be a relative file path.");
+  }
+  if (!/\.(png|webp)$/i.test(sanitized.spritesheetPath)) {
+    throw httpError(400, "HATCH_MANIFEST_INVALID", "hatch-pet spritesheetPath must point to a PNG or WebP file.");
   }
   if (JSON.stringify(sanitized).length > MAX_HATCH_MANIFEST_BYTES) {
     throw httpError(413, "HATCH_MANIFEST_TOO_LARGE", `hatch-pet manifest must be ${MAX_HATCH_MANIFEST_BYTES} bytes or smaller.`);
   }
   return sanitized;
+}
+
+function validateHatchAssetConsistency(hatchSource, hatchPetManifest, atlas) {
+  if (hatchSource === "openai_hatch_pet" && !hatchPetManifest) {
+    throw httpError(400, "HATCH_MANIFEST_REQUIRED", "Official hatch-pet uploads require pet.json manifest metadata.");
+  }
+  if (hatchPetManifest && !atlas) {
+    throw httpError(400, "HATCH_ATLAS_REQUIRED", "hatch-pet uploads require a spritesheet atlas.");
+  }
+  if (!hatchPetManifest || !atlas) return;
+  const extension = hatchPetManifest.spritesheetPath.split(".").at(-1).toLowerCase();
+  if (extension !== atlas.extension) {
+    throw httpError(400, "HATCH_MANIFEST_INVALID", "hatch-pet spritesheetPath extension must match the uploaded atlas format.");
+  }
+}
+
+function assetSourceFingerprint({ manifest, atlas, hatchPetManifest, hatchSource }) {
+  if (!atlas?.sha256 && !hatchPetManifest) return null;
+  return hashJson({
+    source: hatchSource,
+    atlas_sha256: atlas?.sha256 ?? null,
+    atlas_format: atlas?.format ?? null,
+    manifest,
+    hatch_pet_manifest: hatchPetManifest,
+  });
+}
+
+function sanitizeOptionalHash(value) {
+  const clean = String(value ?? "").trim().toLowerCase();
+  return /^[a-f0-9]{64}$/.test(clean) ? clean : null;
 }
 
 function sanitizeReviewNote(value) {

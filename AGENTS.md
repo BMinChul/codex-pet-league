@@ -38,7 +38,7 @@ ${CODEX_HOME:-~/.codex}/pets/<pet-id>/
   spritesheet.webp
 ```
 
-The official contract documents `pet.json` fields and a fixed sprite atlas. Current League importer supports PNG/WebP atlas upload and validates dimensions, MIME, hash, and manifest shape.
+The official contract documents `pet.json` fields and a fixed sprite atlas. Current League importer supports PNG/WebP atlas upload and validates dimensions, MIME, safe relative `spritesheetPath`, manifest shape, manifest hash, spritesheet hash, and package fingerprint.
 
 Important: public Codex App documentation does not currently expose a server-verifiable API, signed claim, or MCP field for reading the user's currently selected active Codex App pet. Treat local hatch package discovery as candidate input only.
 
@@ -76,6 +76,8 @@ Asset rules:
 
 - The server validates the submitted hatch atlas and manifest.
 - The server stores a canonical official copy and hash.
+- The server stores source provenance: hatch source, hatch pet id, manifest sha256, atlas sha256, source fingerprint, upload account, and client package fingerprint hints.
+- Cross-account reuse of the same hatch source fingerprint is allowed but flagged for review; do not automatically punish because false positives are possible.
 - Asset records are immutable; changes create a new revision.
 - Local file changes after registration have no ranked effect.
 - Structurally valid assets become usable immediately.
@@ -322,7 +324,7 @@ Timeout rules:
 
 Battle snapshots:
 
-- At room creation, server snapshots pet id, asset hash, loadout, stats, Battle Class, skill versions, and ruleset version.
+- At room creation, server snapshots pet id, asset hash/source summary, loadout, stats, Battle Class, skill versions, and ruleset version.
 - Later loadout, asset, or stat changes do not affect that active room.
 - Replays and logs are server-owned and tamper-evident.
 
@@ -451,6 +453,7 @@ Production-shaped direction:
 - Real passkey/email/OAuth providers.
 - Bridge/replay signing secrets.
 - `/api/health` and `/api/metrics` for runtime checks.
+- `codexpet doctor` and MCP `league_doctor` for local Codex App/CLI runtime checks before deeper debugging.
 
 Database conversion should be handled deliberately and late in the deployment path. Do not casually rewrite the persistence model while working on gameplay or UX features.
 
@@ -464,6 +467,7 @@ Common checks:
 npm test
 npm run test:runtime
 npm run test:browser
+npm run balance:sim
 npm run verify:loop -- 2
 git diff --check
 ```
@@ -498,6 +502,8 @@ node --check public/app.js
 - Do not let Style XP affect combat power.
 - Do not make custom user skill mechanics ranked-authoritative.
 - Do not let clients submit final XP, LP, stats, HP, or battle results.
+- Do not trust stored pet XP, level, stats, Battle Class, or LP unless it matches the append-only XP/LP ledgers.
+- Do not allow an asset under moderation review or private visibility into ranked; safety-blocked assets cannot enter battles.
 - Do not auto-punish users only because a heuristic risk score is high.
 - Do not make main ranked cross Battle Class.
 - Do not make web the only required play surface.

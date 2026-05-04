@@ -118,8 +118,8 @@ Device binding improves abuse detection and session continuity, but device ident
 - `columns`
 - `rows`
 - `asset_status`: `active`, `format_rejected`, `quarantined`, `removed`
-- `safety_status`: `unscanned`, `clear`, `flagged`
-- `visibility`: `public`, `hidden`
+- `safety_status`: `unscanned`, `review`, `reported`, `clear`, `flagged`, `blocked`
+- `visibility`: `public`, `private`
 - `created_at`
 - `activated_at`
 
@@ -139,7 +139,7 @@ Assets become active immediately after automatic format validation passes. Revis
 
 There is no manual pre-approval queue for normal pet usage. The user should be able to use the pet they made as soon as the atlas is structurally valid. Safety checks run automatically and asynchronously; clearly abusive or invalid assets can be quarantined or removed after the fact.
 
-Active official pet assets are public by default. Other players can see them in profiles, battle screens, friend rooms, replays, and other League surfaces where pets are shown. `hidden` is reserved for moderation, safety, legal, or account enforcement states, not the default registration flow.
+Active official pet assets are public by default. Other players can see them in profiles, battle screens, friend rooms, replays, and other League surfaces where pets are shown. `private` is reserved for moderation, safety, legal, or account enforcement states, not the default registration flow. Private or review-state assets are blocked from ranked, while blocked assets are blocked from every battle mode.
 
 ### Pet
 
@@ -651,9 +651,9 @@ OAuth means League account OAuth, such as Google, Apple, or GitHub. It does not 
 - `GET /pet-assets/{asset_id}/manifest`
 - `GET /pet-assets/{asset_id}/atlas`
 
-Upload completion triggers automatic format validation. If validation passes, the asset becomes active immediately and can be used in ranked, casual, and friend battles.
+Upload completion triggers automatic format validation. If validation passes, the asset becomes active immediately and can be used in casual and friend battles. Ranked also requires the active asset's safety state to be `clear` and its visibility to be `public`.
 
-Async safety checks and user reports can later quarantine or remove abusive assets. Quarantine blocks future use but does not let the client rewrite past ranked results.
+Async safety checks and user reports can later flag, mark reported, quarantine, set private, or remove abusive assets. Review/reported/flagged/private assets block future ranked entry; blocked assets block future battle use entirely, but none of these states lets the client rewrite past ranked results.
 
 ### Pets
 
@@ -788,6 +788,8 @@ A pet can enter ranked only if:
 - owner has a League verified account
 - pet belongs to the account
 - pet asset is active
+- pet asset safety state is clear
+- pet asset visibility is public
 - pet is not under asset hold
 - pet has a legal loadout
 - pet has exactly four active skill slots
@@ -808,6 +810,9 @@ Examples:
 - `PET_NOT_FOUND`
 - `PET_NOT_OWNED`
 - `ASSET_NOT_ACTIVE`
+- `PET_ASSET_MISSING`
+- `PET_ASSET_RANKED_REVIEW`
+- `PET_ASSET_BLOCKED`
 - `LOADOUT_INVALID`
 - `QUEUE_ALREADY_ACTIVE`
 - `BATTLE_NOT_FOUND`
@@ -839,7 +844,7 @@ Record enough to investigate suspicious play:
 - impossible action attempts
 - rejected action counts
 - XP ledger anomalies and repeated cap-bound farming
-- asset hash and asset/safety state at battle start
+- asset hash, hatch source fingerprint, provenance, and asset/safety state at battle start
 
 Do not store raw Codex project content in audit records.
 
@@ -868,6 +873,7 @@ Property tests:
 - every ranked battle produces exactly one result
 - LP changes only from server battle results
 - XP ledger replay produces the same progression totals
+- XP, level, stats, Battle Class, Style XP, and LP audit recomputation matches stored state
 - Style XP never changes battle stats or level
 - ranked matchmaking does not cross Battle Class
 - element advantage never exceeds the -15% to +15% cap
@@ -886,6 +892,7 @@ Security tests:
 
 - client submits fake HP
 - client submits fake LP
+- client submits fake level, stats, Battle Class, or Style XP
 - client uses skill not in loadout
 - client submits action after deadline
 - client replays old action

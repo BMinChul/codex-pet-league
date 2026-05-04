@@ -35,6 +35,7 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
   assert.deepEqual(
     list.result.tools.map((tool) => tool.name),
     [
+      "league_doctor",
       "auth_challenge",
       "auth_verify",
       "league_setup",
@@ -44,6 +45,7 @@ test("MCP bridge initializes and lists Pet League tools", async () => {
       "pet_status",
       "pet_create",
       "pet_discover_hatch",
+      "pet_inspect_hatch",
       "pet_import_hatch",
       "pet_activate",
       "league_status",
@@ -97,7 +99,7 @@ test("MCP bridge supports Content-Length stdio framing", async () => {
   child.kill();
 
   assert.equal(messages.find((message) => message.id === 1).result.serverInfo.name, "codex-pet-league");
-  assert.ok(messages.find((message) => message.id === 2).result.tools.some((tool) => tool.name === "admin_audit"));
+  assert.ok(messages.find((message) => message.id === 2).result.tools.some((tool) => tool.name === "league_doctor"));
 });
 
 test("MCP bridge calls League tools against a strict temp server", async () => {
@@ -119,6 +121,10 @@ test("MCP bridge calls League tools against a strict temp server", async () => {
 
     const client = lineRpcClient(child);
     await client.request("initialize", {});
+    const doctor = await client.callTool("league_doctor", {});
+    assert.equal(doctor.structuredContent.state, "ok");
+    assert.equal(doctor.structuredContent.bridge.official_openai_identity, "unconfirmed");
+
     const created = await client.callTool("pet_create", {
       name: "MCP Smoke",
       primary_element: "Forge",
@@ -144,6 +150,13 @@ test("MCP bridge calls League tools against a strict temp server", async () => {
     });
     assert.equal(discovered.structuredContent.count, 1);
     assert.equal(discovered.structuredContent.packages[0].id, "mcp-hatch");
+
+    const inspected = await client.callTool("pet_inspect_hatch", {
+      package_path: hatch.dir,
+    });
+    assert.equal(inspected.structuredContent.id, "mcp-hatch");
+    assert.equal(inspected.structuredContent.dimensions, "1536x1872");
+    assert.match(inspected.structuredContent.package_fingerprint, /^[a-f0-9]{64}$/);
 
     const imported = await client.callTool("pet_import_hatch", {
       root_path: hatch.root,
