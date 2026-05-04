@@ -18,16 +18,16 @@ Do not turn the product into a web-only game. Web can play, but Codex App plus C
 
 ## Current Handoff Snapshot
 
-Latest verified local baseline:
+Latest verified repo baseline:
 
-- Commit: `be61d0b` (`Harden hatch pet league UX and integrity checks`).
-- Working tree after that commit was clean before this handoff update.
-- Full local verification passed at that baseline:
-  - `npm test` with 78 passing tests.
-  - `npm run test:runtime`.
-  - `npm run test:browser`.
-  - `npm run balance:sim`.
-  - `npm run verify:loop -- 2`.
+- Commit: `9e4321a` (`Tighten auth email rate limit`).
+- Working tree after that commit was clean before the R2 handoff update.
+- Verification passed at that baseline:
+  - `npm test` with 83 passing tests.
+  - `npm run prod:check` in local mode.
+  - Live Render deploy reached `live`.
+  - Live `/api/health` and `/api/metrics` returned 200.
+  - Live auth email challenge rate limit was verified as first request 201, second same-IP request 429.
 
 Implemented local product surface:
 
@@ -116,27 +116,36 @@ Official shared League server provider decision track:
 - [x] Confirm domain, HTTPS, cookie, and admin access strategy: Cloudflare DNS, Render custom domain, secure host-only League cookies, and server-side League admin roles after verified email login.
 - [x] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
 - [x] Implement Resend email-code delivery path and production/ops config checks.
-- [ ] Run production-shaped integration checks after real credentials exist.
+- [ ] Run the remaining production-shaped integration checks after real credentials exist.
 
 Official shared server launch checklist:
 
-- [ ] 1. Create real provider resources:
-  - [ ] Render Web Service from `https://github.com/BMinChul/codex-pet-league`.
-  - [ ] Render Postgres in the same Render region as the Web Service.
-  - [ ] Render Key Value Redis in the same Render region as the Web Service.
-  - [ ] Resend verified sender domain for the League email-code login sender.
-  - [ ] Cloudflare R2 bucket for canonical/public pet atlas assets.
-  - [ ] OpenAI API project key for moderation.
-  - [ ] Cloudflare DNS zone or domain for `league.<domain>` and `assets.<domain>`.
-- [ ] 2. Wire Render environment variables without committing secrets.
+- [x] 1. Create real provider resources:
+  - [x] Render Web Service from `https://github.com/BMinChul/codex-pet-league`.
+  - [x] Render Postgres in the same Render region as the Web Service.
+  - [x] Render Key Value Redis in the same Render region as the Web Service.
+  - [x] Resend verified sender domain for the League email-code login sender.
+  - [x] Cloudflare R2 bucket for canonical/public pet atlas assets.
+  - [x] OpenAI API project key for moderation.
+  - [x] Cloudflare DNS zone or domain for `league.<domain>` and `assets.<domain>`.
+- [x] 2. Wire Render environment variables without committing secrets.
 - [ ] 3. Run Postgres migrations and schema checks against the real Render Postgres URL.
-- [ ] 4. Deploy the Render Web Service and verify `/api/health` plus `/api/metrics`.
+- [x] 4. Deploy the Render Web Service and verify `/api/health` plus `/api/metrics`.
 - [ ] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
 - [ ] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
 - [ ] 7. Bootstrap the first verified owner account to server-side `role=admin`.
 - [ ] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
 - [ ] 9. Add backup/log/cost-alert/incident routines.
 - [ ] 10. Publish official server URL and user setup docs.
+
+Current live shared-server status:
+
+- Render Web Service: `codex-pet-league`, service id `srv-d7s35rcm0tmc738lspj0`, public temporary URL `https://codex-pet-league.onrender.com`.
+- Render runtime env is configured for production, email-code auth through Resend, Postgres snapshots, Redis realtime/request guard/locks, OpenAI moderation, and Cloudflare R2 S3-compatible asset storage.
+- Auth challenge email rate limit is IP-scoped to one request per 10 minutes.
+- R2 bucket `codex-pet-league-assets` is configured and a tiny `ops-probe/r2-write-read-probe.png` object was successfully written and read through the League asset store.
+- `CODEX_PET_ASSET_CDN_BASE_URL` is intentionally not set yet; public asset URLs should continue to route through the Render API until `assets.codexpetz.com` is attached to R2.
+- Postgres migration/schema check remains pending because only the Render internal database URL is currently available from the web service network.
 
 Current provider recommendation as of 2026-05-04:
 
