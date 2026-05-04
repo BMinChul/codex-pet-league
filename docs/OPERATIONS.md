@@ -10,6 +10,18 @@ This project defaults to the JSON store for local development. For production-li
 4. Resolve asset moderation cases as `clear`, `quarantine`, or `hide`.
 5. Use ranked locks only as a manual review outcome, not as an automatic risk-score side effect.
 
+## Moderation Loop
+
+Production moderation uses the OpenAI Moderation API with `omni-moderation-latest` for image/text triage, plus manual admin review for final quarantine/block decisions.
+
+Review asset cases with the existing actions:
+
+- `clear`: restore `safety_status=clear` and `visibility=public`.
+- `quarantine`: set `safety_status=review` and `visibility=private`; the pet cannot enter ranked while review is open.
+- `hide`: set `safety_status=blocked` and `visibility=private`; the pet cannot enter any battle.
+
+Moderation output is not an automatic account penalty. Use category flags, category scores, user reports, duplicate-source evidence, and visible asset context together before blocking content or applying account enforcement. If an already-public asset becomes quarantined or hidden, purge or remove the public R2/custom-domain object path as part of the same moderation action.
+
 ## Season Loop
 
 1. End the active season with `end_current`.

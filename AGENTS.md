@@ -102,7 +102,6 @@ Public GitHub baseline:
 
 Remaining official shared League server decisions still needed from the user:
 
-- Image/text moderation provider and review policy.
 - Domain, HTTPS, secure cookie, and admin access strategy.
 - Real provider credential values for Render, Clerk, Cloudflare R2, and the final domain.
 
@@ -114,7 +113,7 @@ Official shared League server provider decision track:
 - [x] Confirm managed Postgres provider: Render Postgres.
 - [x] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks: Render Key Value.
 - [x] Confirm object storage and public asset URL/CDN strategy: Cloudflare R2 with a custom domain.
-- [ ] Confirm image/text moderation provider and review policy.
+- [x] Confirm image/text moderation provider and review policy: OpenAI Moderation API with `omni-moderation-latest`, using manual review for quarantine/block decisions.
 - [ ] Confirm domain, HTTPS, cookie, and admin access strategy.
 - [ ] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
 - [ ] Run production-shaped integration checks after real credentials exist.
@@ -561,7 +560,8 @@ Production-shaped direction:
 
 - Postgres snapshot backend after migrations.
 - Redis for realtime bus, request guard, and distributed locks.
-- S3-compatible object storage or persistent asset root.
+- Cloudflare R2 S3-compatible object storage with a custom public asset domain.
+- OpenAI Moderation API for image/text moderation triage.
 - HTTPS with secure cookies.
 - Real passkey/email/OAuth providers.
 - Bridge/replay signing secrets.
@@ -572,11 +572,12 @@ Database conversion should be handled deliberately and late in the deployment pa
 
 Production work not yet done:
 
-- No final external Auth/Postgres/Redis/object-storage/CDN/moderation providers have been chosen.
-- No production domain or hosting target has been chosen.
+- Provider choices are recorded, but real Render, Clerk, Cloudflare R2, OpenAI, and domain credentials are not wired or verified yet.
+- No production domain, HTTPS, secure cookie, or admin access strategy has been finalized.
 - Local JSON storage remains the default dev path.
-- Postgres schema checks and migration scripts exist, but the real managed database cutover should happen after provider selection.
+- Postgres schema checks and migration scripts exist, but the real managed database cutover should happen after credential setup.
 - Redis and S3-compatible code paths exist, but need real provider credentials and runtime verification.
+- OpenAI moderation is the chosen provider, but the real API key, integration call path, and production review runbook still need runtime verification.
 - Docker is not required for local verification right now; revisit it only if the selected deployment target needs container packaging.
 
 ## Verification Expectations

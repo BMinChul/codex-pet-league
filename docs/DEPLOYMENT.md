@@ -76,12 +76,16 @@ CODEX_PET_S3_REGION=auto
 CODEX_PET_S3_ACCESS_KEY_ID=<r2-access-key-id>
 CODEX_PET_S3_SECRET_ACCESS_KEY=<r2-secret-access-key>
 CODEX_PET_ASSET_CDN_BASE_URL=https://assets.<league-domain>
+OPENAI_API_KEY=<openai-api-key>
+CODEX_PET_MODERATION_PROVIDER=openai
+CODEX_PET_MODERATION_MODEL=omni-moderation-latest
+CODEX_PET_MODERATION_FAIL_MODE=review
 CODEX_PET_BRIDGE_SECRET=<strong-secret>
 CODEX_PET_BRIDGE_ATTESTATION_SECRET=<strong-secret>
 CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
 ```
 
-Do not send real users to the Render service until the real provider credentials and remaining policies are configured: Clerk, Render Postgres, Render Key Value, Cloudflare R2/custom domain, moderation, domain/HTTPS, and admin access policy.
+Do not send real users to the Render service until the real provider credentials and remaining policies are configured: Clerk, Render Postgres, Render Key Value, Cloudflare R2/custom domain, OpenAI moderation, domain/HTTPS, and admin access policy.
 
 ## Render Postgres Target
 
@@ -169,6 +173,34 @@ R2 setup notes:
 - Connect a custom domain such as `assets.<league-domain>` to the bucket and set that value as `CODEX_PET_ASSET_CDN_BASE_URL`.
 - Keep the public development `r2.dev` URL disabled for production. Use the custom domain so Cloudflare cache, access controls, WAF rules, and bot controls can be applied.
 - The server should only emit CDN URLs for visible public assets. If a previously public asset is later quarantined, blocked, or made private, delete or overwrite the public object or purge/disable the custom-domain path as part of the moderation action.
+
+## OpenAI Moderation Target
+
+The official shared League server image/text moderation provider is the OpenAI Moderation API with `omni-moderation-latest`.
+
+Use moderation as a triage signal before public asset exposure and before user-controlled text is shown broadly. It should feed the existing asset states instead of replacing admin review:
+
+- `clear`: content can stay public and can enter ranked if all other rules pass.
+- `quarantine`: content becomes private, cannot enter ranked, and waits for admin review.
+- `hide`: content becomes blocked/private and cannot enter any battle.
+
+Production-shaped moderation environment values:
+
+```bash
+OPENAI_API_KEY=<openai-api-key>
+CODEX_PET_MODERATION_PROVIDER=openai
+CODEX_PET_MODERATION_MODEL=omni-moderation-latest
+CODEX_PET_MODERATION_FAIL_MODE=review
+```
+
+Moderation policy:
+
+- Send both the pet atlas image and related text when available: pet name, appearance metadata, skill nicknames, user report reasons, and Training Report summaries. Do not send raw source code or full Codex transcripts.
+- Treat hard model flags for severe categories as `quarantine` by default, with `hide` reserved for clear safety-blocking cases or manual admin resolution.
+- Do not auto-punish accounts, remove LP, or apply ranked locks from moderation scores alone. Account enforcement stays a manual review outcome.
+- If the moderation provider is down or times out during public asset registration, fail into `quarantine`/private review rather than publishing directly to the R2 custom domain.
+- Store only moderation metadata needed for audit: model, timestamp, flagged result, categories, scores, applied input types, action, and reviewer notes. Avoid storing unnecessary submitted text beyond the existing summarized League records.
+- Image-only moderation does not cover every text-only category. Keep user reports and manual review available for text embedded inside pet pixels or ambiguous stylized imagery.
 
 ## Clerk Auth Target
 
