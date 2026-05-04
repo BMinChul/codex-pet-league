@@ -131,7 +131,7 @@ Official shared server launch checklist:
 - [x] 2. Wire Render environment variables without committing secrets.
 - [ ] 3. Run Postgres migrations and schema checks against the real Render Postgres URL.
 - [x] 4. Deploy the Render Web Service and verify `/api/health` plus `/api/metrics`.
-- [ ] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
+- [x] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
 - [ ] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
 - [ ] 7. Bootstrap the first verified owner account to server-side `role=admin`.
 - [ ] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
@@ -140,11 +140,13 @@ Official shared server launch checklist:
 
 Current live shared-server status:
 
-- Render Web Service: `codex-pet-league`, service id `srv-d7s35rcm0tmc738lspj0`, public temporary URL `https://codex-pet-league.onrender.com`.
+- Render Web Service: `codex-pet-league`, service id `srv-d7s35rcm0tmc738lspj0`, official URL `https://league.codexpetz.com`, fallback Render URL `https://codex-pet-league.onrender.com`.
+- Render custom domain `league.codexpetz.com` is verified.
 - Render runtime env is configured for production, email-code auth through Resend, Postgres snapshots, Redis realtime/request guard/locks, OpenAI moderation, and Cloudflare R2 S3-compatible asset storage.
 - Auth challenge email rate limit is IP-scoped to one request per 10 minutes.
-- R2 bucket `codex-pet-league-assets` is configured and a tiny `ops-probe/r2-write-read-probe.png` object was successfully written and read through the League asset store.
-- `CODEX_PET_ASSET_CDN_BASE_URL` is intentionally not set yet; public asset URLs should continue to route through the Render API until `assets.codexpetz.com` is attached to R2.
+- R2 bucket `codex-pet-league-assets` is configured and `assets.codexpetz.com` serves the tiny `ops-probe/r2-write-read-probe.png` object with 200 `image/png`.
+- `CODEX_PET_PUBLIC_BASE_URL` and `CODEX_PET_LEAGUE_URL` are set to `https://league.codexpetz.com`.
+- `CODEX_PET_ASSET_CDN_BASE_URL` is set to `https://assets.codexpetz.com`.
 - Postgres migration/schema check remains pending because only the Render internal database URL is currently available from the web service network.
 
 Current provider recommendation as of 2026-05-04:
