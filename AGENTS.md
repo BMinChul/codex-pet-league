@@ -16,6 +16,51 @@ Primary surfaces:
 
 Do not turn the product into a web-only game. Web can play, but Codex App plus CLI are priority one.
 
+## Current Handoff Snapshot
+
+Latest verified local baseline:
+
+- Commit: `be61d0b` (`Harden hatch pet league UX and integrity checks`).
+- Working tree after that commit was clean before this handoff update.
+- Full local verification passed at that baseline:
+  - `npm test` with 78 passing tests.
+  - `npm run test:runtime`.
+  - `npm run test:browser`.
+  - `npm run balance:sim`.
+  - `npm run verify:loop -- 2`.
+
+Implemented local product surface:
+
+- Codex App MCP bridge is present in `src/mcp/codex-pet-mcp.cjs`.
+- Codex CLI is present in `src/cli/index.js`.
+- Web companion UI is present in `public/app.js` and `public/styles.css`.
+- Official `hatch-pet` package discovery, inspection, import, validation, provenance hashing, and duplicate source review are implemented in `src/hatchPackage.cjs` and domain asset creation.
+- First active League pet selection is permanent and server-enforced.
+- Real-time turn-based battles, random matchmaking, friend invite rooms, 30 second turn timing, AFK timeout ladder, battle logs, replay hashes, and ranked settlement are implemented locally.
+- Pet XP, Style XP, level, stats, Battle Class, LP, seasons, tiers, daily caps, and ledgers are implemented locally.
+- User skill nicknames are cosmetic only and visible on battle/profile/replay surfaces, while official skill identity remains authoritative.
+- Anti-cheat controls are implemented locally for idempotency, rate limits, stale actions, replay/hash chains, linked account context, repeated pairings, friend farming, duplicate hatch source fingerprints, asset moderation, and manual ranked locks.
+- Audit recomputes pet XP, Style XP, level, stats, Battle Class, and LP from append-only ledgers and flags direct state tampering.
+- Asset policy is implemented as: review/private assets cannot enter ranked; safety-blocked assets cannot enter any battle; local post-registration file changes have no ranked effect.
+- `codexpet doctor`, `codexpet auth providers`, `codexpet bridge status`, `codexpet pet inspect-hatch`, MCP `league_doctor`, and MCP `pet_inspect_hatch` exist for Codex App/CLI troubleshooting.
+
+Next-session priority:
+
+1. Decide external services with the user.
+2. Wire production environment variables for the chosen services.
+3. Do the real Postgres/Redis/object-storage/Auth provider integration checks.
+4. Then handle deployment and private beta readiness.
+
+External decisions still needed from the user:
+
+- Auth provider for passkey, email magic link, and OAuth.
+- Managed Postgres provider.
+- Redis provider for realtime bus, request guard, and distributed locks.
+- Object storage provider for pet atlas assets, such as S3-compatible storage or Cloudflare R2.
+- CDN or public asset URL strategy.
+- Image/text moderation provider and review policy.
+- Hosting/deployment target and domain.
+
 Official Codex sign-in docs:
 
 - https://developers.openai.com/codex/app
@@ -395,18 +440,18 @@ Golden rules:
 
 Implemented/expected controls:
 
-- League sessions, device binding, and real auth providers.
+- League sessions, device binding, and local provider-shaped auth flows. Real external auth providers are the next production decision.
 - Rate limits and idempotency keys for mutations.
 - Replay prevention and stale action rejection.
 - Turn nonces and server deadlines.
 - Immutable server asset hashes and battle snapshots.
-- XP/LP ledgers and replayable state.
+- XP/LP ledgers and replayable state, including audit recomputation of derived XP, Style XP, level, stats, Battle Class, and LP.
 - Replay/event hash chains.
 - Matchmaking repeated-opponent limits.
 - Linked account and shared-client-context review cases.
 - Friend Duel XP sub-cap and farming detection.
 - Training Report dedupe, summary hash, and quality scoring.
-- Asset upload validation, canonical storage, reporting, hide/quarantine.
+- Official hatch package validation, asset upload validation, canonical storage, reporting, private/review/blocked moderation states, and duplicate source fingerprint review.
 - Admin console for held reports, moderation, risk cases, manual enforcement, and season operations.
 
 Risk-score policy:
@@ -456,6 +501,15 @@ Production-shaped direction:
 - `codexpet doctor` and MCP `league_doctor` for local Codex App/CLI runtime checks before deeper debugging.
 
 Database conversion should be handled deliberately and late in the deployment path. Do not casually rewrite the persistence model while working on gameplay or UX features.
+
+Production work not yet done:
+
+- No final external Auth/Postgres/Redis/object-storage/CDN/moderation providers have been chosen.
+- No production domain or hosting target has been chosen.
+- Local JSON storage remains the default dev path.
+- Postgres schema checks and migration scripts exist, but the real managed database cutover should happen after provider selection.
+- Redis and S3-compatible code paths exist, but need real provider credentials and runtime verification.
+- Docker is not required for local verification right now; revisit it only if the selected deployment target needs container packaging.
 
 ## Verification Expectations
 
