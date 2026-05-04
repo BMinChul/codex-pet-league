@@ -125,7 +125,7 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       const termsPage = await getText(baseUrl, "/terms", {});
       assert(termsPage.includes("Alpha Terms"), "terms page route did not render");
       const supportPage = await getText(baseUrl, "/support", {});
-      assert(supportPage.includes("Support"), "support page route did not render");
+      assert(supportPage.includes("support@codexpetz.com"), "support page route did not render support email");
       const statusPage = await getText(baseUrl, "/status", {});
       assert(statusPage.includes("League Status"), "status page route did not render");
       const statusScript = await getText(baseUrl, "/status.js", {});

@@ -68,6 +68,7 @@ CODEX_PET_ADMIN_EMAIL_ALLOWLIST=owner@example.com
 CODEX_PET_EMAIL_PROVIDER=resend
 CODEX_PET_RESEND_FROM_EMAIL=no-reply@league.<domain>
 CODEX_PET_RESEND_FROM_NAME=Codex Pet League
+CODEX_PET_RESEND_REPLY_TO=support@<domain>
 CODEX_PET_RESEND_API_KEY=<resend-api-key>
 CODEX_PET_STORAGE_DRIVER=postgres
 CODEX_PET_POSTGRES_URL=<render-postgres-url>
@@ -278,6 +279,29 @@ Setup notes:
 - Passkeys and OAuth/social login can be added later through the existing `passkey` and `league_oauth` hook contracts, but they are not required for the low-cost alpha.
 
 Before production traffic, test the flow through `codexpet auth providers`, `codexpet auth challenge --method email_magic_link --identifier <email>`, and `codexpet auth verify`. Production mode must not pass with only `local_dev` auth.
+
+## Private Support Inbox Target
+
+The official shared alpha private support address is:
+
+```text
+support@codexpetz.com
+```
+
+Use Cloudflare Email Routing for inbound support during the alpha. It forwards mail to the owner's private inbox without adding a paid mailbox provider. This receiving path is separate from Resend, which remains the outbound email-code sender.
+
+Cloudflare setup:
+
+1. In Cloudflare, open `codexpetz.com` and go to Email Routing.
+2. Onboard the domain if Email Routing is not already enabled.
+3. Add the owner's destination inbox and complete the verification email.
+4. Create a custom address: `support`.
+5. Set the action to send to the verified owner inbox.
+6. Leave catch-all disabled or set it to drop during alpha to reduce spam.
+7. Send a test email from another mailbox to `support@codexpetz.com`.
+8. After the test arrives, keep `CODEX_PET_RESEND_REPLY_TO=support@codexpetz.com` in Render so login-code replies point at the same private support address.
+
+DNS note: Cloudflare Email Routing uses MX records for the root `codexpetz.com` receiving domain. Resend currently sends from the League subdomain path, so keep the existing Resend sender DNS records intact and do not delete the `send` subdomain records.
 
 ## Runtime Layout
 

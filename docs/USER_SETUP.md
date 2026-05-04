@@ -26,6 +26,7 @@ Official alpha operation pages:
 - Support: https://league.codexpetz.com/support
 - Privacy Notice: https://league.codexpetz.com/privacy
 - Alpha Terms: https://league.codexpetz.com/terms
+- Private support email: support@codexpetz.com
 
 ## 1. Install From GitHub
 

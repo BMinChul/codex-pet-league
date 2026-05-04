@@ -19,7 +19,7 @@ async function main() {
   assert(metrics.includes("codex_pet_abuse_alerts_total"), "metrics missing abuse alert gauge");
 
   await assertPage("/status", "League Status");
-  await assertPage("/support", "Support");
+  await assertPage("/support", "support@codexpetz.com");
   await assertPage("/privacy", "Privacy Notice");
   await assertPage("/terms", "Alpha Terms");
 

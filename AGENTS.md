@@ -167,7 +167,8 @@ Post-launch alpha operating surface:
 - [x] Publish Support guidance at `https://league.codexpetz.com/support` with GitHub Issues for public bug reports and secret-sharing warnings.
 - [x] Publish public Status page at `https://league.codexpetz.com/status` backed by `/api/health`.
 - [x] Add GitHub Actions official monitor every 15 minutes for `/api/health`, `/api/metrics`, and public operating pages.
-- [ ] Add a private inbound support mailbox when the domain is ready for receiving mail.
+- [x] Add private support inbox docs and public references for `support@codexpetz.com`.
+- [ ] Complete Cloudflare Email Routing setup for `support@codexpetz.com` and verify delivery to the owner inbox.
 - [ ] Add provider-level paging or a private escalation channel later if GitHub Actions failure notices are not enough.
 - [ ] Add passkey and OAuth providers later when the alpha needs them.
 

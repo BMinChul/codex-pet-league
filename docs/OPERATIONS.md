@@ -83,7 +83,7 @@ The admin console shows open review cases, audit findings, active abuse alerts, 
 The official shared alpha exposes these public operating pages:
 
 - `https://league.codexpetz.com/status`: browser status page backed by `/api/health`, with links to `/api/health` and `/api/metrics`.
-- `https://league.codexpetz.com/support`: support process, GitHub Issues link, moderation-report guidance, and secret-sharing warnings.
+- `https://league.codexpetz.com/support`: support process, private support email, GitHub Issues link, moderation-report guidance, and secret-sharing warnings.
 - `https://league.codexpetz.com/privacy`: alpha privacy notice.
 - `https://league.codexpetz.com/terms`: alpha operating terms.
 
@@ -96,6 +96,18 @@ npm run monitor:official
 ```
 
 Use `CODEX_PET_MONITOR_BASE_URL=https://league.<domain>` for self-host checks. Set `CODEX_PET_MONITOR_FAIL_ON_ALERTS=true` only when open abuse alerts should fail the monitor instead of remaining a manual review signal.
+
+## Private Support Inbox
+
+The official shared alpha private support address is `support@codexpetz.com`. Route it through Cloudflare Email Routing to the owner inbox, not to a public issue tracker. Use it for account access problems, privacy questions, moderation appeals, and reports that include private identifiers.
+
+Keep these boundaries:
+
+- Public reproducible bugs can go to GitHub Issues.
+- Private account, moderation, privacy, or security-sensitive reports go to `support@codexpetz.com`.
+- Do not ask users to send session tokens, API keys, raw source code, full Codex transcripts, passwords, or payment data.
+- Keep catch-all disabled or dropped during alpha unless there is a specific reason to receive typo variants.
+- Keep Resend as outbound-only login email delivery, with `CODEX_PET_RESEND_REPLY_TO=support@codexpetz.com`.
 
 ## Backup Loop
 

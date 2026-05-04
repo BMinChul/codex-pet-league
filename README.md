@@ -409,6 +409,7 @@ Official alpha pages:
 - Support: https://league.codexpetz.com/support
 - Privacy Notice: https://league.codexpetz.com/privacy
 - Alpha Terms: https://league.codexpetz.com/terms
+- Private support email: support@codexpetz.com
 
 The official shared alpha stores League account records, canonical pet assets, Training Report summaries, battle/replay records, XP/LP ledgers, moderation metadata, and operational audit events on the League server. Do not submit raw source code or full Codex transcripts in Training Reports.
 
