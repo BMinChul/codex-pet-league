@@ -4,6 +4,8 @@ const DAY_MS = 24 * HOUR_MS;
 export function summarizeCostState(state, options = {}) {
   const env = options.env ?? process.env;
   const now = options.now ?? new Date();
+  const openAbuseAlerts = (state.abuseAlerts ?? []).filter((alert) => alert.status === "open");
+  const openAssetReports = (state.assetReports ?? []).filter((report) => report.status === "open");
   const metrics = {
     auth_challenges_last_hour: countSince(state.authChallenges, now, HOUR_MS),
     auth_challenges_last_day: countSince(state.authChallenges, now, DAY_MS),
@@ -11,9 +13,9 @@ export function summarizeCostState(state, options = {}) {
     sessions_last_day: countSince(state.sessions, now, DAY_MS),
     asset_uploads_last_day: countSince(state.assets, now, DAY_MS),
     total_asset_bytes: sumAssetBytes(state.assets),
-    open_asset_reports: (state.assetReports ?? []).filter((report) => report.status === "open").length,
+    open_asset_reports: openAssetReports.length,
     held_training_reports: (state.trainingReports ?? []).filter((report) => report.status === "review").length,
-    open_abuse_alerts: (state.abuseAlerts ?? []).filter((alert) => alert.status === "open").length,
+    open_abuse_alerts: openAbuseAlerts.length,
     active_battles: (state.battleRooms ?? []).filter((room) => room.status === "in_progress").length,
     waiting_match_tickets: (state.matchTickets ?? []).filter((ticket) => ticket.status === "waiting").length,
   };
@@ -71,6 +73,10 @@ export function summarizeCostState(state, options = {}) {
     generated_at: now.toISOString(),
     status,
     metrics,
+    breakdowns: {
+      open_abuse_alerts_by_type: countBy(openAbuseAlerts, abuseAlertKey),
+      open_asset_reports_by_asset: countBy(openAssetReports, (report) => report.asset_id ?? "missing_asset"),
+    },
     checks,
     findings,
   };
@@ -145,6 +151,21 @@ export function summarizeIncidentState(state, options = {}) {
 function thresholdCheck(name, value, warning, critical, description) {
   const level = value >= critical ? "critical" : value >= warning ? "warning" : "ok";
   return { name, value, warning, critical, level, description };
+}
+
+function abuseAlertKey(alert) {
+  const type = alert.type ?? "unknown";
+  const severity = alert.severity ?? "unknown";
+  const dedupePrefix = String(alert.dedupe_key ?? "missing").split(":")[0];
+  return `${type}|${severity}|${dedupePrefix}`;
+}
+
+function countBy(items = [], keyFn) {
+  return items.reduce((counts, item) => {
+    const key = keyFn(item);
+    counts[key] = (counts[key] ?? 0) + 1;
+    return counts;
+  }, {});
 }
 
 function envNumber(env, name, fallback) {

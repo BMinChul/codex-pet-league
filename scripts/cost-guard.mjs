@@ -24,6 +24,8 @@ function printSummary(summary) {
       `${prefix}: ${check.name}=${check.value} warn=${check.warning} critical=${check.critical} (${check.description})`,
     );
   }
+  printBreakdown("open_abuse_alerts_by_type", summary.breakdowns.open_abuse_alerts_by_type);
+  printBreakdown("open_asset_reports_by_asset", summary.breakdowns.open_asset_reports_by_asset);
   if (summary.status === "ok") {
     console.log("cost guard ok: no configured usage threshold is above warning.");
   } else if (summary.status === "warning") {
@@ -31,4 +33,11 @@ function printSummary(summary) {
   } else {
     console.log("critical: pause risky traffic paths, review provider dashboards, and run an incident pack.");
   }
+}
+
+function printBreakdown(label, values) {
+  const entries = Object.entries(values ?? {}).sort((left, right) => right[1] - left[1]).slice(0, 10);
+  if (entries.length === 0) return;
+  console.log(`${label}:`);
+  for (const [key, value] of entries) console.log(`  ${key}=${value}`);
 }
