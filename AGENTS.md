@@ -134,6 +134,10 @@ Official shared server launch checklist:
 - [x] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
 - [x] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
 - [ ] 7. Bootstrap the first verified owner account to server-side `role=admin`.
+  - [x] Add controlled ops script: `npm run admin:bootstrap -- --email=<verified-owner-email>`.
+  - [ ] User must sign in once through Resend email-code login on the live server.
+  - [ ] Run the Render one-off admin promotion for that verified owner email.
+  - [ ] Confirm admin-only endpoints reject normal players and accept the promoted owner session.
 - [ ] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
 - [ ] 9. Add backup/log/cost-alert/incident routines.
 - [ ] 10. Publish official server URL and user setup docs.
@@ -620,7 +624,7 @@ Production work not yet done:
 - Real Render Postgres migrations, schema checks, and snapshot persistence have passed.
 - Redis and S3-compatible code paths have real provider credential runtime verification.
 - OpenAI moderation is the chosen provider and has runtime verification; the production review runbook still needs completion.
-- The first verified owner account still needs a controlled one-off server-side `role=admin` bootstrap.
+- The first verified owner account still needs email-code login, then a controlled one-off server-side `role=admin` bootstrap through `scripts/bootstrap-admin.mjs`.
 - A small live multiplayer test and backup/log/cost-alert/incident routines still need completion.
 - Docker is not required for local verification right now; revisit it only if the selected deployment target needs container packaging.
 

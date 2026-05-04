@@ -29,7 +29,13 @@ Production admin access is tied to verified League accounts with server-side `ro
 Before launch:
 
 1. Verify the first owner account through Resend email-code login.
-2. Promote only that account to `role=admin` with a controlled one-off operation.
+2. Promote only that account to `role=admin` with a controlled one-off operation:
+
+```bash
+npm run admin:bootstrap -- --email=owner@example.com
+```
+
+Use `--dry-run` first when checking the target account. The script refuses local demo accounts unless `--allow-local` is explicitly provided, requires the account to already exist, and requires `verified: true`.
 3. Confirm `/api/admin/audit` rejects normal players and accepts only the promoted admin session.
 4. Confirm `CODEX_PET_AUTH_DEV_CODE=false`, `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false`, `CODEX_PET_PUBLIC_BASE_URL=https://league.<domain>`, and `CODEX_PET_COOKIE_SECURE=true`.
 

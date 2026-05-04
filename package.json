@@ -21,6 +21,7 @@
     "balance:sim": "node scripts/balance-sim.mjs",
     "verify:loop": "node scripts/verify-loop.mjs",
     "ops:check": "node scripts/ops-check.mjs",
+    "admin:bootstrap": "node scripts/bootstrap-admin.mjs",
     "prod:check": "node scripts/production-check.mjs",
     "backup": "node scripts/backup-state.mjs",
     "healthcheck": "node scripts/healthcheck.mjs",
