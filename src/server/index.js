@@ -672,7 +672,7 @@ function leaseBusyError(name, retryAfterSeconds = 2) {
 async function applyRequestGuard(state, req, routeKey, accountId, body) {
   await enforceRequestGuardWithDistributed(state, {
     accountId,
-    actorKey: requestActorKey(req, accountId, body),
+    actorKey: requestActorKey(req, accountId, body, routeKey),
     routeKey,
     requestId: requestId(req, body),
     bodyHash: hashRequestBody(body),
@@ -692,8 +692,9 @@ function requestId(req, body) {
   return req.headers["idempotency-key"]?.toString() || body?.request_id || body?.idempotency_key || "";
 }
 
-function requestActorKey(req, accountId, body) {
+function requestActorKey(req, accountId, body, routeKey) {
   if (accountId) return `account:${accountId}`;
+  if (routeKey === "auth.challenge") return `${clientIpHash(req)}:auth.challenge`;
   const subject = body?.identifier || body?.challenge_id || "anonymous";
   return `${clientIpHash(req)}:${subject}`;
 }

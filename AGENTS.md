@@ -102,20 +102,20 @@ Public GitHub baseline:
 
 Remaining official shared League server setup still needed from the user:
 
-- Real provider credential values for Render, AWS SES, Cloudflare R2, OpenAI, and the final domain.
+- Real provider credential values for Render, Resend, Cloudflare R2, OpenAI, and the final domain.
 
 Official shared League server provider decision track:
 
 - [x] Open the provider decision track after the public GitHub baseline.
 - [x] Confirm hosting/deployment target: Render Web Service.
-- [x] Confirm Auth provider for low-cost alpha: native League email-code login with AWS SES delivery. Passkeys and OAuth are deferred until needed.
+- [x] Confirm Auth provider for low-cost alpha: native League email-code login with Resend delivery. Passkeys and OAuth are deferred until needed.
 - [x] Confirm managed Postgres provider: Render Postgres.
 - [x] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks: Render Key Value from the first shared server launch.
 - [x] Confirm object storage and public asset URL/CDN strategy: Cloudflare R2 with a custom domain.
 - [x] Confirm image/text moderation provider and review policy: OpenAI Moderation API with `omni-moderation-latest`, using manual review for quarantine/block decisions.
 - [x] Confirm domain, HTTPS, cookie, and admin access strategy: Cloudflare DNS, Render custom domain, secure host-only League cookies, and server-side League admin roles after verified email login.
 - [x] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
-- [x] Implement AWS SES email-code delivery path and production/ops config checks.
+- [x] Implement Resend email-code delivery path and production/ops config checks.
 - [ ] Run production-shaped integration checks after real credentials exist.
 
 Official shared server launch checklist:
@@ -124,7 +124,7 @@ Official shared server launch checklist:
   - [ ] Render Web Service from `https://github.com/BMinChul/codex-pet-league`.
   - [ ] Render Postgres in the same Render region as the Web Service.
   - [ ] Render Key Value Redis in the same Render region as the Web Service.
-  - [ ] AWS SES verified sender identity for the League email-code login sender.
+  - [ ] Resend verified sender domain for the League email-code login sender.
   - [ ] Cloudflare R2 bucket for canonical/public pet atlas assets.
   - [ ] OpenAI API project key for moderation.
   - [ ] Cloudflare DNS zone or domain for `league.<domain>` and `assets.<domain>`.
@@ -132,7 +132,7 @@ Official shared server launch checklist:
 - [ ] 3. Run Postgres migrations and schema checks against the real Render Postgres URL.
 - [ ] 4. Deploy the Render Web Service and verify `/api/health` plus `/api/metrics`.
 - [ ] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
-- [ ] 6. Run real integration checks: SES login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
+- [ ] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
 - [ ] 7. Bootstrap the first verified owner account to server-side `role=admin`.
 - [ ] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
 - [ ] 9. Add backup/log/cost-alert/incident routines.
@@ -143,7 +143,7 @@ Current provider recommendation as of 2026-05-04:
 - Hosting/deployment: Render Web Service.
 - Database: Render Postgres. Use the internal database URL from the Render Web Service when the app and database are in the same account and region.
 - Realtime/request guard/locks: Render Key Value, Redis-compatible, from the first shared server launch. Use the internal URL from the same Render region when possible; the runtime supports both `redis://` and `rediss://`.
-- Auth: native League email-code login with AWS SES delivery for the low-cost alpha. The League server owns challenge verification and issues its own `league_session`; AWS SES only sends the code email. Passkeys and OAuth/social login remain future additions.
+- Auth: native League email-code login with Resend delivery for the low-cost alpha. The League server owns challenge verification and issues its own `league_session`; Resend only sends the code email. Passkeys and OAuth/social login remain future additions.
 - Object storage/CDN: Cloudflare R2 with S3-compatible API and a custom domain for public pet atlas assets.
 - Moderation: OpenAI Moderation API with `omni-moderation-latest` for image and text checks, plus manual review for review/private/blocked asset states.
 - Domain/DNS: Cloudflare-managed domain. Use `league.<domain>` as the Render Web Service custom domain for app/API/web/MCP traffic and `assets.<domain>` as the R2 custom domain. Keep app/API on one host so `league_session` remains a host-only `HttpOnly; SameSite=Lax; Secure` cookie. Admin access must come from a verified League session with server-side `role=admin`, bootstrapped after email-code login by a controlled one-off promotion; no shared admin token.
@@ -187,7 +187,7 @@ League authority policy:
 
 Launch account methods:
 
-- Email code/magic-link login first, delivered by AWS SES and verified by the League server.
+- Email code/magic-link login first, delivered by Resend and verified by the League server.
 - Passkey later.
 - League OAuth such as Google, Apple, GitHub, or another normal OAuth provider later.
 
@@ -527,7 +527,7 @@ Golden rules:
 
 Implemented/expected controls:
 
-- League sessions, device binding, local provider-shaped auth flows, and AWS SES email-code delivery for low-cost alpha login.
+- League sessions, device binding, local provider-shaped auth flows, Resend email-code delivery for low-cost alpha login, and IP-scoped auth challenge rate limits to reduce email cost abuse.
 - Rate limits and idempotency keys for mutations.
 - Replay prevention and stale action rejection.
 - Turn nonces and server deadlines.
@@ -583,7 +583,7 @@ Production-shaped direction:
 - Cloudflare R2 S3-compatible object storage with a custom public asset domain.
 - OpenAI Moderation API for image/text moderation triage.
 - HTTPS with secure cookies.
-- AWS SES email-code delivery for initial verified League login.
+- Resend email-code delivery for initial verified League login.
 - Future passkey/OAuth providers when the account surface needs them.
 - Server-side admin role bootstrap after verified email login, with League server-side `role=admin` enforcement.
 - Bridge/replay signing secrets.
@@ -594,7 +594,7 @@ Database conversion should be handled deliberately and late in the deployment pa
 
 Production work not yet done:
 
-- Provider choices and domain/admin strategy are recorded, but real Render, AWS SES, Cloudflare R2, OpenAI, and domain credentials are not wired or verified yet.
+- Provider choices and domain/admin strategy are recorded, but real Render, Resend, Cloudflare R2, OpenAI, and domain credentials are not wired or verified yet.
 - Local JSON storage remains the default dev path.
 - Postgres schema checks and migration scripts exist, but the real managed database cutover should happen after credential setup.
 - Redis and S3-compatible code paths exist, but need real provider credentials and runtime verification.
@@ -652,3 +652,4 @@ node --check public/app.js
 - Do not make main ranked cross Battle Class.
 - Do not make web the only required play surface.
 - Do not store raw source code or full Codex transcripts in Training Reports.
+- Do not use `OPENAI_API_KEY` for any paid OpenAI model endpoint. The official shared server key is moderation-only and should be used only for `/v1/moderations` with `omni-moderation-latest`.

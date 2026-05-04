@@ -82,6 +82,16 @@ function emailDeliveryStatus(env, localDev) {
       credentials: ses.credentials,
     };
   }
+  if (provider === "resend") {
+    const resend = resendStatus(env);
+    return {
+      status: resend.configured ? "configured" : "missing",
+      delivery: "resend",
+      endpoint: resend.endpoint,
+      from: resend.from,
+      credentials: resend.credentials,
+    };
+  }
   if (provider === "console") {
     return {
       status: localDev ? "dev_stub" : "degraded",
@@ -93,6 +103,18 @@ function emailDeliveryStatus(env, localDev) {
     status: "missing",
     delivery: provider || "missing",
     webhook: env.CODEX_PET_EMAIL_WEBHOOK_URL ? "configured" : "missing",
+  };
+}
+
+function resendStatus(env) {
+  const endpoint = env.CODEX_PET_RESEND_ENDPOINT || "https://api.resend.com";
+  const from = env.CODEX_PET_RESEND_FROM_EMAIL || "";
+  const hasApiKey = Boolean(env.CODEX_PET_RESEND_API_KEY || env.RESEND_API_KEY);
+  return {
+    configured: Boolean(endpoint && from && hasApiKey),
+    endpoint: endpoint ? "configured" : "missing",
+    from: from ? "configured" : "missing",
+    credentials: hasApiKey ? "configured" : "missing",
   };
 }
 

@@ -110,11 +110,86 @@ async function deliverEmailMagicLink(challenge, env, transport) {
       },
     };
   }
+  if (provider === "resend") {
+    const result = await sendResendEmail(challenge, payload, env, transport);
+    return {
+      delivery: {
+        method: "email_magic_link",
+        status: "sent",
+        channel: "resend",
+        message: "Login code was sent through Resend.",
+        provider_message_id: result?.id ?? null,
+      },
+    };
+  }
 
   const error = new Error("Email magic-link provider is not configured.");
   error.status = 503;
   error.code = "AUTH_DELIVERY_NOT_CONFIGURED";
   throw error;
+}
+
+async function sendResendEmail(challenge, payload, env, transport) {
+  const config = resendConfig(env);
+  const requestBody = resendEmailPayload(challenge, payload, env, config);
+  const response = await transport(`${config.endpoint.replace(/\/+$/, "")}/emails`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.apiKey}`,
+      "content-type": "application/json",
+      "idempotency-key": String(challenge.challenge_id).slice(0, 256),
+      "user-agent": "codex-pet-league/0.1",
+    },
+    body: JSON.stringify(requestBody),
+  });
+  if (!response?.ok) {
+    const error = new Error(`Resend email delivery failed with ${response?.status ?? "no response"}.`);
+    error.status = response?.status === 429 ? 429 : 502;
+    error.code = "AUTH_EMAIL_DELIVERY_FAILED";
+    throw error;
+  }
+  const contentType = response.headers?.get?.("content-type") ?? "";
+  return contentType.includes("application/json") ? response.json() : {};
+}
+
+function resendEmailPayload(challenge, payload, env, config) {
+  const content = loginEmailContent(challenge, payload, env);
+  const email = {
+    from: senderEmailAddress(config.fromEmail, config.fromName),
+    to: [challenge.identifier],
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+    tags: [
+      { name: "type", value: "auth_login" },
+      { name: "challenge", value: String(challenge.challenge_id).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 256) },
+    ],
+  };
+  if (config.replyTo) email.reply_to = config.replyTo;
+  return email;
+}
+
+function resendConfig(env) {
+  const config = {
+    endpoint: env.CODEX_PET_RESEND_ENDPOINT || "https://api.resend.com",
+    apiKey: env.CODEX_PET_RESEND_API_KEY || env.RESEND_API_KEY,
+    fromEmail: env.CODEX_PET_RESEND_FROM_EMAIL,
+    fromName: env.CODEX_PET_RESEND_FROM_NAME,
+    replyTo: env.CODEX_PET_RESEND_REPLY_TO,
+  };
+  for (const [key, value] of Object.entries({
+    endpoint: config.endpoint,
+    apiKey: config.apiKey,
+    fromEmail: config.fromEmail,
+  })) {
+    if (!value) {
+      const error = new Error(`Resend email delivery is missing ${key}.`);
+      error.status = 503;
+      error.code = "AUTH_EMAIL_DELIVERY_NOT_CONFIGURED";
+      throw error;
+    }
+  }
+  return config;
 }
 
 async function sendSesEmail(challenge, payload, env, transport) {
@@ -136,6 +211,38 @@ async function sendSesEmail(challenge, payload, env, transport) {
 
 function sesEmailPayload(challenge, payload, env) {
   const config = sesConfig(env);
+  const content = loginEmailContent(challenge, payload, env);
+  const email = {
+    FromEmailAddress: senderEmailAddress(config.fromEmail, config.fromName),
+    Destination: {
+      ToAddresses: [challenge.identifier],
+    },
+    Content: {
+      Simple: {
+        Subject: {
+          Data: content.subject,
+          Charset: "UTF-8",
+        },
+        Body: {
+          Text: {
+            Data: content.text,
+            Charset: "UTF-8",
+          },
+          Html: {
+            Data: content.html,
+            Charset: "UTF-8",
+          },
+        },
+      },
+    },
+  };
+  if (config.replyTo) email.ReplyToAddresses = [config.replyTo];
+  if (config.configurationSet) email.ConfigurationSetName = config.configurationSet;
+  return email;
+}
+
+function loginEmailContent(challenge, payload, env) {
+  const subject = env.CODEX_PET_EMAIL_SUBJECT || env.CODEX_PET_SES_SUBJECT || "Your Codex Pet League login code";
   const text = [
     "Codex Pet League login",
     "",
@@ -153,33 +260,7 @@ function sesEmailPayload(challenge, payload, env) {
     `<p>Challenge link: <a href="${escapeHtml(payload.verify_url)}">${escapeHtml(payload.verify_url)}</a></p>`,
     "<p>If you did not request this login, you can ignore this email.</p>",
   ].join("");
-  const email = {
-    FromEmailAddress: sesFromEmailAddress(config),
-    Destination: {
-      ToAddresses: [challenge.identifier],
-    },
-    Content: {
-      Simple: {
-        Subject: {
-          Data: env.CODEX_PET_SES_SUBJECT || "Your Codex Pet League login code",
-          Charset: "UTF-8",
-        },
-        Body: {
-          Text: {
-            Data: text,
-            Charset: "UTF-8",
-          },
-          Html: {
-            Data: html,
-            Charset: "UTF-8",
-          },
-        },
-      },
-    },
-  };
-  if (config.replyTo) email.ReplyToAddresses = [config.replyTo];
-  if (config.configurationSet) email.ConfigurationSetName = config.configurationSet;
-  return email;
+  return { subject, text, html };
 }
 
 function signedSesSendEmailRequest(payload, env) {
@@ -255,10 +336,10 @@ function sesConfig(env) {
   return config;
 }
 
-function sesFromEmailAddress(config) {
-  if (!config.fromName) return config.fromEmail;
-  const cleanName = String(config.fromName).replaceAll('"', "").trim();
-  return cleanName ? `"${cleanName}" <${config.fromEmail}>` : config.fromEmail;
+function senderEmailAddress(fromEmail, fromName) {
+  if (!fromName) return fromEmail;
+  const cleanName = String(fromName).replaceAll('"', "").trim();
+  return cleanName ? `"${cleanName}" <${fromEmail}>` : fromEmail;
 }
 
 function signingKey(secret, dateStamp, region) {

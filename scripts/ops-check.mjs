@@ -5,6 +5,8 @@ const checks = [
   ["CODEX_PET_COOKIE_SECURE", process.env.CODEX_PET_COOKIE_SECURE ?? "false"],
   ["CODEX_PET_EMAIL_PROVIDER", process.env.CODEX_PET_EMAIL_PROVIDER ?? "missing"],
   ["CODEX_PET_EMAIL_WEBHOOK_URL", process.env.CODEX_PET_EMAIL_WEBHOOK_URL ? "configured" : "missing"],
+  ["CODEX_PET_RESEND_FROM_EMAIL", process.env.CODEX_PET_RESEND_FROM_EMAIL ? "configured" : "missing"],
+  ["CODEX_PET_RESEND_API_KEY", process.env.CODEX_PET_RESEND_API_KEY || process.env.RESEND_API_KEY ? "configured" : "missing"],
   ["CODEX_PET_SES_REGION", process.env.CODEX_PET_SES_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "missing"],
   ["CODEX_PET_SES_FROM_EMAIL", process.env.CODEX_PET_SES_FROM_EMAIL ? "configured" : "missing"],
   ["CODEX_PET_SES_ACCESS_KEY_ID", process.env.CODEX_PET_SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID ? "configured" : "missing"],
@@ -58,6 +60,10 @@ if (process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER === "true") {
 
 if ((process.env.CODEX_PET_AUTH_PROVIDER || "local_dev") !== "local_dev") {
   const emailReady = process.env.CODEX_PET_EMAIL_PROVIDER === "webhook" && process.env.CODEX_PET_EMAIL_WEBHOOK_URL;
+  const resendEmailReady =
+    process.env.CODEX_PET_EMAIL_PROVIDER === "resend" &&
+    process.env.CODEX_PET_RESEND_FROM_EMAIL &&
+    (process.env.CODEX_PET_RESEND_API_KEY || process.env.RESEND_API_KEY);
   const sesEmailReady =
     process.env.CODEX_PET_EMAIL_PROVIDER === "aws_ses" &&
     (process.env.CODEX_PET_SES_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION) &&
@@ -71,7 +77,7 @@ if ((process.env.CODEX_PET_AUTH_PROVIDER || "local_dev") !== "local_dev") {
     process.env.CODEX_PET_OAUTH_CLIENT_ID &&
     process.env.CODEX_PET_OAUTH_REDIRECT_URI &&
     process.env.CODEX_PET_OAUTH_VERIFY_URL;
-  if (!emailReady && !sesEmailReady && !passkeyReady && !oauthReady) {
+  if (!emailReady && !resendEmailReady && !sesEmailReady && !passkeyReady && !oauthReady) {
     console.error("error: production auth provider is enabled but no real auth method is fully configured");
     process.exitCode = 1;
   }

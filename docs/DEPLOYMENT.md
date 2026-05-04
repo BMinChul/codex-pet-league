@@ -64,12 +64,10 @@ CODEX_PET_COOKIE_SECURE=true
 CODEX_PET_AUTH_PROVIDER=email_code
 CODEX_PET_AUTH_DEV_CODE=false
 CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
-CODEX_PET_EMAIL_PROVIDER=aws_ses
-CODEX_PET_SES_REGION=us-east-1
-CODEX_PET_SES_FROM_EMAIL=no-reply@league.<domain>
-CODEX_PET_SES_FROM_NAME=Codex Pet League
-CODEX_PET_SES_ACCESS_KEY_ID=<aws-ses-access-key-id>
-CODEX_PET_SES_SECRET_ACCESS_KEY=<aws-ses-secret-access-key>
+CODEX_PET_EMAIL_PROVIDER=resend
+CODEX_PET_RESEND_FROM_EMAIL=no-reply@league.<domain>
+CODEX_PET_RESEND_FROM_NAME=Codex Pet League
+CODEX_PET_RESEND_API_KEY=<resend-api-key>
 CODEX_PET_STORAGE_DRIVER=postgres
 CODEX_PET_POSTGRES_URL=<render-postgres-url>
 CODEX_PET_REALTIME_BUS=redis
@@ -92,7 +90,7 @@ CODEX_PET_BRIDGE_ATTESTATION_SECRET=<strong-secret>
 CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
 ```
 
-Do not send real users to the Render service until the real provider credentials and domain/admin rollout are configured: AWS SES, Render Postgres, Render Key Value, Cloudflare R2/custom domain, OpenAI moderation, Cloudflare DNS, HTTPS, secure cookies, and admin access policy.
+Do not send real users to the Render service until the real provider credentials and domain/admin rollout are configured: Resend, Render Postgres, Render Key Value, Cloudflare R2/custom domain, OpenAI moderation, Cloudflare DNS, HTTPS, secure cookies, and admin access policy.
 
 ## Domain, HTTPS, Cookie, And Admin Target
 
@@ -225,6 +223,8 @@ R2 setup notes:
 
 The official shared League server image/text moderation provider is the OpenAI Moderation API with `omni-moderation-latest`.
 
+The `OPENAI_API_KEY` for this service is moderation-only. Do not use it for Responses, Chat Completions, image generation, embeddings, audio, fine-tuning, or any other paid OpenAI endpoint. In the OpenAI project settings, use a dedicated project/key for this League service and restrict permissions/budgets as tightly as the dashboard allows.
+
 Use moderation as a triage signal before public asset exposure and before user-controlled text is shown broadly. It should feed the existing asset states instead of replacing admin review:
 
 - `clear`: content can stay public and can enter ranked if all other rules pass.
@@ -249,32 +249,30 @@ Moderation policy:
 - Store only moderation metadata needed for audit: model, timestamp, flagged result, categories, scores, applied input types, action, and reviewer notes. Avoid storing unnecessary submitted text beyond the existing summarized League records.
 - Image-only moderation does not cover every text-only category. Keep user reports and manual review available for text embedded inside pet pixels or ambiguous stylized imagery.
 
-## AWS SES Email Code Auth Target
+## Resend Email Code Auth Target
 
-The official shared League server alpha auth path is native League email-code login delivered through AWS SES.
+The official shared League server alpha auth path is native League email-code login delivered through Resend.
 
-AWS SES is only the email sender. The League server still creates the auth challenge, verifies the code, binds the account, and issues its own `league_session` cookie or `CODEX_PET_SESSION_TOKEN`. Do not treat Codex App or ChatGPT sign-in as League ownership proof.
+Resend is only the email sender. The League server still creates the auth challenge, verifies the code, binds the account, and issues its own `league_session` cookie or `CODEX_PET_SESSION_TOKEN`. Do not treat Codex App or ChatGPT sign-in as League ownership proof.
 
-Production-shaped AWS SES environment values:
+Production-shaped Resend environment values:
 
 ```bash
 CODEX_PET_AUTH_PROVIDER=email_code
-CODEX_PET_EMAIL_PROVIDER=aws_ses
-CODEX_PET_SES_REGION=us-east-1
-CODEX_PET_SES_FROM_EMAIL=no-reply@league.<domain>
-CODEX_PET_SES_FROM_NAME=Codex Pet League
-CODEX_PET_SES_REPLY_TO=support@<domain>
-CODEX_PET_SES_CONFIGURATION_SET=<optional-ses-configuration-set>
-CODEX_PET_SES_ACCESS_KEY_ID=<aws-ses-access-key-id>
-CODEX_PET_SES_SECRET_ACCESS_KEY=<aws-ses-secret-access-key>
+CODEX_PET_EMAIL_PROVIDER=resend
+CODEX_PET_RESEND_FROM_EMAIL=no-reply@league.<domain>
+CODEX_PET_RESEND_FROM_NAME=Codex Pet League
+CODEX_PET_RESEND_REPLY_TO=support@<domain>
+CODEX_PET_RESEND_API_KEY=<resend-api-key>
 ```
 
 Setup notes:
 
-- Verify the sending domain or sender address in AWS SES before opening traffic.
-- Move the SES account out of sandbox mode before inviting real users outside verified test recipients.
-- Use an IAM key scoped to `ses:SendEmail` for the verified identity rather than a broad AWS admin key.
+- Verify the sending domain in Resend before opening traffic.
+- Keep the Resend account on the free plan while login volume is small; the free plan has daily and monthly quotas that act as a hard early cost brake.
+- Keep pay-as-you-go overages disabled unless the official server has a real usage reason.
 - Keep `CODEX_PET_AUTH_DEV_CODE=false`; production users should receive the code only through email.
+- Auth challenge rate limits are IP-scoped, and Resend delivery uses a per-challenge idempotency key so retries do not duplicate emails.
 - Passkeys and OAuth/social login can be added later through the existing `passkey` and `league_oauth` hook contracts, but they are not required for the low-cost alpha.
 
 Before production traffic, test the flow through `codexpet auth providers`, `codexpet auth challenge --method email_magic_link --identifier <email>`, and `codexpet auth verify`. Production mode must not pass with only `local_dev` auth.
@@ -330,7 +328,7 @@ These cannot be completed locally without your accounts or provider choices:
 
 - domain and HTTPS certificate
 - production host or cloud project
-- AWS SES email sender credentials
+- Resend email sender credentials
 - bridge and replay signing secrets
 - Postgres, Redis, and persistent object storage locations
 - monitoring destination for `/api/metrics`

@@ -100,6 +100,56 @@ test("email magic-link AWS SES delivery signs SendEmail request", async () => {
   assert.match(body.Content.Simple.Body.Text.Data, /https:\/\/league\.example\.test\/\?auth_challenge=challenge_1/);
 });
 
+test("auth config accepts Resend email delivery", () => {
+  const env = {
+    CODEX_PET_AUTH_PROVIDER: "email_code",
+    CODEX_PET_EMAIL_PROVIDER: "resend",
+    CODEX_PET_RESEND_FROM_EMAIL: "login@example.test",
+    CODEX_PET_RESEND_API_KEY: "re_test",
+  };
+
+  const status = authProviderStatus(env);
+  assert.equal(status.email_magic_link, "configured");
+  assert.equal(status.methods.email_magic_link.delivery, "resend");
+  assert.doesNotThrow(() => assertAuthMethodConfigured("email_magic_link", env));
+});
+
+test("email magic-link Resend delivery posts with idempotency key", async () => {
+  const calls = [];
+  const env = {
+    CODEX_PET_AUTH_PROVIDER: "email_code",
+    CODEX_PET_EMAIL_PROVIDER: "resend",
+    CODEX_PET_RESEND_FROM_EMAIL: "login@example.test",
+    CODEX_PET_RESEND_FROM_NAME: "Codex Pet League",
+    CODEX_PET_RESEND_API_KEY: "re_test",
+    CODEX_PET_PUBLIC_BASE_URL: "https://league.example.test",
+  };
+  const challenge = {
+    challenge_id: "challenge_1",
+    method: "email_magic_link",
+    identifier: "player@example.test",
+    dev_code: "ABCDEFGH",
+    expires_at: "2026-05-03T00:10:00.000Z",
+  };
+  const result = await deliverAuthChallenge(challenge, env, async (url, init) => {
+    calls.push({ url, init });
+    return jsonResponse({ id: "email_1" });
+  });
+
+  assert.equal(result.delivery.status, "sent");
+  assert.equal(result.delivery.channel, "resend");
+  assert.equal(result.delivery.provider_message_id, "email_1");
+  assert.equal(calls[0].url, "https://api.resend.com/emails");
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers.authorization, "Bearer re_test");
+  assert.equal(calls[0].init.headers["idempotency-key"], "challenge_1");
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.from, '"Codex Pet League" <login@example.test>');
+  assert.equal(body.to[0], "player@example.test");
+  assert.match(body.text, /ABCDEFGH/);
+  assert.match(body.text, /https:\/\/league\.example\.test\/\?auth_challenge=challenge_1/);
+});
+
 test("passkey provider verification accepts a verified external hook response", async () => {
   const env = {
     CODEX_PET_AUTH_PROVIDER: "production",
