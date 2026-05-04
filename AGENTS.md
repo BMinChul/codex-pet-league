@@ -64,7 +64,7 @@ Current GitHub release checklist:
 - [x] Split README guidance into local run, self-host run, and official shared League server later.
 - [x] Run the GitHub-release verification set before pushing.
 - [x] Create or select the GitHub repository and push the public baseline.
-- [ ] After the public repo baseline is shipped, return to official shared League server provider decisions.
+- [x] After the public repo baseline is shipped, return to official shared League server provider decisions.
 
 Checklist discipline:
 
@@ -109,6 +109,29 @@ Later official shared League server decisions still needed from the user:
 - CDN or public asset URL strategy.
 - Image/text moderation provider and review policy.
 - Hosting/deployment target and domain.
+
+Official shared League server provider decision track:
+
+- [x] Open the provider decision track after the public GitHub baseline.
+- [ ] Confirm hosting/deployment target.
+- [ ] Confirm Auth provider for passkeys, email links, and OAuth.
+- [ ] Confirm managed Postgres provider.
+- [ ] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks.
+- [ ] Confirm object storage and public asset URL/CDN strategy.
+- [ ] Confirm image/text moderation provider and review policy.
+- [ ] Confirm domain, HTTPS, cookie, and admin access strategy.
+- [ ] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
+- [ ] Run production-shaped integration checks after real credentials exist.
+
+Current provider recommendation as of 2026-05-04:
+
+- Hosting/deployment: Render Web Service.
+- Database: Render Postgres.
+- Realtime/request guard/locks: Render Key Value, Redis-compatible.
+- Auth: Clerk, because it supports passkeys, email links, and OAuth/social connections.
+- Object storage/CDN: Cloudflare R2 with S3-compatible API and a custom domain for public pet atlas assets.
+- Moderation: OpenAI Moderation API with `omni-moderation-latest` for image and text checks, plus manual review for review/private/blocked asset states.
+- Domain/DNS: Cloudflare-managed domain so R2 custom domain and later app subdomains can share one zone.
 
 Official Codex sign-in docs:
 
