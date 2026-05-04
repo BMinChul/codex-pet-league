@@ -63,7 +63,7 @@ Current GitHub release checklist:
 - [x] Document an installable CLI/MCP/plugin flow for other users' machines.
 - [x] Split README guidance into local run, self-host run, and official shared League server later.
 - [x] Run the GitHub-release verification set before pushing.
-- [ ] Create or select the GitHub repository and push the public baseline.
+- [x] Create or select the GitHub repository and push the public baseline.
 - [ ] After the public repo baseline is shipped, return to official shared League server provider decisions.
 
 Checklist discipline:
@@ -93,6 +93,12 @@ Latest GitHub-release verification:
 - `npm run balance:sim`: passed with `status: ok`.
 - `npm run verify:loop -- 2`: passed.
 - `git diff --check`: passed.
+
+Public GitHub baseline:
+
+- Repository: `https://github.com/BMinChul/codex-pet-league`.
+- First pushed branch: `master`.
+- Public release prep commit: `a51e13b` (`Prepare public GitHub release`).
 
 Later official shared League server decisions still needed from the user:
 
