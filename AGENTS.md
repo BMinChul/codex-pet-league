@@ -106,7 +106,7 @@ Remaining official shared League server work:
 
 - No blocker remains on the launch checklist after item 10.
 - Public alpha operating pages are implemented at `/privacy`, `/terms`, `/support`, and `/status`.
-- Broader traffic still needs only follow-up operating choices as usage grows: a private support inbox, an external alert destination, and any future passkey/OAuth provider additions.
+- Broader traffic still needs only follow-up operating choices as usage grows: a private support inbox, provider-level paging/escalation if needed, and any future passkey/OAuth provider additions.
 
 Official shared League server provider decision track:
 
@@ -166,8 +166,9 @@ Post-launch alpha operating surface:
 - [x] Publish alpha Terms at `https://league.codexpetz.com/terms`.
 - [x] Publish Support guidance at `https://league.codexpetz.com/support` with GitHub Issues for public bug reports and secret-sharing warnings.
 - [x] Publish public Status page at `https://league.codexpetz.com/status` backed by `/api/health`.
+- [x] Add GitHub Actions official monitor every 15 minutes for `/api/health`, `/api/metrics`, and public operating pages.
 - [ ] Add a private inbound support mailbox when the domain is ready for receiving mail.
-- [ ] Add an external alert destination that watches `/api/health`, `/api/metrics`, Render, Postgres, Redis, Resend, R2, and OpenAI moderation usage.
+- [ ] Add provider-level paging or a private escalation channel later if GitHub Actions failure notices are not enough.
 - [ ] Add passkey and OAuth providers later when the alpha needs them.
 
 Current live shared-server status:

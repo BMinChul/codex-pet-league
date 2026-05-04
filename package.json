@@ -29,6 +29,7 @@
     "ops:resolve-audit-alerts": "node scripts/resolve-stale-audit-alerts.mjs",
     "cost:check": "node scripts/cost-guard.mjs",
     "incident:pack": "node scripts/incident-pack.mjs",
+    "monitor:official": "node scripts/monitor-official.mjs",
     "healthcheck": "node scripts/healthcheck.mjs",
     "db:schema:check": "node scripts/postgres-schema-check.mjs",
     "db:postgres:migrate": "node scripts/postgres-migrate.mjs",

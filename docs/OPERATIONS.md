@@ -52,6 +52,7 @@ During operations, admin role changes should be rare and auditable. The official
 
 ```bash
 npm run ops:check
+npm run monitor:official
 npm run cost:check
 npm run test:abuse
 npm run test:storage
@@ -87,6 +88,14 @@ The official shared alpha exposes these public operating pages:
 - `https://league.codexpetz.com/terms`: alpha operating terms.
 
 The status page is a public convenience view, not a full alerting system. Keep provider dashboards and any future external monitors pointed at `/api/health`, `/api/metrics`, Render deploy status, Postgres, Redis, Resend, R2, and OpenAI moderation usage.
+
+GitHub Actions runs `.github/workflows/official-monitor.yml` every 15 minutes against the official shared alpha. The monitor fails when `/api/health` is not `ok`, production providers drift away from Postgres/Redis, `/api/metrics` is missing expected gauges, or the public operating pages stop rendering. Run the same check manually with:
+
+```bash
+npm run monitor:official
+```
+
+Use `CODEX_PET_MONITOR_BASE_URL=https://league.<domain>` for self-host checks. Set `CODEX_PET_MONITOR_FAIL_ON_ALERTS=true` only when open abuse alerts should fail the monitor instead of remaining a manual review signal.
 
 ## Backup Loop
 
