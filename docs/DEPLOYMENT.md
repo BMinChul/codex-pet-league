@@ -106,6 +106,37 @@ Notes:
 - The current runtime writes authoritative snapshots to `league_state_snapshots`; table-specific write-through can be added after the production database is live.
 - Consider Render PgBouncer only if connection pressure appears in metrics or logs. The current single Web Service can start with direct internal connections.
 
+## Render Key Value Target
+
+The official shared League server Redis-compatible provider is Render Key Value.
+
+Use one Render Key Value instance for:
+
+- Realtime fanout over Redis-compatible pub/sub.
+- Distributed request guard buckets for rate limits and idempotency keys.
+- Distributed locks for matchmaking, battle turns, and ops jobs.
+
+Create the Key Value instance in the same Render workspace and region as the Web Service. Use the internal URL for `CODEX_PET_REDIS_URL` whenever possible. Render Key Value URLs can use either `redis://` or `rediss://`; this runtime supports both schemes.
+
+Production runtime values:
+
+```bash
+CODEX_PET_REALTIME_BUS=redis
+CODEX_PET_REQUEST_GUARD=redis
+CODEX_PET_DISTRIBUTED_LOCK=redis
+CODEX_PET_REDIS_URL=<render-key-value-internal-url>
+CODEX_PET_REALTIME_CHANNEL=codex-pet-league:events
+CODEX_PET_REQUEST_GUARD_NAMESPACE=codex-pet-league
+CODEX_PET_LOCK_NAMESPACE=codex-pet-league
+CODEX_PET_LOCK_TTL_MS=30000
+```
+
+Notes:
+
+- Prefer paid/persistent Key Value for the official shared League server so short-lived lock/rate/idempotency data survives routine instance restarts as much as the provider supports.
+- Keep external Key Value access disabled unless a specific admin/debug workflow needs it, and disable it again afterward.
+- `codexpet doctor`, MCP `league_doctor`, and `/api/health` expose redacted Redis connection status for troubleshooting.
+
 ## Clerk Auth Target
 
 The official shared League server auth provider is Clerk.

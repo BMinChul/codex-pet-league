@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
-import { once } from "node:events";
-import { createRealtimeBus, encodeRedisCommand } from "../src/realtime/bus.js";
+import { EventEmitter, once } from "node:events";
+import { RedisConnection, createRealtimeBus, encodeRedisCommand } from "../src/realtime/bus.js";
 
 test("local realtime bus fans events out to subscribers", async () => {
   const bus = createRealtimeBus({ CODEX_PET_REALTIME_BUS: "local" });
@@ -19,6 +19,26 @@ test("local realtime bus fans events out to subscribers", async () => {
 test("Redis command encoding uses RESP arrays", () => {
   assert.equal(encodeRedisCommand(["PING"]).toString("utf8"), "*1\r\n$4\r\nPING\r\n");
   assert.equal(encodeRedisCommand(["PUBLISH", "room", "hello"]).toString("utf8"), "*3\r\n$7\r\nPUBLISH\r\n$4\r\nroom\r\n$5\r\nhello\r\n");
+});
+
+test("redis connection selects TLS for rediss URLs", async () => {
+  const seen = [];
+  const connection = new RedisConnection("rediss://cache.example.test:6380/0", (options) => {
+    seen.push(options);
+    const socket = new EventEmitter();
+    socket.write = () => true;
+    socket.destroy = () => {};
+    queueMicrotask(() => socket.emit("connect"));
+    return socket;
+  });
+
+  await connection.open();
+  connection.close();
+
+  assert.equal(seen[0].tls, true);
+  assert.equal(seen[0].host, "cache.example.test");
+  assert.equal(seen[0].port, 6380);
+  assert.equal(seen[0].servername, "cache.example.test");
 });
 
 test("redis realtime bus publishes through a Redis-compatible socket", async () => {

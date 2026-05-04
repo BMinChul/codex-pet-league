@@ -1,5 +1,4 @@
-import { connect as netConnect } from "node:net";
-import { RedisConnection } from "../realtime/bus.js";
+import { RedisConnection, connectRedisSocket } from "../realtime/bus.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0";
@@ -7,7 +6,7 @@ const DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0";
 export function createDistributedRequestGuard(env = process.env, options = {}) {
   const provider = env.CODEX_PET_REQUEST_GUARD || "local";
   if (provider === "local") return new LocalRequestGuard(env);
-  if (provider === "redis") return new RedisRequestGuard(env, options.connect ?? netConnect);
+  if (provider === "redis") return new RedisRequestGuard(env, options.connect);
   throw new Error(`Unsupported CODEX_PET_REQUEST_GUARD: ${provider}`);
 }
 
@@ -33,7 +32,7 @@ export class LocalRequestGuard {
 }
 
 export class RedisRequestGuard {
-  constructor(env = process.env, connect = netConnect) {
+  constructor(env = process.env, connect = connectRedisSocket) {
     this.provider = "redis";
     this.namespace = env.CODEX_PET_REQUEST_GUARD_NAMESPACE || "codex-pet-league";
     this.url = env.CODEX_PET_REDIS_URL || DEFAULT_REDIS_URL;

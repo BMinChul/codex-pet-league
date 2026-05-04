@@ -1,11 +1,17 @@
 import { connect as netConnect } from "node:net";
+import { connect as tlsConnect } from "node:tls";
 import { randomUUID } from "node:crypto";
 
 export function createRealtimeBus(env = process.env, options = {}) {
   const provider = env.CODEX_PET_REALTIME_BUS || "local";
   if (provider === "local") return new LocalRealtimeBus(env);
-  if (provider === "redis") return new RedisRealtimeBus(env, options.connect ?? netConnect);
+  if (provider === "redis") return new RedisRealtimeBus(env, options.connect);
   throw new Error(`Unsupported CODEX_PET_REALTIME_BUS: ${provider}`);
+}
+
+export function connectRedisSocket(options) {
+  const { tls, ...socketOptions } = options;
+  return tls ? tlsConnect(socketOptions) : netConnect(socketOptions);
 }
 
 export class LocalRealtimeBus {
@@ -43,7 +49,7 @@ export class LocalRealtimeBus {
 }
 
 export class RedisRealtimeBus {
-  constructor(env = process.env, connect = netConnect) {
+  constructor(env = process.env, connect = connectRedisSocket) {
     this.provider = "redis";
     this.channel = env.CODEX_PET_REALTIME_CHANNEL || "codex-pet-league:events";
     this.url = env.CODEX_PET_REDIS_URL || "redis://127.0.0.1:6379/0";
@@ -102,7 +108,7 @@ export class RedisRealtimeBus {
 }
 
 export class RedisConnection {
-  constructor(url, connect) {
+  constructor(url, connect = connectRedisSocket) {
     this.url = new URL(url);
     this.connect = connect;
     this.socket = null;
@@ -113,9 +119,15 @@ export class RedisConnection {
 
   async open() {
     if (this.socket) return;
+    if (!["redis:", "rediss:"].includes(this.url.protocol)) {
+      throw new Error(`Unsupported Redis URL protocol: ${this.url.protocol}`);
+    }
+    const useTls = this.url.protocol === "rediss:";
     this.socket = this.connect({
       host: this.url.hostname,
       port: Number(this.url.port || 6379),
+      servername: this.url.hostname,
+      tls: useTls,
     });
     this.socket.on("data", (chunk) => this.onData(chunk));
     this.socket.on("error", (error) => this.rejectPending(error));

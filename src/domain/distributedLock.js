@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { connect as netConnect } from "node:net";
-import { RedisConnection } from "../realtime/bus.js";
+import { RedisConnection, connectRedisSocket } from "../realtime/bus.js";
 
 const DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0";
 const DEFAULT_LOCK_TTL_MS = 30_000;
@@ -8,7 +7,7 @@ const DEFAULT_LOCK_TTL_MS = 30_000;
 export function createDistributedLockManager(env = process.env, options = {}) {
   const provider = env.CODEX_PET_DISTRIBUTED_LOCK || "local";
   if (provider === "local") return new LocalDistributedLockManager(env);
-  if (provider === "redis") return new RedisDistributedLockManager(env, options.connect ?? netConnect);
+  if (provider === "redis") return new RedisDistributedLockManager(env, options.connect);
   throw new Error(`Unsupported CODEX_PET_DISTRIBUTED_LOCK: ${provider}`);
 }
 
@@ -66,7 +65,7 @@ export class LocalDistributedLockManager {
 }
 
 export class RedisDistributedLockManager {
-  constructor(env = process.env, connect = netConnect) {
+  constructor(env = process.env, connect = connectRedisSocket) {
     this.provider = "redis";
     this.namespace = env.CODEX_PET_LOCK_NAMESPACE || "codex-pet-league";
     this.url = env.CODEX_PET_REDIS_URL || DEFAULT_REDIS_URL;
