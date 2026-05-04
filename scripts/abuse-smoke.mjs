@@ -12,13 +12,11 @@ import { createDefaultState } from "../src/storage/jsonStore.js";
 
 const state = createDefaultState();
 
-for (let i = 0; i < 5; i += 1) {
-  enforceRequestGuard(state, {
-    actorKey: "192.0.2.10:abuse@example.test",
-    routeKey: "auth.challenge",
-    bodyHash: hashRequestBody({ identifier: "abuse@example.test" }),
-  });
-}
+enforceRequestGuard(state, {
+  actorKey: "192.0.2.10:abuse@example.test",
+  routeKey: "auth.challenge",
+  bodyHash: hashRequestBody({ identifier: "abuse@example.test" }),
+});
 assert.throws(
   () =>
     enforceRequestGuard(state, {

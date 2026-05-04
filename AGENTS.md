@@ -116,7 +116,7 @@ Official shared League server provider decision track:
 - [x] Confirm domain, HTTPS, cookie, and admin access strategy: Cloudflare DNS, Render custom domain, secure host-only League cookies, and server-side League admin roles after verified email login.
 - [x] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
 - [x] Implement Resend email-code delivery path and production/ops config checks.
-- [ ] Run the remaining production-shaped integration checks after real credentials exist.
+- [x] Run the remaining production-shaped integration checks after real credentials exist.
 
 Official shared server launch checklist:
 
@@ -132,7 +132,7 @@ Official shared server launch checklist:
 - [x] 3. Run Postgres migrations and schema checks against the real Render Postgres URL.
 - [x] 4. Deploy the Render Web Service and verify `/api/health` plus `/api/metrics`.
 - [x] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
-- [ ] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
+- [x] 6. Run real integration checks: Resend login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
 - [ ] 7. Bootstrap the first verified owner account to server-side `role=admin`.
 - [ ] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
 - [ ] 9. Add backup/log/cost-alert/incident routines.
@@ -149,6 +149,15 @@ Current live shared-server status:
 - `CODEX_PET_ASSET_CDN_BASE_URL` is set to `https://assets.codexpetz.com`.
 - Render one-off job `job-d7sfmi3eo5us73ah26l0` applied `001_initial_postgres_schema.sql` to the real Render Postgres database.
 - Render one-off job `job-d7sfmmjrjlhs73bspa70` passed schema check with `1 migration, 25 tables`.
+- 2026-05-04 real integration checks passed:
+  - Resend auth challenge through `https://league.codexpetz.com` returned 201 with Resend delivery and no exposed dev code.
+  - Render one-off job `job-d7sg9fjeo5us73ahopmg` verified Postgres snapshot load/save persistence.
+  - Render one-off job `job-d7sg9ibrjlhs73btfrsg` verified Redis PING, expiring request-guard-style keys, and distributed lock exclusion.
+  - Render one-off job `job-d7sg9l77f7vs73d9bfm0` verified Cloudflare R2 write/read through the S3-compatible asset store.
+  - Render one-off job `job-d7sg9o5ckfvc73cguso0` verified the moderation-only OpenAI `/v1/moderations` call path with `omni-moderation-latest`.
+  - CLI `doctor`, `auth providers`, `bridge status`, and `rules` passed against the live Render fallback URL while local Windows DNS cache for `league.codexpetz.com` clears.
+  - MCP `league_doctor` passed against the live server.
+  - Playwright browser smoke loaded `https://league.codexpetz.com` and reached the expected signed-out UI state without unexpected JS or network failures.
 
 Current provider recommendation as of 2026-05-04:
 
@@ -606,11 +615,13 @@ Database conversion should be handled deliberately and late in the deployment pa
 
 Production work not yet done:
 
-- Provider choices and domain/admin strategy are recorded, but real Render, Resend, Cloudflare R2, OpenAI, and domain credentials are not wired or verified yet.
+- Provider choices, domain/admin strategy, real Render, Resend, Cloudflare R2, OpenAI, and domain credentials are wired and integration-checked; do not commit or expose the credential values.
 - Local JSON storage remains the default dev path.
-- Postgres schema checks and migration scripts exist, but the real managed database cutover should happen after credential setup.
-- Redis and S3-compatible code paths exist, but need real provider credentials and runtime verification.
-- OpenAI moderation is the chosen provider, but the real API key, integration call path, and production review runbook still need runtime verification.
+- Real Render Postgres migrations, schema checks, and snapshot persistence have passed.
+- Redis and S3-compatible code paths have real provider credential runtime verification.
+- OpenAI moderation is the chosen provider and has runtime verification; the production review runbook still needs completion.
+- The first verified owner account still needs a controlled one-off server-side `role=admin` bootstrap.
+- A small live multiplayer test and backup/log/cost-alert/incident routines still need completion.
 - Docker is not required for local verification right now; revisit it only if the selected deployment target needs container packaging.
 
 ## Verification Expectations
