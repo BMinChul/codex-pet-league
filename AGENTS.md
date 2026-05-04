@@ -168,7 +168,7 @@ Post-launch alpha operating surface:
 - [x] Publish public Status page at `https://league.codexpetz.com/status` backed by `/api/health`.
 - [x] Add GitHub Actions official monitor every 15 minutes for `/api/health`, `/api/metrics`, and public operating pages.
 - [x] Add private support inbox docs and public references for `support@codexpetz.com`.
-- [ ] Complete Cloudflare Email Routing setup for `support@codexpetz.com` and verify delivery to the owner inbox.
+- [x] Complete Cloudflare Email Routing setup for `support@codexpetz.com` and verify delivery to the owner inbox.
 - [ ] Add provider-level paging or a private escalation channel later if GitHub Actions failure notices are not enough.
 - [ ] Add passkey and OAuth providers later when the alpha needs them.
 
@@ -178,6 +178,7 @@ Current live shared-server status:
 - Render custom domain `league.codexpetz.com` is verified.
 - Render runtime env is configured for production, email-code auth through Resend, Postgres snapshots, Redis realtime/request guard/locks, OpenAI moderation, and Cloudflare R2 S3-compatible asset storage.
 - Auth challenge email rate limit is IP-scoped to one request per 10 minutes.
+- Private support inbox `support@codexpetz.com` is configured through Cloudflare Email Routing to the owner inbox; root-domain MX resolves to Cloudflare routing hosts.
 - R2 bucket `codex-pet-league-assets` is configured and `assets.codexpetz.com` serves the tiny `ops-probe/r2-write-read-probe.png` object with 200 `image/png`.
 - `CODEX_PET_PUBLIC_BASE_URL` and `CODEX_PET_LEAGUE_URL` are set to `https://league.codexpetz.com`.
 - `CODEX_PET_ASSET_CDN_BASE_URL` is set to `https://assets.codexpetz.com`.

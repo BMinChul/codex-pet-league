@@ -8,6 +8,13 @@ support@codexpetz.com
 
 Use this for account access problems, moderation appeals, privacy questions, and reports that include private identifiers. Keep public reproducible bugs in GitHub Issues.
 
+Current official shared alpha status:
+
+- Cloudflare Email Routing is active for `support@codexpetz.com`.
+- The destination inbox is the owner Gmail account.
+- Delivery was manually verified by sending from a non-destination mailbox.
+- Root-domain MX resolves to Cloudflare Email Routing hosts.
+
 ## Recommended Provider
 
 Use Cloudflare Email Routing for inbound support during alpha.
