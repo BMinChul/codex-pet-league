@@ -20,6 +20,13 @@ Public pet assets:
 https://assets.codexpetz.com
 ```
 
+Official alpha operation pages:
+
+- Status: https://league.codexpetz.com/status
+- Support: https://league.codexpetz.com/support
+- Privacy Notice: https://league.codexpetz.com/privacy
+- Alpha Terms: https://league.codexpetz.com/terms
+
 ## 1. Install From GitHub
 
 Clone the repo and install dependencies:

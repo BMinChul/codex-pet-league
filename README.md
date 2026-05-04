@@ -403,6 +403,13 @@ Then register MCP directly with Codex CLI, or use the repo-local plugin scaffold
 
 ## Privacy And Terms
 
+Official alpha pages:
+
+- Status: https://league.codexpetz.com/status
+- Support: https://league.codexpetz.com/support
+- Privacy Notice: https://league.codexpetz.com/privacy
+- Alpha Terms: https://league.codexpetz.com/terms
+
 The official shared alpha stores League account records, canonical pet assets, Training Report summaries, battle/replay records, XP/LP ledgers, moderation metadata, and operational audit events on the League server. Do not submit raw source code or full Codex transcripts in Training Reports.
 
 When you run locally or self-host, state stays in your configured storage. Do not commit `.env`, `data/`, runtime logs, uploaded pet assets, database files, service credentials, or session tokens.

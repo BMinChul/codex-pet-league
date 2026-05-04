@@ -105,7 +105,8 @@ Public GitHub baseline:
 Remaining official shared League server work:
 
 - No blocker remains on the launch checklist after item 10.
-- Broader traffic still needs non-code operating decisions as usage grows: terms/privacy copy, support process, monitoring/alert destination, and any future passkey/OAuth provider additions.
+- Public alpha operating pages are implemented at `/privacy`, `/terms`, `/support`, and `/status`.
+- Broader traffic still needs only follow-up operating choices as usage grows: a private support inbox, an external alert destination, and any future passkey/OAuth provider additions.
 
 Official shared League server provider decision track:
 
@@ -158,6 +159,16 @@ Official shared server launch checklist:
   - [x] README names `https://league.codexpetz.com` as the official shared alpha server.
   - [x] `docs/USER_SETUP.md` documents install, email-code login, session token setup, MCP registration, hatch-pet import, Training Reports, matchmaking, and troubleshooting.
   - [x] The repo-local plugin scaffold defaults `CODEX_PET_LEAGUE_URL` to the official server, with docs for local/self-host overrides.
+
+Post-launch alpha operating surface:
+
+- [x] Publish alpha Privacy Notice at `https://league.codexpetz.com/privacy`.
+- [x] Publish alpha Terms at `https://league.codexpetz.com/terms`.
+- [x] Publish Support guidance at `https://league.codexpetz.com/support` with GitHub Issues for public bug reports and secret-sharing warnings.
+- [x] Publish public Status page at `https://league.codexpetz.com/status` backed by `/api/health`.
+- [ ] Add a private inbound support mailbox when the domain is ready for receiving mail.
+- [ ] Add an external alert destination that watches `/api/health`, `/api/metrics`, Render, Postgres, Redis, Resend, R2, and OpenAI moderation usage.
+- [ ] Add passkey and OAuth providers later when the alpha needs them.
 
 Current live shared-server status:
 

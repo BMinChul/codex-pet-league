@@ -77,6 +77,17 @@ Run `npm run backup` before upgrades or risky maintenance.
 
 The admin console shows open review cases, audit findings, active abuse alerts, recent risk events, enforcement history, and asset moderation history. Audit-driven alerts are review-only signals; ranked locks stay manual to avoid false-positive punishment. Audit also recomputes pet XP, level, stats, Battle Class, Style XP, and ranked LP from server ledgers so direct state tampering is visible before ops sign-off.
 
+## Public Alpha Pages
+
+The official shared alpha exposes these public operating pages:
+
+- `https://league.codexpetz.com/status`: browser status page backed by `/api/health`, with links to `/api/health` and `/api/metrics`.
+- `https://league.codexpetz.com/support`: support process, GitHub Issues link, moderation-report guidance, and secret-sharing warnings.
+- `https://league.codexpetz.com/privacy`: alpha privacy notice.
+- `https://league.codexpetz.com/terms`: alpha operating terms.
+
+The status page is a public convenience view, not a full alerting system. Keep provider dashboards and any future external monitors pointed at `/api/health`, `/api/metrics`, Render deploy status, Postgres, Redis, Resend, R2, and OpenAI moderation usage.
+
 ## Backup Loop
 
 Run a manual backup before risky deploys, schema work, provider changes, or moderation cleanups:

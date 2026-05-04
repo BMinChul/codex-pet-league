@@ -95,10 +95,15 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
   }
 });
 
-test("two browser accounts complete friend PvP and avoid linked-network ranked matching", async ({ browser }) => {
+test("two browser accounts complete friend PvP and avoid linked-device ranked matching", async ({ browser }) => {
   const app = await startTempServer();
-  const contextA = await browser.newContext();
-  const contextB = await browser.newContext();
+  const contextA = await browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": "198.51.100.101" } });
+  const contextB = await browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": "198.51.100.102" } });
+  const sharedDeviceId = "browser-shared-device-context";
+  await Promise.all([
+    contextA.addInitScript((deviceId) => localStorage.setItem("codexPetLeagueDeviceId", deviceId), sharedDeviceId),
+    contextB.addInitScript((deviceId) => localStorage.setItem("codexPetLeagueDeviceId", deviceId), sharedDeviceId),
+  ]);
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
   const networkFailures = [];
@@ -144,7 +149,7 @@ test("two browser accounts complete friend PvP and avoid linked-network ranked m
 
     await pageA.click("#adminRefreshButton");
     await expect(pageA.locator("#adminReviewCases")).toContainText("linked_accounts");
-    await expect(pageA.locator("#adminReviewCases")).toContainText("shared_recent_network");
+    await expect(pageA.locator("#adminReviewCases")).toContainText("shared_recent_device");
     await expect(pageA.locator("#adminHistory")).toContainText("matchmaking.integrity_candidate_skipped");
   } finally {
     await contextA.close();

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Status | Codex Pet League</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="legal-shell status-shell">
+      <nav class="legal-nav" aria-label="Site navigation">
+        <a href="/">League</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </nav>
+
+      <header class="legal-hero">
+        <p class="eyebrow">Live runtime</p>
+        <h1>League Status</h1>
+        <p>
+          Public health view for the official shared alpha. This page refreshes the server health endpoint and links to
+          raw metrics for operators.
+        </p>
+        <div id="statusBadge" class="status-banner" role="status" aria-live="polite">Checking...</div>
+        <p id="statusUpdatedAt" class="muted">Waiting for first check.</p>
+      </header>
+
+      <section class="status-grid" id="statusCards"></section>
+
+      <section class="legal-section">
+        <div class="panel-header">
+          <h2>Raw Endpoints</h2>
+          <div class="button-row">
+            <a class="text-button" href="/api/health">/api/health</a>
+            <a class="text-button" href="/api/metrics">/api/metrics</a>
+          </div>
+        </div>
+        <pre id="statusRaw" class="output">No health payload yet.</pre>
+      </section>
+    </main>
+
+    <script type="module" src="/status.js"></script>
+  </body>
+</html>

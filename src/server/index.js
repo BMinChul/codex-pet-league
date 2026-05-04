@@ -70,6 +70,12 @@ const BRIDGE_SECRET = process.env.CODEX_PET_BRIDGE_SECRET ?? "";
 const BRIDGE_ATTESTATION_SECRET = process.env.CODEX_PET_BRIDGE_ATTESTATION_SECRET ?? "";
 const OPS_JOB_INTERVAL_MS = Number(process.env.CODEX_PET_OPS_JOB_INTERVAL_MS ?? 60_000);
 const SESSION_COOKIE = "league_session";
+const STATIC_PAGE_ALIASES = new Map([
+  ["/privacy", "/privacy.html"],
+  ["/terms", "/terms.html"],
+  ["/support", "/support.html"],
+  ["/status", "/status.html"],
+]);
 const liveClients = new Set();
 const realtimeBus = createRealtimeBus();
 const requestGuard = createDistributedRequestGuard();
@@ -903,8 +909,8 @@ function safeEqual(left, right) {
 }
 
 async function serveStatic(req, res, url) {
-  const requested = url.pathname === "/" ? "/index.html" : url.pathname;
-  const safePath = normalize(requested).replace(/^(\.\.[/\\])+/, "");
+  const requested = STATIC_PAGE_ALIASES.get(url.pathname) ?? (url.pathname === "/" ? "/index.html" : url.pathname);
+  const safePath = normalize(requested).replace(/^(\.\.[/\\])+/, "").replace(/^[/\\]+/, "");
   const filePath = join(PUBLIC_DIR, safePath);
   if (!filePath.startsWith(PUBLIC_DIR)) {
     sendJson(res, 403, { error: { code: "FORBIDDEN", message: "Forbidden path." } });

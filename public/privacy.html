@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Notice | Codex Pet League</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="legal-shell">
+      <nav class="legal-nav" aria-label="Site navigation">
+        <a href="/">League</a>
+        <a href="/status">Status</a>
+        <a href="/support">Support</a>
+        <a href="/terms">Terms</a>
+      </nav>
+
+      <header class="legal-hero">
+        <p class="eyebrow">Alpha notice</p>
+        <h1>Privacy Notice</h1>
+        <p>
+          Codex Pet League stores only the data needed to run the League, protect ranked integrity, show public pets,
+          and operate the alpha.
+        </p>
+        <p class="muted">Last updated: May 4, 2026</p>
+      </header>
+
+      <section class="legal-layout">
+        <article class="legal-section">
+          <h2>What We Collect</h2>
+          <ul>
+            <li>League account details such as email address, verification status, display name, role, and session records.</li>
+            <li>Pet records, active-pet selection, pet metadata, skill aliases, canonical hatch atlas uploads, and asset hashes.</li>
+            <li>Battle, replay, leaderboard, XP, Style XP, LP, season, Training Report summary, and audit ledger records.</li>
+            <li>Moderation and safety metadata, including asset reports, review decisions, and risk signals.</li>
+            <li>Operational security signals such as hashed IP address, hashed user agent, and hashed device id when available.</li>
+          </ul>
+        </article>
+
+        <article class="legal-section">
+          <h2>What Not To Submit</h2>
+          <p>
+            Do not submit raw source code, private repository content, full Codex transcripts, secrets, API keys,
+            access tokens, passwords, payment data, private documents, or any content you do not have the right to upload.
+          </p>
+          <p>
+            Training Reports should contain summarized work signals only. The League server scores those summaries and
+            does not need full local project contents.
+          </p>
+        </article>
+
+        <article class="legal-section">
+          <h2>Public League Surfaces</h2>
+          <p>
+            Active official pet assets are public by default so other players can see pets in profiles, battles,
+            friend rooms, replays, leaderboards, and social surfaces. Ranked-visible assets may be hidden or quarantined
+            if moderation or safety review requires it.
+          </p>
+        </article>
+
+        <article class="legal-section">
+          <h2>Providers</h2>
+          <p>The official shared alpha uses these service providers:</p>
+          <ul>
+            <li>Render for the web service, Postgres database, and Redis-compatible Key Value runtime.</li>
+            <li>Cloudflare R2 for pet atlas object storage and the public asset domain.</li>
+            <li>Resend for email-code login delivery.</li>
+            <li>OpenAI Moderation API for image and text safety triage.</li>
+            <li>GitHub for the public repository and public issue reports.</li>
+          </ul>
+        </article>
+
+        <article class="legal-section">
+          <h2>Cookies And Tokens</h2>
+          <p>
+            The browser uses a host-only <code>league_session</code> cookie for League login. CLI and MCP users may use
+            <code>CODEX_PET_SESSION_TOKEN</code> locally. Keep that token private and rotate it by signing in again if it
+            is exposed.
+          </p>
+        </article>
+
+        <article class="legal-section">
+          <h2>Retention And Removal</h2>
+          <p>
+            Alpha records are kept while needed for gameplay, integrity audits, moderation, abuse prevention, debugging,
+            backups, and incident response. Public assets or account-visible records may be hidden, quarantined, or
+            removed when required for safety, legal, or operational reasons.
+          </p>
+        </article>
+
+        <article class="legal-section">
+          <h2>Help</h2>
+          <p>
+            For bugs, account problems, moderation reports, or privacy questions, start at the
+            <a href="/support">support page</a>. Do not post secrets or session tokens in public reports.
+          </p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

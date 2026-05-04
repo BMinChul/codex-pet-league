@@ -120,6 +120,16 @@ async function runOfficialRuntimeSmoke(tempRoot) {
       assert(health.status === "ok", "health endpoint did not return ok");
       const metrics = await getText(baseUrl, "/api/metrics", {});
       assert(metrics.includes("codex_pet_uptime_seconds"), "metrics endpoint did not expose uptime");
+      const privacyPage = await getText(baseUrl, "/privacy", {});
+      assert(privacyPage.includes("Privacy Notice"), "privacy page route did not render");
+      const termsPage = await getText(baseUrl, "/terms", {});
+      assert(termsPage.includes("Alpha Terms"), "terms page route did not render");
+      const supportPage = await getText(baseUrl, "/support", {});
+      assert(supportPage.includes("Support"), "support page route did not render");
+      const statusPage = await getText(baseUrl, "/status", {});
+      assert(statusPage.includes("League Status"), "status page route did not render");
+      const statusScript = await getText(baseUrl, "/status.js", {});
+      assert(statusScript.includes("refreshStatus"), "status script did not render");
 
       runCli("doctor", baseUrl, sessionA.session_token);
       runCli(["auth", "providers"], baseUrl, sessionA.session_token);

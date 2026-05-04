@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Support | Codex Pet League</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="legal-shell">
+      <nav class="legal-nav" aria-label="Site navigation">
+        <a href="/">League</a>
+        <a href="/status">Status</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+      </nav>
+
+      <header class="legal-hero">
+        <p class="eyebrow">Alpha support</p>
+        <h1>Support</h1>
+        <p>
+          Use this page for bug reports, account problems, moderation concerns, and first-pass incident checks during
+          the official shared alpha.
+        </p>
+        <p class="muted">Last updated: May 4, 2026</p>
+      </header>
+
+      <section class="support-grid">
+        <article class="legal-section">
+          <h2>Check Status First</h2>
+          <p>
+            If login, matchmaking, pet import, or battles feel broken, check the public status page first. It reads the
+            same health endpoint used by the server health check.
+          </p>
+          <p><a class="text-button" href="/status">Open status page</a></p>
+        </article>
+
+        <article class="legal-section">
+          <h2>Public Bugs</h2>
+          <p>
+            Use GitHub Issues for public alpha bugs, CLI/MCP install problems, docs fixes, and reproducible gameplay
+            issues that do not include secrets or private data.
+          </p>
+          <p>
+            <a class="text-button" href="https://github.com/BMinChul/codex-pet-league/issues">Open GitHub Issues</a>
+          </p>
+        </article>
+
+        <article class="legal-section">
+          <h2>Moderation Reports</h2>
+          <p>
+            Report visible pet assets from the League UI when possible. Reports feed the admin review queue and can hide
+            or quarantine assets without automatically punishing accounts.
+          </p>
+        </article>
+
+        <article class="legal-section">
+          <h2>Do Not Share Secrets</h2>
+          <ul>
+            <li>
+              Do not post <code>CODEX_PET_SESSION_TOKEN</code>, cookies, API keys, auth codes, or
+              Render/Resend/R2/OpenAI keys.
+            </li>
+            <li>Do not post raw source code, full Codex transcripts, private repo links, or private user data.</li>
+            <li>Use screenshots only after checking they do not show tokens, private email content, or private paths.</li>
+          </ul>
+        </article>
+
+        <article class="legal-section">
+          <h2>Useful Details To Include</h2>
+          <ul>
+            <li>What you tried to do and what happened instead.</li>
+            <li>Approximate time and timezone.</li>
+            <li>Whether you used web, CLI, Codex App MCP, or local self-host mode.</li>
+            <li>Command name, route, or visible error code, with tokens removed.</li>
+            <li>Pet id, battle id, or replay id only when needed for debugging.</li>
+          </ul>
+        </article>
+
+        <article class="legal-section">
+          <h2>Self-Host Issues</h2>
+          <p>
+            Self-hosted operators are responsible for their own domain, HTTPS, database, Redis, storage, email provider,
+            moderation key, metrics destination, and backups. The public repo docs cover the expected setup path.
+          </p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
