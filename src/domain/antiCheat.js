@@ -6,7 +6,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 export const RATE_LIMIT_POLICIES = {
-  "auth.challenge": { limit: 5, windowMs: 15 * MINUTE, score: 25 },
+  "auth.challenge": { limit: 1, windowMs: 10 * MINUTE, score: 25 },
   "auth.verify": { limit: 8, windowMs: 15 * MINUTE, score: 35 },
   "asset.upload": { limit: 8, windowMs: HOUR, score: 35 },
   "asset.report": { limit: 10, windowMs: HOUR, score: 25 },

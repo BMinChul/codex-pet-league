@@ -387,13 +387,11 @@ test("request guards rate-limit abusive traffic and reject replayed mutation ids
     /already used/,
   );
 
-  for (let i = 0; i < 5; i += 1) {
-    enforceRequestGuard(state, {
-      actorKey: "ip:test@example.test",
-      routeKey: "auth.challenge",
-      bodyHash: hashRequestBody({ identifier: "test@example.test" }),
-    });
-  }
+  enforceRequestGuard(state, {
+    actorKey: "ip:test@example.test",
+    routeKey: "auth.challenge",
+    bodyHash: hashRequestBody({ identifier: "test@example.test" }),
+  });
   assert.throws(
     () =>
       enforceRequestGuard(state, {

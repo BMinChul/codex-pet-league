@@ -527,7 +527,7 @@ Golden rules:
 
 Implemented/expected controls:
 
-- League sessions, device binding, local provider-shaped auth flows, Resend email-code delivery for low-cost alpha login, and IP-scoped auth challenge rate limits to reduce email cost abuse.
+- League sessions, device binding, local provider-shaped auth flows, Resend email-code delivery for low-cost alpha login, and IP-scoped auth challenge rate limits of one email-code request per 10 minutes to reduce email cost abuse.
 - Rate limits and idempotency keys for mutations.
 - Replay prevention and stale action rejection.
 - Turn nonces and server deadlines.

@@ -272,7 +272,7 @@ Setup notes:
 - Keep the Resend account on the free plan while login volume is small; the free plan has daily and monthly quotas that act as a hard early cost brake.
 - Keep pay-as-you-go overages disabled unless the official server has a real usage reason.
 - Keep `CODEX_PET_AUTH_DEV_CODE=false`; production users should receive the code only through email.
-- Auth challenge rate limits are IP-scoped, and Resend delivery uses a per-challenge idempotency key so retries do not duplicate emails.
+- Auth challenge rate limits are IP-scoped to one email-code request per 10 minutes, and Resend delivery uses a per-challenge idempotency key so retries do not duplicate emails.
 - Passkeys and OAuth/social login can be added later through the existing `passkey` and `league_oauth` hook contracts, but they are not required for the low-cost alpha.
 
 Before production traffic, test the flow through `codexpet auth providers`, `codexpet auth challenge --method email_magic_link --identifier <email>`, and `codexpet auth verify`. Production mode must not pass with only `local_dev` auth.

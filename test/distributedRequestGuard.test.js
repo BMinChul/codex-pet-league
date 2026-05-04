@@ -38,10 +38,10 @@ test("redis request guard shares rate limit buckets across instances", async () 
   });
 
   try {
-    const guards = Array.from({ length: 6 }, () => createDistributedRequestGuard(redis.env(), { connect: redis.connect }));
+    const guards = Array.from({ length: 2 }, () => createDistributedRequestGuard(redis.env(), { connect: redis.connect }));
     try {
-      for (let index = 0; index < 5; index += 1) await guards[index].enforce(input);
-      await assert.rejects(() => guards[5].enforce(input), /Too many auth.challenge/);
+      await guards[0].enforce(input);
+      await assert.rejects(() => guards[1].enforce(input), /Too many auth.challenge/);
     } finally {
       await Promise.all(guards.map((guard) => guard.close()));
     }
@@ -82,7 +82,7 @@ async function startFakeRedis() {
 function requestInput({ routeKey, requestId, bodyHash }) {
   const actorHash = createHash("sha256").update("account:acct_demo").digest("hex");
   const policies = {
-    "auth.challenge": { limit: 5, windowMs: 15 * 60 * 1000, score: 25 },
+    "auth.challenge": { limit: 1, windowMs: 10 * 60 * 1000, score: 25 },
     "battle.action": { limit: 90, windowMs: 60 * 1000, score: 20 },
   };
   return {
