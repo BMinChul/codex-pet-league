@@ -118,6 +118,26 @@ Official shared League server provider decision track:
 - [x] Implement AWS SES email-code delivery path and production/ops config checks.
 - [ ] Run production-shaped integration checks after real credentials exist.
 
+Official shared server launch checklist:
+
+- [ ] 1. Create real provider resources:
+  - [ ] Render Web Service from `https://github.com/BMinChul/codex-pet-league`.
+  - [ ] Render Postgres in the same Render region as the Web Service.
+  - [ ] Render Key Value Redis in the same Render region as the Web Service.
+  - [ ] AWS SES verified sender identity for the League email-code login sender.
+  - [ ] Cloudflare R2 bucket for canonical/public pet atlas assets.
+  - [ ] OpenAI API project key for moderation.
+  - [ ] Cloudflare DNS zone or domain for `league.<domain>` and `assets.<domain>`.
+- [ ] 2. Wire Render environment variables without committing secrets.
+- [ ] 3. Run Postgres migrations and schema checks against the real Render Postgres URL.
+- [ ] 4. Deploy the Render Web Service and verify `/api/health` plus `/api/metrics`.
+- [ ] 5. Connect `league.<domain>` to Render and `assets.<domain>` to R2.
+- [ ] 6. Run real integration checks: SES login, Postgres persistence, Redis matchmaking/locks, R2 assets, OpenAI moderation, CLI/MCP doctor, and browser smoke.
+- [ ] 7. Bootstrap the first verified owner account to server-side `role=admin`.
+- [ ] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
+- [ ] 9. Add backup/log/cost-alert/incident routines.
+- [ ] 10. Publish official server URL and user setup docs.
+
 Current provider recommendation as of 2026-05-04:
 
 - Hosting/deployment: Render Web Service.
