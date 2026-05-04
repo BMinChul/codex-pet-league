@@ -102,7 +102,6 @@ Public GitHub baseline:
 
 Remaining official shared League server decisions still needed from the user:
 
-- Domain, HTTPS, secure cookie, and admin access strategy.
 - Real provider credential values for Render, Clerk, Cloudflare R2, and the final domain.
 
 Official shared League server provider decision track:
@@ -114,7 +113,7 @@ Official shared League server provider decision track:
 - [x] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks: Render Key Value.
 - [x] Confirm object storage and public asset URL/CDN strategy: Cloudflare R2 with a custom domain.
 - [x] Confirm image/text moderation provider and review policy: OpenAI Moderation API with `omni-moderation-latest`, using manual review for quarantine/block decisions.
-- [ ] Confirm domain, HTTPS, cookie, and admin access strategy.
+- [x] Confirm domain, HTTPS, cookie, and admin access strategy: Cloudflare DNS, Render custom domain, secure host-only League cookies, and Clerk-backed League admin roles.
 - [ ] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
 - [ ] Run production-shaped integration checks after real credentials exist.
 
@@ -126,7 +125,7 @@ Current provider recommendation as of 2026-05-04:
 - Auth: Clerk, because it supports passkeys, email links, and OAuth/social connections. The current League server should connect to Clerk through the existing external auth hook contract until a direct Clerk SDK integration is implemented.
 - Object storage/CDN: Cloudflare R2 with S3-compatible API and a custom domain for public pet atlas assets.
 - Moderation: OpenAI Moderation API with `omni-moderation-latest` for image and text checks, plus manual review for review/private/blocked asset states.
-- Domain/DNS: Cloudflare-managed domain so R2 custom domain and later app subdomains can share one zone.
+- Domain/DNS: Cloudflare-managed domain. Use `league.<domain>` as the Render Web Service custom domain for app/API/web/MCP traffic and `assets.<domain>` as the R2 custom domain. Keep app/API on one host so `league_session` remains a host-only `HttpOnly; SameSite=Lax; Secure` cookie. Admin access must come from a verified League session with server-side `role=admin`, bootstrapped from Clerk backend/private metadata or a controlled one-off promotion; no shared admin token.
 
 Official Codex sign-in docs:
 
@@ -564,6 +563,7 @@ Production-shaped direction:
 - OpenAI Moderation API for image/text moderation triage.
 - HTTPS with secure cookies.
 - Real passkey/email/OAuth providers.
+- Clerk-backed admin role bootstrap with League server-side `role=admin` enforcement.
 - Bridge/replay signing secrets.
 - `/api/health` and `/api/metrics` for runtime checks.
 - `codexpet doctor` and MCP `league_doctor` for local Codex App/CLI runtime checks before deeper debugging.
@@ -572,8 +572,7 @@ Database conversion should be handled deliberately and late in the deployment pa
 
 Production work not yet done:
 
-- Provider choices are recorded, but real Render, Clerk, Cloudflare R2, OpenAI, and domain credentials are not wired or verified yet.
-- No production domain, HTTPS, secure cookie, or admin access strategy has been finalized.
+- Provider choices and domain/admin strategy are recorded, but real Render, Clerk, Cloudflare R2, OpenAI, and domain credentials are not wired or verified yet.
 - Local JSON storage remains the default dev path.
 - Postgres schema checks and migration scripts exist, but the real managed database cutover should happen after credential setup.
 - Redis and S3-compatible code paths exist, but need real provider credentials and runtime verification.

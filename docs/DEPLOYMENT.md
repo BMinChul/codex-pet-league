@@ -85,7 +85,47 @@ CODEX_PET_BRIDGE_ATTESTATION_SECRET=<strong-secret>
 CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
 ```
 
-Do not send real users to the Render service until the real provider credentials and remaining policies are configured: Clerk, Render Postgres, Render Key Value, Cloudflare R2/custom domain, OpenAI moderation, domain/HTTPS, and admin access policy.
+Do not send real users to the Render service until the real provider credentials and domain/admin rollout are configured: Clerk, Render Postgres, Render Key Value, Cloudflare R2/custom domain, OpenAI moderation, Cloudflare DNS, HTTPS, secure cookies, and admin access policy.
+
+## Domain, HTTPS, Cookie, And Admin Target
+
+The official shared League server domain strategy is:
+
+- `league.<domain>`: Render Web Service custom domain for the web UI, HTTP API, Codex App MCP bridge endpoint, and CLI server target.
+- `assets.<domain>`: Cloudflare R2 custom domain for public pet atlas assets.
+- `www.<domain>`: optional redirect or public landing page later; not required for the first shared League server.
+
+Do not split the app and API across separate hostnames for 1.0. Keeping browser traffic on `league.<domain>` lets the existing `league_session` cookie remain host-only and avoids cross-site cookie complexity. CLI and MCP clients can continue using `CODEX_PET_SESSION_TOKEN` or the `x-league-session-token` header.
+
+Render and Cloudflare DNS setup:
+
+1. Add `league.<domain>` as a Render custom domain on the Web Service.
+2. In Cloudflare DNS, create a CNAME for `league` pointing at the service's `*.onrender.com` hostname.
+3. Keep the `league` record DNS-only while Render verifies the domain and issues TLS.
+4. Remove any `AAAA` records for Render-served hostnames.
+5. If the zone has CAA records, allow Render's certificate authorities: `letsencrypt.org` and `pki.goog`.
+6. After Render shows the certificate as valid, leave the record DNS-only for the simplest launch path or switch it to proxied only after `/api/health`, session login, SSE, and battle turns are verified through Cloudflare.
+7. Disable the default `*.onrender.com` subdomain after `league.<domain>` is healthy, so official traffic uses only the League domain.
+
+HTTPS and cookie runtime values:
+
+```bash
+CODEX_PET_PUBLIC_BASE_URL=https://league.<domain>
+CODEX_PET_COOKIE_SECURE=true
+CODEX_PET_AUTH_DEV_CODE=false
+CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
+```
+
+Render terminates inbound HTTPS at its load balancer and forwards HTTP to the service container, so the Node app should keep binding to `PORT` and should not try to manage public TLS itself. The current browser session cookie is `league_session` with `HttpOnly`, `SameSite=Lax`, `Path=/`, and `Secure` when `CODEX_PET_COOKIE_SECURE=true`.
+
+Admin access policy:
+
+- Admin API access requires a valid League session and server-side `account.role === "admin"`.
+- Do not use shared admin passwords, public admin tokens, query-string secrets, or client-controlled role flags.
+- Use Clerk as the upstream identity proof, then mirror only verified admin users into League server records as `role=admin`.
+- Store admin authorization in Clerk backend-only/private metadata or a server-side allowlist inside the Clerk auth adapter. Do not trust Clerk unsafe metadata or browser-submitted role values.
+- Bootstrap the first production admin with a controlled one-off promotion after Clerk verification, then keep later admin changes audited through League admin operations or a small locked-down ops script.
+- Keep `CODEX_PET_AUTH_DEV_CODE=false` and `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false` in every shared environment.
 
 ## Render Postgres Target
 

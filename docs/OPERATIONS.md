@@ -22,6 +22,19 @@ Review asset cases with the existing actions:
 
 Moderation output is not an automatic account penalty. Use category flags, category scores, user reports, duplicate-source evidence, and visible asset context together before blocking content or applying account enforcement. If an already-public asset becomes quarantined or hidden, purge or remove the public R2/custom-domain object path as part of the same moderation action.
 
+## Admin Access Loop
+
+Production admin access is tied to verified League accounts with server-side `role=admin`. Clerk proves the person; the League server decides the role.
+
+Before launch:
+
+1. Verify the first owner account through Clerk.
+2. Promote only that account to `role=admin` with a controlled one-off operation.
+3. Confirm `/api/admin/audit` rejects normal players and accepts only the promoted admin session.
+4. Confirm `CODEX_PET_AUTH_DEV_CODE=false`, `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false`, `CODEX_PET_PUBLIC_BASE_URL=https://league.<domain>`, and `CODEX_PET_COOKIE_SECURE=true`.
+
+During operations, admin role changes should be rare and auditable. Revoke sessions after removing admin access, and avoid using Render dashboard or database access as a routine moderation tool.
+
 ## Season Loop
 
 1. End the active season with `end_current`.
