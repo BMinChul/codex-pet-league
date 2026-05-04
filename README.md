@@ -194,6 +194,7 @@ Environment:
 
 ```bash
 CODEX_PET_LEAGUE_URL=http://localhost:4317
+CODEX_PET_DEPLOYMENT_ENV=local
 CODEX_PET_STATE_PATH=./data/league-state.json
 CODEX_PET_SESSION_TOKEN=league_session_token
 CODEX_PET_ACCOUNT_ID=acct_demo
@@ -215,6 +216,7 @@ CODEX_PET_OAUTH_REDIRECT_URI=https://league.example.com/oauth/callback
 CODEX_PET_OAUTH_VERIFY_URL=https://oauth-provider.example/verify
 CODEX_PET_BRIDGE_SECRET=shared_bridge_hmac_secret
 CODEX_PET_BRIDGE_ATTESTATION_SECRET=shared_codex_app_attestation_secret
+CODEX_PET_REPLAY_SIGNING_SECRET=shared_replay_signing_secret
 CODEX_PET_OPS_JOB_INTERVAL_MS=60000
 CODEX_PET_STORAGE_DRIVER=json
 CODEX_PET_SQLITE_PATH=./data/league-state.sqlite
@@ -247,7 +249,7 @@ Set `CODEX_PET_COOKIE_SECURE=true` behind HTTPS so League session cookies are ma
 Email delivery webhooks receive a signed JSON payload when `CODEX_PET_EMAIL_WEBHOOK_SECRET` is set. Passkey and OAuth verification hooks must return JSON with `verified: true` before the server creates an official League session.
 Set `CODEX_PET_ASSET_STORAGE=s3_compatible` with the `CODEX_PET_S3_*` values to store hatch spritesheet PNG/WebP objects in S3-compatible object storage. If `CODEX_PET_ASSET_CDN_BASE_URL` is set, public pet profiles return CDN atlas URLs.
 Set `CODEX_PET_REALTIME_BUS=redis`, `CODEX_PET_REQUEST_GUARD=redis`, and `CODEX_PET_DISTRIBUTED_LOCK=redis` with `CODEX_PET_REDIS_URL` when running more than one server instance. The Redis request guard shares rate-limit and idempotency buckets across instances, while Redis locks serialize matchmaking, ops jobs, and battle turn mutations. `npm run db:schema:check` validates the Postgres schema migrations under `db/migrations`; `npm run db:postgres:migrate` applies them to `CODEX_PET_POSTGRES_URL`.
-`CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. Untrusted high-value reports are held for review.
+`CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. `CODEX_PET_REPLAY_SIGNING_SECRET` signs replay and audit-derived integrity records outside local development. Untrusted high-value reports are held for review.
 High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; the browser, CLI, and MCP bridge add one automatically.
 Risk scores are review signals first. Automatic ranked lock only respects an explicit/manual `ranked_locked_until` or future tamper-confirmed policy, so false positives do not silently punish normal players.
 `npm run test:load` starts a strict temp server, performs concurrent auth/read traffic, and checks security headers on `/api/health`.

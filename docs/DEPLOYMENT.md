@@ -36,6 +36,47 @@ In production mode it fails if:
 - public base URL is not HTTPS
 - realtime bus, request guard, or distributed lock is still local, or Redis is not configured
 
+## Render Deployment Target
+
+The official shared League server deployment target is Render Web Service.
+
+Use Render for the long-running Node server and keep provider secrets in Render environment variables, not in git. Render should build from this repository's root `Dockerfile`, run `node src/server/index.js`, and use `/api/health` as the service health check path.
+
+Initial Render service settings:
+
+- Service type: Web Service.
+- Source: `https://github.com/BMinChul/codex-pet-league`.
+- Runtime: Docker, using the root `Dockerfile`.
+- Branch: `master` until a release branch is introduced.
+- Health check path: `/api/health`.
+- Port: use the app `PORT` environment variable. This repo defaults to `4317`; keep `PORT=4317` unless the Render service is configured for a different container port.
+- Auto deploy: acceptable for early operations, but pause it before risky production migrations.
+
+Minimum Render environment values before real production traffic:
+
+```bash
+NODE_ENV=production
+CODEX_PET_DEPLOYMENT_ENV=production
+PORT=4317
+CODEX_PET_PUBLIC_BASE_URL=https://<league-domain>
+CODEX_PET_COOKIE_SECURE=true
+CODEX_PET_AUTH_PROVIDER=<real-provider>
+CODEX_PET_AUTH_DEV_CODE=false
+CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
+CODEX_PET_STORAGE_DRIVER=postgres
+CODEX_PET_POSTGRES_URL=<render-postgres-url>
+CODEX_PET_REALTIME_BUS=redis
+CODEX_PET_REQUEST_GUARD=redis
+CODEX_PET_DISTRIBUTED_LOCK=redis
+CODEX_PET_REDIS_URL=<render-key-value-redis-url>
+CODEX_PET_ASSET_STORAGE=s3_compatible
+CODEX_PET_BRIDGE_SECRET=<strong-secret>
+CODEX_PET_BRIDGE_ATTESTATION_SECRET=<strong-secret>
+CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
+```
+
+Do not send real users to the Render service until the remaining provider choices are configured: Auth, Render Postgres, Render Key Value, object storage/CDN, moderation, domain/HTTPS, and admin access policy.
+
 ## Runtime Layout
 
 Use persistent storage for:

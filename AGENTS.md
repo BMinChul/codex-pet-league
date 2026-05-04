@@ -113,7 +113,7 @@ Later official shared League server decisions still needed from the user:
 Official shared League server provider decision track:
 
 - [x] Open the provider decision track after the public GitHub baseline.
-- [ ] Confirm hosting/deployment target.
+- [x] Confirm hosting/deployment target: Render Web Service.
 - [ ] Confirm Auth provider for passkeys, email links, and OAuth.
 - [ ] Confirm managed Postgres provider.
 - [ ] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks.
