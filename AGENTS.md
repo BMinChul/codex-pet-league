@@ -114,7 +114,7 @@ Official shared League server provider decision track:
 - [x] Confirm object storage and public asset URL/CDN strategy: Cloudflare R2 with a custom domain.
 - [x] Confirm image/text moderation provider and review policy: OpenAI Moderation API with `omni-moderation-latest`, using manual review for quarantine/block decisions.
 - [x] Confirm domain, HTTPS, cookie, and admin access strategy: Cloudflare DNS, Render custom domain, secure host-only League cookies, and Clerk-backed League admin roles.
-- [ ] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
+- [x] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
 - [ ] Run production-shaped integration checks after real credentials exist.
 
 Current provider recommendation as of 2026-05-04:

@@ -18,6 +18,10 @@ check("CODEX_PET_PUBLIC_BASE_URL", env.CODEX_PET_PUBLIC_BASE_URL || "missing");
 check("CODEX_PET_REALTIME_BUS", env.CODEX_PET_REALTIME_BUS || "local");
 check("CODEX_PET_REQUEST_GUARD", env.CODEX_PET_REQUEST_GUARD || "local");
 check("CODEX_PET_DISTRIBUTED_LOCK", env.CODEX_PET_DISTRIBUTED_LOCK || "local");
+check("CODEX_PET_MODERATION_PROVIDER", env.CODEX_PET_MODERATION_PROVIDER || "missing");
+check("CODEX_PET_MODERATION_MODEL", env.CODEX_PET_MODERATION_MODEL || "omni-moderation-latest");
+check("CODEX_PET_MODERATION_FAIL_MODE", env.CODEX_PET_MODERATION_FAIL_MODE || "review");
+check("OPENAI_API_KEY", env.OPENAI_API_KEY ? "configured" : "missing");
 
 const auth = authProviderStatus(env);
 const authReady = ["passkey", "email_magic_link", "league_oauth"].some(
@@ -41,6 +45,16 @@ if (production) {
   requireCondition((env.CODEX_PET_DISTRIBUTED_LOCK || "local") === "redis", "production should use redis distributed locks for scale-out");
   requireCondition(Boolean(env.CODEX_PET_REDIS_URL), "production redis realtime/request guard/lock requires CODEX_PET_REDIS_URL");
   if ((env.CODEX_PET_ASSET_STORAGE || "local_fs") === "s3_compatible") requireS3Config();
+  requireCondition((env.CODEX_PET_MODERATION_PROVIDER || "") === "openai", "production moderation provider should be openai");
+  requireSecret("OPENAI_API_KEY");
+  requireCondition(
+    (env.CODEX_PET_MODERATION_MODEL || "omni-moderation-latest") === "omni-moderation-latest",
+    "production moderation model should be omni-moderation-latest",
+  );
+  requireCondition(
+    (env.CODEX_PET_MODERATION_FAIL_MODE || "review") === "review",
+    "production moderation fail mode should be review",
+  );
 } else {
   warnIf(env.CODEX_PET_AUTH_DEV_CODE === "true", "auth dev codes are exposed");
   warnIf(env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER === "true", "dev account header fallback is enabled");

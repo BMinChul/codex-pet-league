@@ -34,6 +34,10 @@ const checks = [
   ["CODEX_PET_LOCK_NAMESPACE", process.env.CODEX_PET_LOCK_NAMESPACE ?? "codex-pet-league"],
   ["CODEX_PET_LOCK_TTL_MS", process.env.CODEX_PET_LOCK_TTL_MS ?? "30000"],
   ["CODEX_PET_REDIS_URL", process.env.CODEX_PET_REDIS_URL ? "configured" : "missing"],
+  ["OPENAI_API_KEY", process.env.OPENAI_API_KEY ? "configured" : "missing"],
+  ["CODEX_PET_MODERATION_PROVIDER", process.env.CODEX_PET_MODERATION_PROVIDER ?? "missing"],
+  ["CODEX_PET_MODERATION_MODEL", process.env.CODEX_PET_MODERATION_MODEL ?? "omni-moderation-latest"],
+  ["CODEX_PET_MODERATION_FAIL_MODE", process.env.CODEX_PET_MODERATION_FAIL_MODE ?? "review"],
 ];
 
 for (const [name, value] of checks) {
