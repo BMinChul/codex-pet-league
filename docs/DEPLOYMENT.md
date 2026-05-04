@@ -77,6 +77,39 @@ CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
 
 Do not send real users to the Render service until the remaining provider choices are configured: Auth, Render Postgres, Render Key Value, object storage/CDN, moderation, domain/HTTPS, and admin access policy.
 
+## Clerk Auth Target
+
+The official shared League server auth provider is Clerk.
+
+Clerk is the upstream account provider for passkeys, email links, and OAuth/social connections. The League server should still issue its own `league_session` cookie or `CODEX_PET_SESSION_TOKEN` after Clerk verifies a user. Do not treat Codex App or ChatGPT sign-in as League ownership proof.
+
+The current server uses an external auth hook contract, so wire Clerk through a small auth adapter or server route that can:
+
+- Send or initiate Clerk-backed email link login for `email_magic_link`.
+- Verify Clerk passkey results for `passkey`.
+- Verify Clerk OAuth/session results for `league_oauth`.
+- Return JSON with `verified: true` and a stable `provider_subject` when Clerk verification succeeds.
+
+Production-shaped Clerk environment values:
+
+```bash
+CODEX_PET_AUTH_PROVIDER=clerk
+CODEX_PET_EMAIL_PROVIDER=webhook
+CODEX_PET_EMAIL_WEBHOOK_URL=https://<auth-adapter>/clerk/email-link
+CODEX_PET_AUTH_WEBHOOK_SECRET=<shared-auth-hook-secret>
+CODEX_PET_EMAIL_WEBHOOK_SECRET=<shared-auth-hook-secret>
+CODEX_PET_PASSKEY_PROVIDER=true
+CODEX_PET_PASSKEY_VERIFY_URL=https://<auth-adapter>/clerk/passkey/verify
+CODEX_PET_PASSKEY_RP_ID=<league-domain>
+CODEX_PET_OAUTH_ISSUER=https://<clerk-instance-domain>
+CODEX_PET_OAUTH_AUTHORIZE_URL=https://<clerk-instance-domain>/sign-in
+CODEX_PET_OAUTH_CLIENT_ID=codex-pet-league
+CODEX_PET_OAUTH_REDIRECT_URI=https://<league-domain>/oauth/callback
+CODEX_PET_OAUTH_VERIFY_URL=https://<auth-adapter>/clerk/oauth/verify
+```
+
+Before production traffic, test all three auth methods through `codexpet auth providers`, `codexpet auth challenge`, and `codexpet auth verify`. Production mode must not pass with only `local_dev` auth.
+
 ## Runtime Layout
 
 Use persistent storage for:

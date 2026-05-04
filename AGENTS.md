@@ -114,7 +114,7 @@ Official shared League server provider decision track:
 
 - [x] Open the provider decision track after the public GitHub baseline.
 - [x] Confirm hosting/deployment target: Render Web Service.
-- [ ] Confirm Auth provider for passkeys, email links, and OAuth.
+- [x] Confirm Auth provider for passkeys, email links, and OAuth: Clerk.
 - [ ] Confirm managed Postgres provider.
 - [ ] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks.
 - [ ] Confirm object storage and public asset URL/CDN strategy.
@@ -128,7 +128,7 @@ Current provider recommendation as of 2026-05-04:
 - Hosting/deployment: Render Web Service.
 - Database: Render Postgres.
 - Realtime/request guard/locks: Render Key Value, Redis-compatible.
-- Auth: Clerk, because it supports passkeys, email links, and OAuth/social connections.
+- Auth: Clerk, because it supports passkeys, email links, and OAuth/social connections. The current League server should connect to Clerk through the existing external auth hook contract until a direct Clerk SDK integration is implemented.
 - Object storage/CDN: Cloudflare R2 with S3-compatible API and a custom domain for public pet atlas assets.
 - Moderation: OpenAI Moderation API with `omni-moderation-latest` for image and text checks, plus manual review for review/private/blocked asset states.
 - Domain/DNS: Cloudflare-managed domain so R2 custom domain and later app subdomains can share one zone.
