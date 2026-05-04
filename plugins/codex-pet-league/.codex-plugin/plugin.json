@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Codex Pet League",
     "shortDescription": "Grow official Codex pets and run turn battles from Codex App.",
-    "longDescription": "Codex Pet League connects Codex App to a local League server for account-bound pets, hatch atlas uploads, Training Reports, random matchmaking, Friend Duel invite codes, real-time turn battles, replays, and leaderboard checks.",
+    "longDescription": "Codex Pet League connects Codex App to the official shared alpha or a self-hosted League server for account-bound pets, hatch atlas uploads, Training Reports, random matchmaking, Friend Duel invite codes, real-time turn battles, replays, and leaderboard checks.",
     "developerName": "Codex Pet League",
     "category": "Games",
     "capabilities": [
@@ -29,7 +29,7 @@
       "MCP",
       "Write"
     ],
-    "websiteURL": "https://github.com/BMinChul/codex-pet-league",
+    "websiteURL": "https://league.codexpetz.com",
     "privacyPolicyURL": "https://github.com/BMinChul/codex-pet-league#privacy-and-terms",
     "termsOfServiceURL": "https://github.com/BMinChul/codex-pet-league#privacy-and-terms",
     "defaultPrompt": [

@@ -18,15 +18,17 @@ Do not turn the product into a web-only game. Web can play, but Codex App plus C
 
 ## Current Handoff Snapshot
 
-Latest verified repo baseline:
+Latest verified repo baseline before the user-docs update:
 
-- Commit: `5603cf6` (`Document owner-only admin and live multiplayer check`).
-- Working tree after that commit was clean before the backup/cost/incident routine update.
+- Commit: `c11d664` (`Resolve stale audit alert workflow`).
+- Working tree after that commit was clean before the official user setup documentation update.
 - Verification passed at that baseline:
   - `npm test` with 84 passing tests.
-  - `npm run prod:check` in local mode.
-  - Live Render deploy reached `live`.
-  - Live multiplayer ranked smoke passed with disposable account cleanup.
+  - Live Render deploy reached `live` for stable hash and stale audit alert cleanup.
+  - Live `npm run audit:summary -- --json` reported `ok: true` with zero findings.
+  - Live `npm run cost:check -- --json` reported `status: ok` with zero open abuse alerts.
+  - Live `/api/health` and `/api/metrics` returned healthy production counts.
+  - Earlier live multiplayer ranked smoke passed with disposable account cleanup.
   - Owner-only admin allowlist was verified against the live Render service.
 
 Implemented local product surface:
@@ -46,12 +48,12 @@ Implemented local product surface:
 
 Current execution track:
 
-The active plan is no longer "private beta first." The current launch model is:
+The active launch model is:
 
-1. Publish the project to GitHub first as a public local/self-host preview.
-2. Let users install or clone the CLI, MCP bridge, and Codex App plugin scaffold from the repo.
-3. Keep the official shared League server as a later operations step, not a blocker for the initial GitHub release.
-4. Never publish production secrets, live service credentials, local state, admin tokens, or personal machine paths.
+1. Public GitHub repo is the install path for the CLI, MCP bridge, and Codex App plugin scaffold.
+2. Official shared alpha server is live at `https://league.codexpetz.com`.
+3. Local and self-host modes remain supported for development and independent deployments.
+4. Never publish production secrets, live service credentials, local state, admin tokens, session tokens, or personal machine paths.
 
 Current GitHub release checklist:
 
@@ -100,9 +102,10 @@ Public GitHub baseline:
 - First pushed branch: `master`.
 - Public release prep commit: `a51e13b` (`Prepare public GitHub release`).
 
-Remaining official shared League server setup still needed from the user:
+Remaining official shared League server work:
 
-- Real provider credential values for Render, Resend, Cloudflare R2, OpenAI, and the final domain.
+- No blocker remains on the launch checklist after item 10.
+- Broader traffic still needs non-code operating decisions as usage grows: terms/privacy copy, support process, monitoring/alert destination, and any future passkey/OAuth provider additions.
 
 Official shared League server provider decision track:
 
@@ -151,7 +154,10 @@ Official shared server launch checklist:
   - [x] `npm run ops:resolve-audit-alerts` closes stale open `audit:*` abuse alerts after their underlying high/critical audit finding is gone.
   - [x] `npm run cost:check` checks email-code challenge volume, asset upload/storage growth, open asset reports, and open abuse alerts against configurable warning/critical thresholds.
   - [x] `npm run incident:pack` collects `/api/health`, `/api/metrics`, redacted state summaries, and cost guard output without dumping secrets, session tokens, API keys, or full state.
-- [ ] 10. Publish official server URL and user setup docs.
+- [x] 10. Publish official server URL and user setup docs.
+  - [x] README names `https://league.codexpetz.com` as the official shared alpha server.
+  - [x] `docs/USER_SETUP.md` documents install, email-code login, session token setup, MCP registration, hatch-pet import, Training Reports, matchmaking, and troubleshooting.
+  - [x] The repo-local plugin scaffold defaults `CODEX_PET_LEAGUE_URL` to the official server, with docs for local/self-host overrides.
 
 Current live shared-server status:
 

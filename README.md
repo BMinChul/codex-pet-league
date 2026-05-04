@@ -1,14 +1,85 @@
 # Codex Pet League
 
-Public local/self-host preview for the Codex App and Codex CLI-first pet league.
+Codex App and Codex CLI-first pet growth, Training Reports, and server-authoritative turn battles.
+
+Official shared alpha:
+
+```text
+https://league.codexpetz.com
+```
+
+User setup guide:
+
+```text
+docs/USER_SETUP.md
+```
 
 ## Release Model
 
-This repository is intended to be public before the official shared League server is operated.
+This repository is public and the official shared alpha server is live.
 
-- Local run: clone this repo, run the League server on your own machine, and connect the CLI/MCP bridge to it.
+- Official shared alpha: clone this repo for the CLI/MCP/plugin scaffold and point `CODEX_PET_LEAGUE_URL` at `https://league.codexpetz.com`.
+- Local run: run the League server on your own machine for development or offline testing.
 - Self-host run: deploy your own server and point `CODEX_PET_LEAGUE_URL` at that HTTPS endpoint.
-- Official shared League server: planned later. Do not treat this repo's local development auth, state files, or secrets as production service credentials.
+- Never commit production secrets, local state, service credentials, session tokens, uploaded assets, or personal machine paths.
+
+## Official Shared Alpha
+
+Install and connect to the official server:
+
+```bash
+git clone https://github.com/BMinChul/codex-pet-league.git
+cd codex-pet-league
+npm install
+export CODEX_PET_LEAGUE_URL=https://league.codexpetz.com
+npm run cli -- doctor
+```
+
+PowerShell:
+
+```powershell
+git clone https://github.com/BMinChul/codex-pet-league.git
+cd codex-pet-league
+npm install
+$env:CODEX_PET_LEAGUE_URL="https://league.codexpetz.com"
+npm run cli -- doctor
+```
+
+Log in with an email code:
+
+```bash
+npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
+npm run cli -- auth verify --challenge challenge_id --code EMAILCODE
+```
+
+Then set the printed `session_token`:
+
+```bash
+export CODEX_PET_SESSION_TOKEN=league_session_token
+```
+
+PowerShell:
+
+```powershell
+$env:CODEX_PET_SESSION_TOKEN="league_session_token"
+```
+
+Register MCP from the repo root:
+
+```powershell
+$repo = (Get-Location).Path
+codex mcp add codex-pet-league -- node "$repo\src\mcp\codex-pet-mcp.cjs"
+```
+
+Create a pet with OpenAI's official `hatch-pet` skill first, then import it:
+
+```bash
+npm run cli -- pet discover-hatch
+npm run cli -- pet inspect-hatch --path <hatch-pet-folder>
+npm run cli -- setup --path <hatch-pet-folder> --yes --primary Forge --secondary Trace
+```
+
+More detail: `docs/USER_SETUP.md`.
 
 ## Local Run
 
@@ -255,7 +326,7 @@ High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; 
 Risk scores are review signals first. Automatic ranked lock only respects an explicit/manual `ranked_locked_until` or future tamper-confirmed policy, so false positives do not silently punish normal players.
 `npm run test:load` starts a strict temp server, performs concurrent auth/read traffic, and checks security headers on `/api/health`.
 
-See `docs/OPERATIONS.md` for runtime operations and `docs/DEPLOYMENT.md` for container deployment, production checks, backup, and the final user-owned setup list.
+See `docs/USER_SETUP.md` for official alpha setup, `docs/OPERATIONS.md` for runtime operations, and `docs/DEPLOYMENT.md` for container deployment, production checks, backup, and self-host setup.
 
 ## Codex App MCP Bridge
 
@@ -317,7 +388,7 @@ This repo includes a local Codex App plugin scaffold at `plugins/codex-pet-leagu
 - Skill guide: `plugins/codex-pet-league/skills/codex-pet-league/SKILL.md`
 - Marketplace entry: `.agents/plugins/marketplace.json`
 
-The plugin MCP config points to `./scripts/codex-pet-mcp.cjs`, a small launcher that starts the repo's `src/mcp/codex-pet-mcp.cjs` bridge. By default it expects the League server at `http://localhost:4317`; set `CODEX_PET_LEAGUE_URL` to a self-hosted HTTPS server when you are not using the local server.
+The plugin MCP config points to `./scripts/codex-pet-mcp.cjs`, a small launcher that starts the repo's `src/mcp/codex-pet-mcp.cjs` bridge. By default it expects the official shared server at `https://league.codexpetz.com`; set `CODEX_PET_LEAGUE_URL` to `http://localhost:4317` for local development or to your own HTTPS endpoint for self-hosting.
 
 Plugin scaffold flow for a cloned repo:
 
@@ -325,13 +396,13 @@ Plugin scaffold flow for a cloned repo:
 git clone https://github.com/BMinChul/codex-pet-league.git
 cd codex-pet-league
 npm install
-$env:CODEX_PET_AUTH_DEV_CODE="true"; npm start
+$env:CODEX_PET_LEAGUE_URL="https://league.codexpetz.com"
 ```
 
-Then register MCP directly with Codex CLI from another terminal, or use the repo-local plugin scaffold through `.agents/plugins/marketplace.json` in environments that load local Codex plugins.
+Then register MCP directly with Codex CLI, or use the repo-local plugin scaffold through `.agents/plugins/marketplace.json` in environments that load local Codex plugins. Local development still uses `CODEX_PET_AUTH_DEV_CODE=true npm start` and `CODEX_PET_LEAGUE_URL=http://localhost:4317`.
 
 ## Privacy And Terms
 
-This public preview is local/self-host first. When you run it locally, state stays in your configured local or self-hosted storage. Do not commit `.env`, `data/`, runtime logs, uploaded pet assets, database files, service credentials, or session tokens.
+The official shared alpha stores League account records, canonical pet assets, Training Report summaries, battle/replay records, XP/LP ledgers, moderation metadata, and operational audit events on the League server. Do not submit raw source code or full Codex transcripts in Training Reports.
 
-An official shared League server will need separate production privacy, terms, moderation, account, retention, and operations policies before it is opened to users.
+When you run locally or self-host, state stays in your configured storage. Do not commit `.env`, `data/`, runtime logs, uploaded pet assets, database files, service credentials, or session tokens.

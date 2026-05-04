@@ -91,7 +91,7 @@ CODEX_PET_BRIDGE_ATTESTATION_SECRET=<strong-secret>
 CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
 ```
 
-Do not send real users to the Render service until the real provider credentials and domain/admin rollout are configured: Resend, Render Postgres, Render Key Value, Cloudflare R2/custom domain, OpenAI moderation, Cloudflare DNS, HTTPS, secure cookies, and admin access policy.
+The official shared alpha is live at `https://league.codexpetz.com`. Keep the provider credentials, domain/admin rollout, secure cookies, and owner-only admin policy configured before sending broader traffic.
 
 ## Domain, HTTPS, Cookie, And Admin Target
 
@@ -372,9 +372,9 @@ CODEX_PET_COST_OPEN_ASSET_REPORTS_CRITICAL=100
 
 Keep Resend pay-as-you-go overages disabled during alpha. If cost guard warns on auth challenges, inspect Resend and Render logs before raising limits. If storage thresholds warn, inspect recent assets and moderation state before changing R2/CDN exposure.
 
-## User-Owned Setup Kept For Last
+## Self-Host Setup Still User-Owned
 
-These cannot be completed locally without your accounts or provider choices:
+These remain self-host responsibilities for anyone deploying their own League server:
 
 - domain and HTTPS certificate
 - production host or cloud project

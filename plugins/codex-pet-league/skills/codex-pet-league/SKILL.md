@@ -18,31 +18,35 @@ Use this skill when the user asks about their Codex pet, official `hatch-pet` pa
 - Treat the League server as authoritative. Do not infer XP, LP, rank, battle results, or replay outcomes locally.
 - Prefer MCP tools when available. Use CLI commands as the fallback bridge.
 - Official actions require `CODEX_PET_SESSION_TOKEN` or a League session cookie. `CODEX_PET_ACCOUNT_ID` is only a local development fallback.
+- The official shared alpha server is `https://league.codexpetz.com`. Use `CODEX_PET_LEAGUE_URL=https://league.codexpetz.com` unless the user is running local or self-hosted.
 - Training Reports must come from observable Codex work signals and should be drafted before submission when the user wants to review.
 - Battle turns are simultaneous and have a 30-second deadline. If the user gives no action, recommend `guard` for low HP, `focus` for low energy, otherwise `strike`.
 - User skill aliases are cosmetic. Never change the server skill ids unless the user explicitly changes the four-skill loadout.
 
 ## Common MCP Flow
 
-1. `league_setup` for first-run onboarding. It checks League session, discovers hatch packages, requires permanent-selection confirmation, imports the official pet, and returns the next action.
-2. `league_home` for a combined account, active pet, XP, queue, and leaderboard snapshot.
-3. `next_action` when the user asks what to do next.
-4. `pet_discover_hatch` if the user has not provided a package path.
-5. `pet_inspect_hatch` to validate a chosen package before upload.
-6. `pet_import_hatch` with `package_path`, or no path when discovery finds exactly one package, to register an official pet.
-7. `pet_activate` only before the first permanent League selection, or idempotently for the already active pet.
-8. `pet_create` with `atlas_path` only for direct PNG/WebP spritesheet uploads.
-9. `league_play` for the Codex App loop: inspect active state, optionally join queue, optionally submit the recommended turn.
-10. `training_report_draft`, then `training_report_submit` after user approval.
-11. `matchmaking_join` for random ranked or casual queue.
-12. `friend_invite_create` and `friend_invite_accept` for invite-code battles.
-13. `battle_get`, `battle_action_options`, then `battle_action` for active turns.
-14. `league_doctor` when the user asks whether the local League server, auth, bridge, or runtime configuration is healthy.
+1. `auth_challenge` and `auth_verify` when the user has no League session token yet; tell the user to set the returned `CODEX_PET_SESSION_TOKEN` before official actions.
+2. `league_setup` for first-run onboarding. It checks League session, discovers hatch packages, requires permanent-selection confirmation, imports the official pet, and returns the next action.
+3. `league_home` for a combined account, active pet, XP, queue, and leaderboard snapshot.
+4. `next_action` when the user asks what to do next.
+5. `pet_discover_hatch` if the user has not provided a package path.
+6. `pet_inspect_hatch` to validate a chosen package before upload.
+7. `pet_import_hatch` with `package_path`, or no path when discovery finds exactly one package, to register an official pet.
+8. `pet_activate` only before the first permanent League selection, or idempotently for the already active pet.
+9. `pet_create` with `atlas_path` only for direct PNG/WebP spritesheet uploads.
+10. `league_play` for the Codex App loop: inspect active state, optionally join queue, optionally submit the recommended turn.
+11. `training_report_draft`, then `training_report_submit` after user approval.
+12. `matchmaking_join` for random ranked or casual queue.
+13. `friend_invite_create` and `friend_invite_accept` for invite-code battles.
+14. `battle_get`, `battle_action_options`, then `battle_action` for active turns.
+15. `league_doctor` when the user asks whether the local League server, auth, bridge, or runtime configuration is healthy.
 
 ## CLI Fallbacks
 
 ```powershell
 npm run cli -- doctor
+npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
+npm run cli -- auth verify --challenge challenge_id --code EMAILCODE
 npm run cli -- home
 npm run cli -- setup --path <hatch-pet-folder> --yes --primary Forge --secondary Trace
 npm run cli -- next

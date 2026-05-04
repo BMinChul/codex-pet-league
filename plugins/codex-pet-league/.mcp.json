@@ -6,7 +6,7 @@
         "./scripts/codex-pet-mcp.cjs"
       ],
       "env": {
-        "CODEX_PET_LEAGUE_URL": "http://localhost:4317"
+        "CODEX_PET_LEAGUE_URL": "https://league.codexpetz.com"
       }
     }
   }
