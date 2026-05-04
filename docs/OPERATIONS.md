@@ -126,6 +126,15 @@ npm run ops:rehash -- --apply
 
 Do not use `ops:rehash` to hide unexplained tampering. Use it only for the stable JSON hash migration or another documented hash-format migration.
 
+After audit findings are cleared, resolve stale audit-generated abuse alerts so cost guard reflects current risk instead of historical resolved findings:
+
+```bash
+npm run ops:resolve-audit-alerts
+npm run ops:resolve-audit-alerts -- --apply
+```
+
+This only closes open abuse alerts whose `audit:*` dedupe key no longer corresponds to an active high/critical audit finding.
+
 ## Incident Loop
 
 When the site is down, slow, under abuse, or behaving oddly, collect a redacted pack first:

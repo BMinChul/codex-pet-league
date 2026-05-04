@@ -335,6 +335,8 @@ npm run audit:summary
 npm run audit:summary -- --json
 npm run ops:rehash
 npm run ops:rehash -- --apply
+npm run ops:resolve-audit-alerts
+npm run ops:resolve-audit-alerts -- --apply
 npm run incident:pack
 npm run incident:pack -- runs/incidents/incident-YYYYMMDD-HHMM
 ```
@@ -344,6 +346,8 @@ npm run incident:pack -- runs/incidents/incident-YYYYMMDD-HHMM
 `npm run audit:summary` prints redacted audit finding counts and a small high/critical sample so an incident can quickly separate real state tampering from test or cleanup residue. It exits nonzero when audit has high or critical findings.
 
 `npm run ops:rehash` is a dry-run chain rebase for append-only state hashes. Use `-- --apply` only for a documented hash-format migration, such as converting legacy `JSON.stringify` hashes to stable JSON hashes after Postgres JSONB storage has normalized object key order.
+
+`npm run ops:resolve-audit-alerts` closes stale open `audit:*` abuse alerts only after the corresponding high/critical audit finding no longer exists. Use the dry run first, then apply.
 
 `npm run incident:pack` writes a redacted local bundle with `/api/health`, `/api/metrics`, state summary counts, open review/alert summaries, and cost guard output. Set `CODEX_PET_INCIDENT_BASE_URL=https://league.<domain>` when collecting against the official shared server. It does not include raw state snapshots, secrets, API keys, session tokens, or full user content.
 

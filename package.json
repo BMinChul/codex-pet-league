@@ -26,6 +26,7 @@
     "backup": "node scripts/backup-state.mjs",
     "audit:summary": "node scripts/audit-summary.mjs",
     "ops:rehash": "node scripts/rehash-state-chains.mjs",
+    "ops:resolve-audit-alerts": "node scripts/resolve-stale-audit-alerts.mjs",
     "cost:check": "node scripts/cost-guard.mjs",
     "incident:pack": "node scripts/incident-pack.mjs",
     "healthcheck": "node scripts/healthcheck.mjs",
