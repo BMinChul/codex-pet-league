@@ -140,8 +140,10 @@ Official shared server launch checklist:
   - [x] Owner email `skskcb@gmail.com` signed in through Resend email-code login on the live server.
   - [x] Render one-off job `job-d7sgr49j2pic73f9q0s0` promoted only `skskcb@gmail.com` from `player` to `admin` and demoted one local demo admin.
   - [x] Render one-off job `job-d7sgrgfavr4c73b5qujg` confirmed admin-only endpoint access: unauthenticated rejected, normal player rejected, promoted owner accepted.
-  - [ ] Lock production admin access to `skskcb@gmail.com` with `CODEX_PET_ADMIN_EMAIL_ALLOWLIST` so no other admin can access admin endpoints unless the owner explicitly changes that allowlist.
-- [ ] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
+  - [x] Production admin access is locked to `skskcb@gmail.com` with `CODEX_PET_ADMIN_EMAIL_ALLOWLIST` so no other admin can access admin endpoints unless the owner explicitly changes that allowlist.
+  - [x] Render one-off job `job-d7sgumegvqtc73buhf80` confirmed a non-owner `role=admin` account is rejected with `ADMIN_NOT_ALLOWED` while the owner admin session is accepted.
+- [x] 8. Run a small live multiplayer test with pet import, matchmaking, battle, XP/LP settlement, replay, report, and moderation paths.
+  - [x] Render one-off job `job-d7sgvt1j2pic73f9vplg` created disposable verified player sessions, uploaded hatch-pet atlas assets through the live API, created pets, submitted a Training Report, matched ranked PvP, resolved a turn battle, verified XP/LP/replay/profile, exercised asset report plus admin moderation, then cleaned the test accounts/pets/battles from Postgres state.
 - [ ] 9. Add backup/log/cost-alert/incident routines.
 - [ ] 10. Publish official server URL and user setup docs.
 
@@ -157,6 +159,8 @@ Current live shared-server status:
 - Render one-off job `job-d7sfmi3eo5us73ah26l0` applied `001_initial_postgres_schema.sql` to the real Render Postgres database.
 - Render one-off job `job-d7sfmmjrjlhs73bspa70` passed schema check with `1 migration, 25 tables`.
 - Owner account `skskcb@gmail.com` is verified and server-side `role=admin`; the production owner bootstrap demoted local `@codexpet.local` demo admin access. Production admin access must stay owner-only unless the owner explicitly authorizes another email.
+- `CODEX_PET_ADMIN_EMAIL_ALLOWLIST` is set to `skskcb@gmail.com`, and non-owner `role=admin` accounts are rejected by admin endpoints.
+- Live multiplayer ranked smoke passed on 2026-05-04, and disposable test accounts/pets/assets/battles were cleaned from Postgres state afterward.
 - 2026-05-04 real integration checks passed:
   - Resend auth challenge through `https://league.codexpetz.com` returned 201 with Resend delivery and no exposed dev code.
   - Render one-off job `job-d7sg9fjeo5us73ahopmg` verified Postgres snapshot load/save persistence.
@@ -629,7 +633,7 @@ Production work not yet done:
 - Redis and S3-compatible code paths have real provider credential runtime verification.
 - OpenAI moderation is the chosen provider and has runtime verification; the production review runbook still needs completion.
 - The first verified owner account has been bootstrapped to server-side `role=admin`.
-- A small live multiplayer test and backup/log/cost-alert/incident routines still need completion.
+- Backup/log/cost-alert/incident routines still need completion.
 - Docker is not required for local verification right now; revisit it only if the selected deployment target needs container packaging.
 
 ## Verification Expectations
