@@ -24,11 +24,11 @@ Moderation output is not an automatic account penalty. Use category flags, categ
 
 ## Admin Access Loop
 
-Production admin access is tied to verified League accounts with server-side `role=admin`. Clerk proves the person; the League server decides the role.
+Production admin access is tied to verified League accounts with server-side `role=admin`. Email-code login proves control of the owner email address for the low-cost alpha; the League server decides the role.
 
 Before launch:
 
-1. Verify the first owner account through Clerk.
+1. Verify the first owner account through AWS SES email-code login.
 2. Promote only that account to `role=admin` with a controlled one-off operation.
 3. Confirm `/api/admin/audit` rejects normal players and accepts only the promoted admin session.
 4. Confirm `CODEX_PET_AUTH_DEV_CODE=false`, `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false`, `CODEX_PET_PUBLIC_BASE_URL=https://league.<domain>`, and `CODEX_PET_COOKIE_SECURE=true`.

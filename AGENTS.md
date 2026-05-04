@@ -100,21 +100,22 @@ Public GitHub baseline:
 - First pushed branch: `master`.
 - Public release prep commit: `a51e13b` (`Prepare public GitHub release`).
 
-Remaining official shared League server decisions still needed from the user:
+Remaining official shared League server setup still needed from the user:
 
-- Real provider credential values for Render, Clerk, Cloudflare R2, and the final domain.
+- Real provider credential values for Render, AWS SES, Cloudflare R2, OpenAI, and the final domain.
 
 Official shared League server provider decision track:
 
 - [x] Open the provider decision track after the public GitHub baseline.
 - [x] Confirm hosting/deployment target: Render Web Service.
-- [x] Confirm Auth provider for passkeys, email links, and OAuth: Clerk.
+- [x] Confirm Auth provider for low-cost alpha: native League email-code login with AWS SES delivery. Passkeys and OAuth are deferred until needed.
 - [x] Confirm managed Postgres provider: Render Postgres.
 - [x] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks: Render Key Value.
 - [x] Confirm object storage and public asset URL/CDN strategy: Cloudflare R2 with a custom domain.
 - [x] Confirm image/text moderation provider and review policy: OpenAI Moderation API with `omni-moderation-latest`, using manual review for quarantine/block decisions.
-- [x] Confirm domain, HTTPS, cookie, and admin access strategy: Cloudflare DNS, Render custom domain, secure host-only League cookies, and Clerk-backed League admin roles.
+- [x] Confirm domain, HTTPS, cookie, and admin access strategy: Cloudflare DNS, Render custom domain, secure host-only League cookies, and server-side League admin roles after verified email login.
 - [x] Write chosen provider values into deployment docs and `.env.example` comments/placeholders.
+- [x] Implement AWS SES email-code delivery path and production/ops config checks.
 - [ ] Run production-shaped integration checks after real credentials exist.
 
 Current provider recommendation as of 2026-05-04:
@@ -122,10 +123,10 @@ Current provider recommendation as of 2026-05-04:
 - Hosting/deployment: Render Web Service.
 - Database: Render Postgres. Use the internal database URL from the Render Web Service when the app and database are in the same account and region.
 - Realtime/request guard/locks: Render Key Value, Redis-compatible. Use the internal URL from the same Render region when possible; the runtime supports both `redis://` and `rediss://`.
-- Auth: Clerk, because it supports passkeys, email links, and OAuth/social connections. The current League server should connect to Clerk through the existing external auth hook contract until a direct Clerk SDK integration is implemented.
+- Auth: native League email-code login with AWS SES delivery for the low-cost alpha. The League server owns challenge verification and issues its own `league_session`; AWS SES only sends the code email. Passkeys and OAuth/social login remain future additions.
 - Object storage/CDN: Cloudflare R2 with S3-compatible API and a custom domain for public pet atlas assets.
 - Moderation: OpenAI Moderation API with `omni-moderation-latest` for image and text checks, plus manual review for review/private/blocked asset states.
-- Domain/DNS: Cloudflare-managed domain. Use `league.<domain>` as the Render Web Service custom domain for app/API/web/MCP traffic and `assets.<domain>` as the R2 custom domain. Keep app/API on one host so `league_session` remains a host-only `HttpOnly; SameSite=Lax; Secure` cookie. Admin access must come from a verified League session with server-side `role=admin`, bootstrapped from Clerk backend/private metadata or a controlled one-off promotion; no shared admin token.
+- Domain/DNS: Cloudflare-managed domain. Use `league.<domain>` as the Render Web Service custom domain for app/API/web/MCP traffic and `assets.<domain>` as the R2 custom domain. Keep app/API on one host so `league_session` remains a host-only `HttpOnly; SameSite=Lax; Secure` cookie. Admin access must come from a verified League session with server-side `role=admin`, bootstrapped after email-code login by a controlled one-off promotion; no shared admin token.
 
 Official Codex sign-in docs:
 
@@ -166,9 +167,9 @@ League authority policy:
 
 Launch account methods:
 
-- Passkey.
-- Email magic link.
-- League OAuth such as Google, Apple, GitHub, or another normal OAuth provider.
+- Email code/magic-link login first, delivered by AWS SES and verified by the League server.
+- Passkey later.
+- League OAuth such as Google, Apple, GitHub, or another normal OAuth provider later.
 
 League OAuth does not mean OpenAI account authority. OpenAI/ChatGPT account authority is future-only until OpenAI exposes a signed, server-verifiable identity claim with issuer, audience, expiry, replay protection, and a documented verification endpoint or public keys.
 
@@ -506,7 +507,7 @@ Golden rules:
 
 Implemented/expected controls:
 
-- League sessions, device binding, and local provider-shaped auth flows. Real external auth providers are the next production decision.
+- League sessions, device binding, local provider-shaped auth flows, and AWS SES email-code delivery for low-cost alpha login.
 - Rate limits and idempotency keys for mutations.
 - Replay prevention and stale action rejection.
 - Turn nonces and server deadlines.
@@ -562,8 +563,9 @@ Production-shaped direction:
 - Cloudflare R2 S3-compatible object storage with a custom public asset domain.
 - OpenAI Moderation API for image/text moderation triage.
 - HTTPS with secure cookies.
-- Real passkey/email/OAuth providers.
-- Clerk-backed admin role bootstrap with League server-side `role=admin` enforcement.
+- AWS SES email-code delivery for initial verified League login.
+- Future passkey/OAuth providers when the account surface needs them.
+- Server-side admin role bootstrap after verified email login, with League server-side `role=admin` enforcement.
 - Bridge/replay signing secrets.
 - `/api/health` and `/api/metrics` for runtime checks.
 - `codexpet doctor` and MCP `league_doctor` for local Codex App/CLI runtime checks before deeper debugging.
@@ -572,7 +574,7 @@ Database conversion should be handled deliberately and late in the deployment pa
 
 Production work not yet done:
 
-- Provider choices and domain/admin strategy are recorded, but real Render, Clerk, Cloudflare R2, OpenAI, and domain credentials are not wired or verified yet.
+- Provider choices and domain/admin strategy are recorded, but real Render, AWS SES, Cloudflare R2, OpenAI, and domain credentials are not wired or verified yet.
 - Local JSON storage remains the default dev path.
 - Postgres schema checks and migration scripts exist, but the real managed database cutover should happen after credential setup.
 - Redis and S3-compatible code paths exist, but need real provider credentials and runtime verification.

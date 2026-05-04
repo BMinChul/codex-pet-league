@@ -97,7 +97,7 @@ OpenAI's public `hatch-pet` contract documents local packages under `${CODEX_HOM
 
 The importer validates the local package before upload: `pet.json` must include `id`, `displayName`, `description`, and a safe relative `spritesheetPath`; the spritesheet must be PNG or WebP, match the official `1536x1872` atlas contract, and remain inside the package directory. The server recomputes hashes after upload and never trusts client-provided hashes as authority.
 
-Official Codex docs say Codex CLI/App can be used after signing in with ChatGPT, but that is Codex product access, not a League-verifiable account token. League login remains passkey, email magic link, or League OAuth until OpenAI documents a signed identity claim for third-party League servers.
+Official Codex docs say Codex CLI/App can be used after signing in with ChatGPT, but that is Codex product access, not a League-verifiable account token. The low-cost shared League alpha uses League-owned email code login delivered through AWS SES; passkeys and League OAuth can be added later if the account surface needs them.
 
 ## Scripts
 
@@ -203,18 +203,20 @@ CODEX_PET_AUTH_PROVIDER=local_dev
 CODEX_PET_AUTH_DEV_CODE=false
 CODEX_PET_COOKIE_SECURE=false
 CODEX_PET_PUBLIC_BASE_URL=http://localhost:4317
-CODEX_PET_EMAIL_PROVIDER=webhook
-CODEX_PET_EMAIL_WEBHOOK_URL=https://email-provider.example/send
-CODEX_PET_AUTH_WEBHOOK_SECRET=shared_auth_hook_secret
-CODEX_PET_EMAIL_WEBHOOK_SECRET=shared_email_hmac_secret
-CODEX_PET_PASSKEY_PROVIDER=true
-CODEX_PET_PASSKEY_VERIFY_URL=https://passkey-provider.example/verify
+CODEX_PET_EMAIL_PROVIDER=aws_ses
+CODEX_PET_SES_REGION=us-east-1
+CODEX_PET_SES_FROM_EMAIL=no-reply@league.example.com
+CODEX_PET_SES_FROM_NAME=Codex Pet League
+CODEX_PET_SES_ACCESS_KEY_ID=
+CODEX_PET_SES_SECRET_ACCESS_KEY=
+CODEX_PET_PASSKEY_PROVIDER=false
+CODEX_PET_PASSKEY_VERIFY_URL=
 CODEX_PET_PASSKEY_RP_ID=league.example.com
-CODEX_PET_OAUTH_ISSUER=https://oauth-provider.example
-CODEX_PET_OAUTH_AUTHORIZE_URL=https://oauth-provider.example/authorize
-CODEX_PET_OAUTH_CLIENT_ID=codex-pet-league
-CODEX_PET_OAUTH_REDIRECT_URI=https://league.example.com/oauth/callback
-CODEX_PET_OAUTH_VERIFY_URL=https://oauth-provider.example/verify
+CODEX_PET_OAUTH_ISSUER=
+CODEX_PET_OAUTH_AUTHORIZE_URL=
+CODEX_PET_OAUTH_CLIENT_ID=
+CODEX_PET_OAUTH_REDIRECT_URI=
+CODEX_PET_OAUTH_VERIFY_URL=
 CODEX_PET_BRIDGE_SECRET=shared_bridge_hmac_secret
 CODEX_PET_BRIDGE_ATTESTATION_SECRET=shared_codex_app_attestation_secret
 CODEX_PET_REPLAY_SIGNING_SECRET=shared_replay_signing_secret
@@ -245,9 +247,9 @@ CODEX_PET_REDIS_URL=
 ```
 
 `CODEX_PET_SESSION_TOKEN` or the HttpOnly `league_session` cookie is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and is disabled unless `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true`.
-`CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. When `CODEX_PET_AUTH_PROVIDER` is not `local_dev`, auth fails closed unless at least one real method is fully configured: email magic-link webhook, passkey verify hook, or OAuth authorize plus verify hook.
+`CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. When `CODEX_PET_AUTH_PROVIDER` is not `local_dev`, auth fails closed unless at least one real method is fully configured: AWS SES email-code delivery, email magic-link webhook, passkey verify hook, or OAuth authorize plus verify hook.
 Set `CODEX_PET_COOKIE_SECURE=true` behind HTTPS so League session cookies are marked `Secure`.
-Email delivery and auth verification webhooks receive a signed JSON payload when `CODEX_PET_AUTH_WEBHOOK_SECRET` or `CODEX_PET_EMAIL_WEBHOOK_SECRET` is set. Passkey and OAuth verification hooks must return JSON with `verified: true` before the server creates an official League session.
+For the alpha shared server, set `CODEX_PET_EMAIL_PROVIDER=aws_ses` plus `CODEX_PET_SES_REGION`, `CODEX_PET_SES_FROM_EMAIL`, `CODEX_PET_SES_ACCESS_KEY_ID`, and `CODEX_PET_SES_SECRET_ACCESS_KEY`. AWS SES sends the code email only; the League server verifies the code and creates the official session. Email delivery and auth verification webhooks remain available for custom/self-host providers, and receive a signed JSON payload when `CODEX_PET_AUTH_WEBHOOK_SECRET` or `CODEX_PET_EMAIL_WEBHOOK_SECRET` is set. Passkey and OAuth verification hooks must return JSON with `verified: true` before the server creates an official League session.
 Set `CODEX_PET_ASSET_STORAGE=s3_compatible` with the `CODEX_PET_S3_*` values to store hatch spritesheet PNG/WebP objects in S3-compatible object storage. If `CODEX_PET_ASSET_CDN_BASE_URL` is set, public pet profiles return CDN atlas URLs.
 Set `CODEX_PET_REALTIME_BUS=redis`, `CODEX_PET_REQUEST_GUARD=redis`, and `CODEX_PET_DISTRIBUTED_LOCK=redis` with `CODEX_PET_REDIS_URL` when running more than one server instance. The Redis request guard shares rate-limit and idempotency buckets across instances, while Redis locks serialize matchmaking, ops jobs, and battle turn mutations. `npm run db:schema:check` validates the Postgres schema migrations under `db/migrations`; `npm run db:postgres:migrate` applies them to `CODEX_PET_POSTGRES_URL`.
 `CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. `CODEX_PET_REPLAY_SIGNING_SECRET` signs replay and audit-derived integrity records outside local development. Untrusted high-value reports are held for review.

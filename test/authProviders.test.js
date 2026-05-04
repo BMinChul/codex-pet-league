@@ -43,6 +43,63 @@ test("email magic-link webhook delivery posts a signed provider payload", async 
   assert.equal(payload.verify_url, "https://league.example.test/?auth_challenge=challenge_1");
 });
 
+test("auth config accepts AWS SES email delivery", () => {
+  const env = {
+    CODEX_PET_AUTH_PROVIDER: "email_code",
+    CODEX_PET_EMAIL_PROVIDER: "aws_ses",
+    CODEX_PET_SES_REGION: "us-east-1",
+    CODEX_PET_SES_FROM_EMAIL: "no-reply@example.test",
+    CODEX_PET_SES_ACCESS_KEY_ID: "access",
+    CODEX_PET_SES_SECRET_ACCESS_KEY: "secret",
+  };
+
+  const status = authProviderStatus(env);
+  assert.equal(status.email_magic_link, "configured");
+  assert.equal(status.methods.email_magic_link.delivery, "aws_ses");
+  assert.equal(status.methods.email_magic_link.region, "us-east-1");
+  assert.doesNotThrow(() => assertAuthMethodConfigured("email_magic_link", env));
+});
+
+test("email magic-link AWS SES delivery signs SendEmail request", async () => {
+  const calls = [];
+  const env = {
+    CODEX_PET_AUTH_PROVIDER: "email_code",
+    CODEX_PET_EMAIL_PROVIDER: "aws_ses",
+    CODEX_PET_SES_REGION: "us-east-1",
+    CODEX_PET_SES_FROM_EMAIL: "no-reply@example.test",
+    CODEX_PET_SES_FROM_NAME: "Codex Pet League",
+    CODEX_PET_SES_ACCESS_KEY_ID: "access",
+    CODEX_PET_SES_SECRET_ACCESS_KEY: "secret",
+    CODEX_PET_PUBLIC_BASE_URL: "https://league.example.test",
+  };
+  const challenge = {
+    challenge_id: "challenge_1",
+    method: "email_magic_link",
+    identifier: "player@example.test",
+    dev_code: "ABCDEFGH",
+    expires_at: "2026-05-03T00:10:00.000Z",
+  };
+  const result = await deliverAuthChallenge(challenge, env, async (url, init) => {
+    calls.push({ url, init });
+    return jsonResponse({ MessageId: "message_1" });
+  });
+
+  assert.equal(result.delivery.status, "sent");
+  assert.equal(result.delivery.channel, "aws_ses");
+  assert.equal(result.delivery.provider_message_id, "message_1");
+  assert.equal(calls[0].url, "https://email.us-east-1.amazonaws.com/v2/email/outbound-emails");
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers["content-type"], "application/json");
+  assert.match(calls[0].init.headers.authorization, /^AWS4-HMAC-SHA256 /);
+  assert.match(calls[0].init.headers["x-amz-date"], /^\d{8}T\d{6}Z$/);
+  assert.match(calls[0].init.headers["x-amz-content-sha256"], /^[a-f0-9]{64}$/);
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.FromEmailAddress, '"Codex Pet League" <no-reply@example.test>');
+  assert.equal(body.Destination.ToAddresses[0], "player@example.test");
+  assert.match(body.Content.Simple.Body.Text.Data, /ABCDEFGH/);
+  assert.match(body.Content.Simple.Body.Text.Data, /https:\/\/league\.example\.test\/\?auth_challenge=challenge_1/);
+});
+
 test("passkey provider verification accepts a verified external hook response", async () => {
   const env = {
     CODEX_PET_AUTH_PROVIDER: "production",

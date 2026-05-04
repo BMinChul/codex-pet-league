@@ -61,9 +61,15 @@ CODEX_PET_DEPLOYMENT_ENV=production
 PORT=4317
 CODEX_PET_PUBLIC_BASE_URL=https://league.<domain>
 CODEX_PET_COOKIE_SECURE=true
-CODEX_PET_AUTH_PROVIDER=clerk
+CODEX_PET_AUTH_PROVIDER=email_code
 CODEX_PET_AUTH_DEV_CODE=false
 CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
+CODEX_PET_EMAIL_PROVIDER=aws_ses
+CODEX_PET_SES_REGION=us-east-1
+CODEX_PET_SES_FROM_EMAIL=no-reply@league.<domain>
+CODEX_PET_SES_FROM_NAME=Codex Pet League
+CODEX_PET_SES_ACCESS_KEY_ID=<aws-ses-access-key-id>
+CODEX_PET_SES_SECRET_ACCESS_KEY=<aws-ses-secret-access-key>
 CODEX_PET_STORAGE_DRIVER=postgres
 CODEX_PET_POSTGRES_URL=<render-postgres-url>
 CODEX_PET_REALTIME_BUS=redis
@@ -86,7 +92,7 @@ CODEX_PET_BRIDGE_ATTESTATION_SECRET=<strong-secret>
 CODEX_PET_REPLAY_SIGNING_SECRET=<strong-secret>
 ```
 
-Do not send real users to the Render service until the real provider credentials and domain/admin rollout are configured: Clerk, Render Postgres, Render Key Value, Cloudflare R2/custom domain, OpenAI moderation, Cloudflare DNS, HTTPS, secure cookies, and admin access policy.
+Do not send real users to the Render service until the real provider credentials and domain/admin rollout are configured: AWS SES, Render Postgres, Render Key Value, Cloudflare R2/custom domain, OpenAI moderation, Cloudflare DNS, HTTPS, secure cookies, and admin access policy.
 
 ## Domain, HTTPS, Cookie, And Admin Target
 
@@ -123,9 +129,9 @@ Admin access policy:
 
 - Admin API access requires a valid League session and server-side `account.role === "admin"`.
 - Do not use shared admin passwords, public admin tokens, query-string secrets, or client-controlled role flags.
-- Use Clerk as the upstream identity proof, then mirror only verified admin users into League server records as `role=admin`.
-- Store admin authorization in Clerk backend-only/private metadata or a server-side allowlist inside the Clerk auth adapter. Do not trust Clerk unsafe metadata or browser-submitted role values.
-- Bootstrap the first production admin with a controlled one-off promotion after Clerk verification, then keep later admin changes audited through League admin operations or a small locked-down ops script.
+- Use League email-code login as the upstream identity proof for the low-cost alpha, then promote only verified owner accounts into League server records as `role=admin`.
+- Store admin authorization only in League server-side account state or a locked-down server-side allowlist. Do not trust browser-submitted role values.
+- Bootstrap the first production admin with a controlled one-off promotion after verified email login, then keep later admin changes audited through League admin operations or a small locked-down ops script.
 - Keep `CODEX_PET_AUTH_DEV_CODE=false` and `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false` in every shared environment.
 
 ## Render Postgres Target
@@ -243,38 +249,35 @@ Moderation policy:
 - Store only moderation metadata needed for audit: model, timestamp, flagged result, categories, scores, applied input types, action, and reviewer notes. Avoid storing unnecessary submitted text beyond the existing summarized League records.
 - Image-only moderation does not cover every text-only category. Keep user reports and manual review available for text embedded inside pet pixels or ambiguous stylized imagery.
 
-## Clerk Auth Target
+## AWS SES Email Code Auth Target
 
-The official shared League server auth provider is Clerk.
+The official shared League server alpha auth path is native League email-code login delivered through AWS SES.
 
-Clerk is the upstream account provider for passkeys, email links, and OAuth/social connections. The League server should still issue its own `league_session` cookie or `CODEX_PET_SESSION_TOKEN` after Clerk verifies a user. Do not treat Codex App or ChatGPT sign-in as League ownership proof.
+AWS SES is only the email sender. The League server still creates the auth challenge, verifies the code, binds the account, and issues its own `league_session` cookie or `CODEX_PET_SESSION_TOKEN`. Do not treat Codex App or ChatGPT sign-in as League ownership proof.
 
-The current server uses an external auth hook contract, so wire Clerk through a small auth adapter or server route that can:
-
-- Send or initiate Clerk-backed email link login for `email_magic_link`.
-- Verify Clerk passkey results for `passkey`.
-- Verify Clerk OAuth/session results for `league_oauth`.
-- Return JSON with `verified: true` and a stable `provider_subject` when Clerk verification succeeds.
-
-Production-shaped Clerk environment values:
+Production-shaped AWS SES environment values:
 
 ```bash
-CODEX_PET_AUTH_PROVIDER=clerk
-CODEX_PET_EMAIL_PROVIDER=webhook
-CODEX_PET_EMAIL_WEBHOOK_URL=https://<auth-adapter>/clerk/email-link
-CODEX_PET_AUTH_WEBHOOK_SECRET=<shared-auth-hook-secret>
-CODEX_PET_EMAIL_WEBHOOK_SECRET=<shared-auth-hook-secret>
-CODEX_PET_PASSKEY_PROVIDER=true
-CODEX_PET_PASSKEY_VERIFY_URL=https://<auth-adapter>/clerk/passkey/verify
-CODEX_PET_PASSKEY_RP_ID=league.<domain>
-CODEX_PET_OAUTH_ISSUER=https://<clerk-instance-domain>
-CODEX_PET_OAUTH_AUTHORIZE_URL=https://<clerk-instance-domain>/sign-in
-CODEX_PET_OAUTH_CLIENT_ID=codex-pet-league
-CODEX_PET_OAUTH_REDIRECT_URI=https://league.<domain>/oauth/callback
-CODEX_PET_OAUTH_VERIFY_URL=https://<auth-adapter>/clerk/oauth/verify
+CODEX_PET_AUTH_PROVIDER=email_code
+CODEX_PET_EMAIL_PROVIDER=aws_ses
+CODEX_PET_SES_REGION=us-east-1
+CODEX_PET_SES_FROM_EMAIL=no-reply@league.<domain>
+CODEX_PET_SES_FROM_NAME=Codex Pet League
+CODEX_PET_SES_REPLY_TO=support@<domain>
+CODEX_PET_SES_CONFIGURATION_SET=<optional-ses-configuration-set>
+CODEX_PET_SES_ACCESS_KEY_ID=<aws-ses-access-key-id>
+CODEX_PET_SES_SECRET_ACCESS_KEY=<aws-ses-secret-access-key>
 ```
 
-Before production traffic, test all three auth methods through `codexpet auth providers`, `codexpet auth challenge`, and `codexpet auth verify`. Production mode must not pass with only `local_dev` auth.
+Setup notes:
+
+- Verify the sending domain or sender address in AWS SES before opening traffic.
+- Move the SES account out of sandbox mode before inviting real users outside verified test recipients.
+- Use an IAM key scoped to `ses:SendEmail` for the verified identity rather than a broad AWS admin key.
+- Keep `CODEX_PET_AUTH_DEV_CODE=false`; production users should receive the code only through email.
+- Passkeys and OAuth/social login can be added later through the existing `passkey` and `league_oauth` hook contracts, but they are not required for the low-cost alpha.
+
+Before production traffic, test the flow through `codexpet auth providers`, `codexpet auth challenge --method email_magic_link --identifier <email>`, and `codexpet auth verify`. Production mode must not pass with only `local_dev` auth.
 
 ## Runtime Layout
 
@@ -327,7 +330,7 @@ These cannot be completed locally without your accounts or provider choices:
 
 - domain and HTTPS certificate
 - production host or cloud project
-- email/passkey/OAuth provider credentials
+- AWS SES email sender credentials
 - bridge and replay signing secrets
 - Postgres, Redis, and persistent object storage locations
 - monitoring destination for `/api/metrics`

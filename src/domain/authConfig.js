@@ -71,6 +71,17 @@ function emailDeliveryStatus(env, localDev) {
       signed: Boolean(env.CODEX_PET_EMAIL_WEBHOOK_SECRET),
     };
   }
+  if (provider === "aws_ses") {
+    const ses = sesStatus(env);
+    return {
+      status: ses.configured ? "configured" : "missing",
+      delivery: "aws_ses",
+      region: ses.region,
+      endpoint: ses.endpoint,
+      from: ses.from,
+      credentials: ses.credentials,
+    };
+  }
   if (provider === "console") {
     return {
       status: localDev ? "dev_stub" : "degraded",
@@ -82,6 +93,22 @@ function emailDeliveryStatus(env, localDev) {
     status: "missing",
     delivery: provider || "missing",
     webhook: env.CODEX_PET_EMAIL_WEBHOOK_URL ? "configured" : "missing",
+  };
+}
+
+function sesStatus(env) {
+  const region = env.CODEX_PET_SES_REGION || env.AWS_REGION || env.AWS_DEFAULT_REGION || "";
+  const endpoint = env.CODEX_PET_SES_ENDPOINT || (region ? `https://email.${region}.amazonaws.com` : "");
+  const from = env.CODEX_PET_SES_FROM_EMAIL || "";
+  const hasAccessKey = Boolean(env.CODEX_PET_SES_ACCESS_KEY_ID || env.AWS_ACCESS_KEY_ID);
+  const hasSecretKey = Boolean(env.CODEX_PET_SES_SECRET_ACCESS_KEY || env.AWS_SECRET_ACCESS_KEY);
+  const credentials = hasAccessKey && hasSecretKey ? "configured" : "missing";
+  return {
+    configured: Boolean(region && endpoint && from && hasAccessKey && hasSecretKey),
+    region: region || "missing",
+    endpoint: endpoint ? "configured" : "missing",
+    from: from ? "configured" : "missing",
+    credentials,
   };
 }
 
