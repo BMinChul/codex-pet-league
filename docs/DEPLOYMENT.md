@@ -64,6 +64,7 @@ CODEX_PET_COOKIE_SECURE=true
 CODEX_PET_AUTH_PROVIDER=email_code
 CODEX_PET_AUTH_DEV_CODE=false
 CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
+CODEX_PET_ADMIN_EMAIL_ALLOWLIST=owner@example.com
 CODEX_PET_EMAIL_PROVIDER=resend
 CODEX_PET_RESEND_FROM_EMAIL=no-reply@league.<domain>
 CODEX_PET_RESEND_FROM_NAME=Codex Pet League
@@ -125,10 +126,11 @@ Render terminates inbound HTTPS at its load balancer and forwards HTTP to the se
 
 Admin access policy:
 
-- Admin API access requires a valid League session and server-side `account.role === "admin"`.
+- Admin API access requires a valid League session, server-side `account.role === "admin"`, and membership in `CODEX_PET_ADMIN_EMAIL_ALLOWLIST` when that allowlist is configured.
 - Do not use shared admin passwords, public admin tokens, query-string secrets, or client-controlled role flags.
 - Use League email-code login as the upstream identity proof for the low-cost alpha, then promote only verified owner accounts into League server records as `role=admin`.
-- Store admin authorization only in League server-side account state or a locked-down server-side allowlist. Do not trust browser-submitted role values.
+- Store admin authorization only in League server-side account state plus the locked-down server-side email allowlist. Do not trust browser-submitted role values.
+- For the official shared server, keep `CODEX_PET_ADMIN_EMAIL_ALLOWLIST` limited to the owner email unless the owner explicitly authorizes another admin.
 - Bootstrap the first production admin with a controlled one-off promotion after verified email login, then keep later admin changes audited through League admin operations or a small locked-down ops script.
 - Keep `CODEX_PET_AUTH_DEV_CODE=false` and `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false` in every shared environment.
 

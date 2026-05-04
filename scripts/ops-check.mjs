@@ -2,6 +2,7 @@ const checks = [
   ["CODEX_PET_AUTH_PROVIDER", process.env.CODEX_PET_AUTH_PROVIDER ?? "local_dev"],
   ["CODEX_PET_AUTH_DEV_CODE", process.env.CODEX_PET_AUTH_DEV_CODE ?? "false"],
   ["CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER", process.env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER ?? "false"],
+  ["CODEX_PET_ADMIN_EMAIL_ALLOWLIST", process.env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST ? "configured" : "missing"],
   ["CODEX_PET_COOKIE_SECURE", process.env.CODEX_PET_COOKIE_SECURE ?? "false"],
   ["CODEX_PET_EMAIL_PROVIDER", process.env.CODEX_PET_EMAIL_PROVIDER ?? "missing"],
   ["CODEX_PET_EMAIL_WEBHOOK_URL", process.env.CODEX_PET_EMAIL_WEBHOOK_URL ? "configured" : "missing"],

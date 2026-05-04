@@ -57,6 +57,10 @@ export function requireAdmin(state, accountId) {
   if (account.role !== "admin") {
     throw httpError(403, "ADMIN_REQUIRED", "An admin League account is required.");
   }
+  const allowlist = adminEmailAllowlist();
+  if (allowlist.length > 0 && !allowlist.includes(normalizeIdentifier(account.email ?? account.identifier))) {
+    throw httpError(403, "ADMIN_NOT_ALLOWED", "This admin account is not on the server admin allowlist.");
+  }
   return account;
 }
 
@@ -3159,6 +3163,19 @@ function statusText(counters) {
     style: `${counters.styleDaily} / ${XP_CAPS.styleDaily}`,
     weeklyStyle: `${counters.styleWeekly} / ${XP_CAPS.styleWeekly}`,
   };
+}
+
+function adminEmailAllowlist(env = process.env) {
+  const configured = [env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST, env.CODEX_PET_OWNER_EMAIL]
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(","))
+    .map(normalizeIdentifier)
+    .filter(Boolean);
+  return [...new Set(configured)];
+}
+
+function normalizeIdentifier(value) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function sum(items, key) {

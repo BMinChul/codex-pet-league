@@ -12,6 +12,9 @@ if (!email) {
 } else if (!allowLocal && email.endsWith("@codexpet.local")) {
   console.error("error: refusing to promote local demo accounts without --allow-local.");
   process.exitCode = 1;
+} else if (!adminEmailAllowed(email)) {
+  console.error("error: refusing to promote an email outside CODEX_PET_ADMIN_EMAIL_ALLOWLIST.");
+  process.exitCode = 1;
 } else {
   try {
     const result = await updateState((state) => bootstrapAdmin(state, { email, dryRun }));
@@ -126,6 +129,15 @@ function isLocalDemoAccount(account) {
 
 function hashText(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function adminEmailAllowed(email) {
+  const configured = [process.env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST, process.env.CODEX_PET_OWNER_EMAIL]
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(","))
+    .map(normalizeEmail)
+    .filter(Boolean);
+  return configured.length === 0 || configured.includes(email);
 }
 
 function opsError(code, message) {

@@ -274,6 +274,23 @@ test("admin actions require admin role", () => {
   assert.throws(() => requireAdmin(state, "acct_rival"), /admin League account/);
 });
 
+test("admin allowlist restricts production admin access by email", () => {
+  const previous = process.env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST;
+  process.env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST = "owner@example.com";
+  try {
+    const state = createDefaultState();
+    assert.throws(() => requireAdmin(state, "acct_demo"), /admin allowlist/);
+
+    const account = state.accounts.find((entry) => entry.id === "acct_demo");
+    account.email = "owner@example.com";
+    account.identifier = "owner@example.com";
+    assert.equal(requireAdmin(state, "acct_demo").id, "acct_demo");
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST;
+    else process.env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST = previous;
+  }
+});
+
 test("asset validation rejects invalid atlas uploads", () => {
   const state = createDefaultState();
 

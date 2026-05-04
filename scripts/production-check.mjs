@@ -11,6 +11,7 @@ const findings = [];
 check("CODEX_PET_AUTH_PROVIDER", env.CODEX_PET_AUTH_PROVIDER || "local_dev");
 check("CODEX_PET_AUTH_DEV_CODE", env.CODEX_PET_AUTH_DEV_CODE || "false");
 check("CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER", env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER || "false");
+check("CODEX_PET_ADMIN_EMAIL_ALLOWLIST", env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST ? "configured" : "missing");
 check("CODEX_PET_COOKIE_SECURE", env.CODEX_PET_COOKIE_SECURE || "false");
 check("CODEX_PET_EMAIL_PROVIDER", env.CODEX_PET_EMAIL_PROVIDER || "missing");
 check("CODEX_PET_RESEND_FROM_EMAIL", env.CODEX_PET_RESEND_FROM_EMAIL ? "configured" : "missing");
@@ -39,6 +40,7 @@ if (production) {
   requireCondition((env.CODEX_PET_AUTH_PROVIDER || "local_dev") !== "local_dev", "production auth must not use local_dev");
   requireCondition(env.CODEX_PET_AUTH_DEV_CODE !== "true", "production must not expose auth dev codes");
   requireCondition(env.CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER !== "true", "production must not allow dev account headers");
+  requireCondition(Boolean(env.CODEX_PET_ADMIN_EMAIL_ALLOWLIST), "production must configure CODEX_PET_ADMIN_EMAIL_ALLOWLIST");
   requireCondition(env.CODEX_PET_COOKIE_SECURE === "true", "production should set CODEX_PET_COOKIE_SECURE=true");
   requireCondition(authReady, "production needs at least one fully configured auth method");
   requireSecret("CODEX_PET_BRIDGE_SECRET");

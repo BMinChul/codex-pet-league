@@ -24,7 +24,7 @@ Moderation output is not an automatic account penalty. Use category flags, categ
 
 ## Admin Access Loop
 
-Production admin access is tied to verified League accounts with server-side `role=admin`. Email-code login proves control of the owner email address for the low-cost alpha; the League server decides the role.
+Production admin access is tied to verified League accounts with server-side `role=admin` and the server-side `CODEX_PET_ADMIN_EMAIL_ALLOWLIST`. Email-code login proves control of the owner email address for the low-cost alpha; the League server decides the role, and the allowlist is the final gate.
 
 Before launch:
 
@@ -35,11 +35,11 @@ Before launch:
 npm run admin:bootstrap -- --email=owner@example.com
 ```
 
-Use `--dry-run` first when checking the target account. The script promotes only the exact email passed with `--email`, refuses local demo accounts unless `--allow-local` is explicitly provided, requires the account to already exist, and requires `verified: true`. During the real production bootstrap, local demo admin accounts ending in `@codexpet.local` are demoted so the owner email is the first real admin.
+Use `--dry-run` first when checking the target account. The script promotes only the exact email passed with `--email`, refuses emails outside `CODEX_PET_ADMIN_EMAIL_ALLOWLIST` when configured, refuses local demo accounts unless `--allow-local` is explicitly provided, requires the account to already exist, and requires `verified: true`. During the real production bootstrap, local demo admin accounts ending in `@codexpet.local` are demoted so the owner email is the first real admin.
 3. Confirm `/api/admin/audit` rejects normal players and accepts only the promoted admin session.
-4. Confirm `CODEX_PET_AUTH_DEV_CODE=false`, `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false`, `CODEX_PET_PUBLIC_BASE_URL=https://league.<domain>`, and `CODEX_PET_COOKIE_SECURE=true`.
+4. Confirm `CODEX_PET_AUTH_DEV_CODE=false`, `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false`, `CODEX_PET_ADMIN_EMAIL_ALLOWLIST=<owner-email>`, `CODEX_PET_PUBLIC_BASE_URL=https://league.<domain>`, and `CODEX_PET_COOKIE_SECURE=true`.
 
-During operations, admin role changes should be rare and auditable. Revoke sessions after removing admin access, and avoid using Render dashboard or database access as a routine moderation tool.
+During operations, admin role changes should be rare and auditable. The official shared server keeps the owner as the only admin unless the owner explicitly authorizes another email. Revoke sessions after removing admin access, remove the email from `CODEX_PET_ADMIN_EMAIL_ALLOWLIST`, and avoid using Render dashboard or database access as a routine moderation tool.
 
 ## Season Loop
 
