@@ -260,6 +260,8 @@ async function handleApi(req, res, url) {
     const account = getAccount(state, accountId);
     sendJson(res, 200, {
       active_pet_id: account.active_pet_id ?? null,
+      active_pet_selection_locked: Boolean(account.active_pet_id),
+      active_pet_locked_at: account.active_pet_locked_at ?? null,
       pets: state.pets.filter((pet) => pet.owner_account_id === accountId).map((pet) => publicPetView(state, pet)),
     });
     return;
@@ -282,9 +284,12 @@ async function handleApi(req, res, url) {
       await applyRequestGuard(state, req, "pet.create", accountId, body);
       getAccount(state, accountId);
       const pet = createPet(state, accountId, body);
+      const account = getAccount(state, accountId);
       return {
         pet: publicPetView(state, pet),
-        active_pet_id: getAccount(state, accountId).active_pet_id ?? null,
+        active_pet_id: account.active_pet_id ?? null,
+        active_pet_selection_locked: Boolean(account.active_pet_id),
+        active_pet_locked_at: account.active_pet_locked_at ?? null,
       };
     });
     sendJson(res, 201, result);

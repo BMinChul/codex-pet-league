@@ -79,7 +79,9 @@ test("one account has one active League pet selection", () => {
     primary_element: "Forge",
     secondary_element: "Trace",
   });
-  assert.equal(state.accounts.find((account) => account.id === "acct_demo").active_pet_id, first.id);
+  const account = state.accounts.find((entry) => entry.id === "acct_demo");
+  assert.equal(account.active_pet_id, first.id);
+  assert.ok(account.active_pet_locked_at);
 
   const second = createPet(state, "acct_demo", {
     name: "Second Pet",
@@ -87,12 +89,14 @@ test("one account has one active League pet selection", () => {
     primary_element: "Logic",
     secondary_element: "Patch",
   });
-  assert.equal(state.accounts.find((account) => account.id === "acct_demo").active_pet_id, second.id);
-  assert.equal(publicPetView(state, first).is_active, false);
-  assert.equal(publicPetView(state, second).is_active, true);
+  assert.equal(account.active_pet_id, first.id);
+  assert.equal(publicPetView(state, first).is_active, true);
+  assert.equal(publicPetView(state, second).is_active, false);
 
+  assert.throws(() => activatePet(state, "acct_demo", second.id), /permanent/);
   const activated = activatePet(state, "acct_demo", first.id);
   assert.equal(activated.active_pet_id, first.id);
+  assert.equal(activated.active_pet_selection_locked, true);
   assert.equal(publicPetView(state, first).is_active, true);
 });
 

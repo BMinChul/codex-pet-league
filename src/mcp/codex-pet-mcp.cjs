@@ -123,13 +123,12 @@ const tools = [
   {
     name: "pet_import_hatch",
     title: "Import hatch-pet Package",
-    description: "Imports an official hatch-pet package folder containing pet.json and spritesheet.webp, then creates the League pet.",
+    description: "Imports an official hatch-pet package folder containing pet.json and spritesheet.webp, then creates the League pet. It becomes active only if the account has no permanent active pet yet.",
     inputSchema: {
       type: "object",
       properties: {
         package_path: { type: "string" },
         root_path: { type: "string" },
-        latest: { type: "boolean" },
         name: { type: "string" },
         primary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
         secondary_element: { type: "string", enum: ["Logic", "Patch", "Trace", "Forge", "Pulse", "Deploy"] },
@@ -140,7 +139,7 @@ const tools = [
   {
     name: "pet_activate",
     title: "Activate League Pet",
-    description: "Sets the one official active League pet for this account. Switching is blocked while a battle is active.",
+    description: "Sets the one permanent official active League pet for this account. Re-selecting the same pet is allowed; switching to another pet is blocked.",
     inputSchema: {
       type: "object",
       properties: {
@@ -502,7 +501,6 @@ async function callTool(name, args) {
   if (name === "pet_import_hatch") {
     const hatch = await loadHatchPetPackage(args.package_path, {
       root: args.root_path,
-      preferLatest: Boolean(args.latest),
     });
     const asset = await apiPost("/api/pet-assets/uploads", {
       appearance: hatch.appearance,

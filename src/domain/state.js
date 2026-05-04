@@ -290,9 +290,10 @@ export function createPet(state, accountId, input = {}) {
   };
   syncCosmeticRewards(pet);
   state.pets.push(pet);
-  if (!account.active_pet_id || input.make_active !== false) {
+  if (!account.active_pet_id) {
     account.active_pet_id = pet.id;
     account.active_pet_selected_at = now;
+    account.active_pet_locked_at = now;
   }
   logEvent(state, "pet.created", accountId, { pet_id: pet.id, asset_id: asset.id });
   return pet;
@@ -301,17 +302,37 @@ export function createPet(state, accountId, input = {}) {
 export function activatePet(state, accountId, petId) {
   const account = getAccount(state, accountId);
   const pet = ownedPet(state, accountId, petId);
+  const now = new Date().toISOString();
+  if (account.active_pet_id === pet.id) {
+    account.active_pet_selected_at ??= now;
+    account.active_pet_locked_at ??= now;
+    pet.last_selected_at = now;
+    return {
+      pet: publicPetView(state, pet),
+      active_pet_id: pet.id,
+      active_pet_selection_locked: true,
+      active_pet_locked_at: account.active_pet_locked_at ?? null,
+    };
+  }
+  if (account.active_pet_id && account.active_pet_id !== pet.id) {
+    throw httpError(409, "ACTIVE_PET_SELECTION_LOCKED", "League pet selection is permanent for this account.");
+  }
   advanceAllBattleRooms(state);
   const activeBattle = (state.battleRooms ?? []).find((room) => room.status === "in_progress" && sideKeyForAccount(room, accountId));
   if (activeBattle) {
     throw httpError(409, "ACTIVE_BATTLE_LOCKS_PET_SELECTION", "Finish the active battle before switching your League pet.");
   }
-  const now = new Date().toISOString();
   account.active_pet_id = pet.id;
-  account.active_pet_selected_at = now;
+  account.active_pet_selected_at ??= now;
+  account.active_pet_locked_at ??= now;
   pet.last_selected_at = now;
   logEvent(state, "pet.activated", accountId, { pet_id: pet.id });
-  return { pet: publicPetView(state, pet), active_pet_id: pet.id };
+  return {
+    pet: publicPetView(state, pet),
+    active_pet_id: pet.id,
+    active_pet_selection_locked: true,
+    active_pet_locked_at: account.active_pet_locked_at ?? null,
+  };
 }
 
 export function updatePetLoadout(state, accountId, petId, input = {}) {

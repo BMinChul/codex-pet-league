@@ -20,6 +20,8 @@ const state = {
   replaysByPetId: new Map(),
   matchmaking: null,
   activePetId: null,
+  activePetSelectionLocked: false,
+  activePetLockedAt: null,
   activeBattleId: null,
   activeBattle: null,
   lastTrainingDraft: null,
@@ -168,12 +170,30 @@ async function runSilentRefresh() {
 
 function bindEvents() {
   els.petSelect?.addEventListener("change", async () => {
-    state.activePetId = els.petSelect.value || null;
-    if (state.activePetId) {
-      await api(`/api/pets/${encodeURIComponent(state.activePetId)}/activate`, {
+    const previousPetId = state.activePetId;
+    const selectedPetId = els.petSelect.value || null;
+    state.activePetId = selectedPetId;
+    if (!selectedPetId || selectedPetId === previousPetId) {
+      await loadActivePetDetails();
+      renderApp();
+      return;
+    }
+    try {
+      const result = await api(`/api/pets/${encodeURIComponent(selectedPetId)}/activate`, {
         method: "POST",
         body: {},
       });
+      state.activePetId = result.active_pet_id ?? selectedPetId;
+      state.activePetSelectionLocked = result.active_pet_selection_locked ?? true;
+      state.activePetLockedAt = result.active_pet_locked_at ?? state.activePetLockedAt;
+    } catch (error) {
+      state.activePetId = previousPetId;
+      pushNotice(
+        error.code === "ACTIVE_PET_SELECTION_LOCKED"
+          ? "League pet selection is permanent for this account."
+          : error.message,
+        "error",
+      );
     }
     await loadActivePetDetails();
     renderApp();
@@ -217,12 +237,16 @@ async function refresh() {
 
   state.league = league ?? state.league;
   state.pets = asArray(petsResult?.pets);
+  state.activePetSelectionLocked = Boolean(petsResult?.active_pet_selection_locked);
+  state.activePetLockedAt = petsResult?.active_pet_locked_at ?? null;
   state.leaderboard = asArray(boardResult?.leaderboard);
   state.events = asArray(eventsResult?.events);
   if (isAdmin()) {
     state.adminConsole = await loadOptional("/api/admin/console", "Admin console could not be loaded.");
   }
-  if (!state.pets.some((pet) => pet.id === state.activePetId)) {
+  if (petsResult?.active_pet_id) {
+    state.activePetId = petsResult.active_pet_id;
+  } else if (!state.pets.some((pet) => pet.id === state.activePetId)) {
     state.activePetId = petsResult?.active_pet_id ?? state.pets.find((pet) => pet.is_active)?.id ?? state.pets[0]?.id ?? null;
   }
   await loadActivePetDetails();
@@ -485,7 +509,7 @@ async function createPet({ demo }) {
       secondary_element: secondary,
     },
   });
-  state.activePetId = pet.pet?.id ?? state.activePetId;
+  state.activePetId = pet.active_pet_id ?? pet.pet?.id ?? state.activePetId;
   await refresh();
 }
 
@@ -1310,8 +1334,12 @@ function updateControls() {
   for (const button of els.actionButtons ?? []) {
     button.disabled = state.busy || !signedIn || !state.activeBattleId || !battleReady || ownPending || (button.dataset.action === "skill" && !hasSkill);
   }
-  for (const control of [els.seedPetButton, els.createPetButton, els.refreshButton, els.petSelect]) {
+  for (const control of [els.seedPetButton, els.createPetButton, els.refreshButton]) {
     if (control) control.disabled = state.busy || !signedIn;
+  }
+  if (els.petSelect) {
+    els.petSelect.disabled = state.busy || !signedIn || (state.activePetSelectionLocked && Boolean(state.activePetId));
+    els.petSelect.title = state.activePetSelectionLocked ? "League pet selection is permanent for this account." : "";
   }
   for (const control of [els.adminRefreshButton, els.adminRunOpsButton, els.adminCaseFilter]) {
     if (control) control.disabled = state.busy || !isAdmin();

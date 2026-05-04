@@ -11,7 +11,8 @@ Use this skill when the user asks about their Codex pet, official `hatch-pet` pa
 
 - Treat Codex App and CLI as the primary play surfaces. The web UI is a companion surface for profiles, leaderboards, replays, visual inspection, and operations.
 - Treat OpenAI `hatch-pet` output as the primary pet asset source. The expected package is `${CODEX_HOME:-~/.codex}/pets/<pet-id>/pet.json` plus `spritesheet.webp`.
-- Users can have multiple local `hatch-pet` packages, but League play should use one active official pet per account.
+- Users can have multiple local `hatch-pet` packages, but League play uses one permanent active official pet per account. Do not switch it after the first League selection.
+- Public Codex App documentation does not currently expose a verifiable "currently selected active pet" API to the League server. Treat local package discovery as candidate input, not proof of official League identity.
 - Treat the League server as authoritative. Do not infer XP, LP, rank, battle results, or replay outcomes locally.
 - Prefer MCP tools when available. Use CLI commands as the fallback bridge.
 - Official actions require `CODEX_PET_SESSION_TOKEN` or a League session cookie. `CODEX_PET_ACCOUNT_ID` is only a local development fallback.
@@ -25,7 +26,7 @@ Use this skill when the user asks about their Codex pet, official `hatch-pet` pa
 2. `next_action` when the user asks what to do next.
 3. `pet_discover_hatch` if the user has not provided a package path.
 4. `pet_import_hatch` with `package_path`, or no path when discovery finds exactly one package, to register an official pet.
-5. `pet_activate` when the user chooses which registered pet is the one active League pet.
+5. `pet_activate` only before the first permanent League selection, or idempotently for the already active pet.
 6. `pet_create` with `atlas_path` only for direct PNG/WebP spritesheet uploads.
 7. `league_play` for the Codex App loop: inspect active state, optionally join queue, optionally submit the recommended turn.
 8. `training_report_draft`, then `training_report_submit` after user approval.
@@ -60,7 +61,7 @@ npm run cli -- battle action --battle battle_room_id --kind strike
 - "내 펫 상태 보여줘" -> `league_home`
 - "내 hatch-pet 펫 찾아줘" -> `pet_discover_hatch`
 - "내 hatch-pet 펫 서버에 올려줘" -> `pet_import_hatch`
-- "이 펫을 공식으로 쓸래" -> `pet_activate`
+- "처음 선택한 펫을 공식으로 확정할래" -> `pet_activate`
 - "오늘 XP 얼마나 남았어" -> `pet_status` or `daily`
 - "훈련 리포트 만들어줘" -> `training_report_draft`
 - "오늘 작업 제출해줘" -> `training_report_submit`

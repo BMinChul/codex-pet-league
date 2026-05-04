@@ -111,9 +111,9 @@ async function resolveDiscoveredHatchPetDir(options) {
     const root = path.resolve(expandHome(options.root ?? path.join(codexHome(), "pets")));
     throw new Error(`No hatch-pet packages were found under ${root}.`);
   }
-  if (candidates.length === 1 || options.preferLatest) return candidates[0].package_dir;
+  if (candidates.length === 1) return candidates[0].package_dir;
   const names = candidates.map((candidate) => `${candidate.manifest.displayName} (${candidate.manifest.id}) -> ${candidate.package_dir}`).join("\n");
-  throw new Error(`Multiple hatch-pet packages were found. Pass --path or --latest.\n${names}`);
+  throw new Error(`Multiple hatch-pet packages were found. Pass --path so the first League selection is explicit.\n${names}`);
 }
 
 function sanitizeHatchManifest(manifest) {

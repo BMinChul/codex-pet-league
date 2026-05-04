@@ -146,10 +146,14 @@ test("MCP bridge calls League tools against a strict temp server", async () => {
       secondary_element: "Logic",
     });
     assert.equal(imported.structuredContent.pet.name, "MCP Hatch");
-    assert.equal(imported.structuredContent.pet.is_active, true);
+    assert.equal(imported.structuredContent.pet.is_active, false);
+
+    const blockedSwitch = await client.callToolError("pet_activate", { pet_id: imported.structuredContent.pet.id });
+    assert.match(blockedSwitch.error.message, /permanent|locked/i);
 
     const reactivated = await client.callTool("pet_activate", { pet_id: petId });
     assert.equal(reactivated.structuredContent.active_pet_id, petId);
+    assert.equal(reactivated.structuredContent.active_pet_selection_locked, true);
 
     const loop = await client.callTool("league_play", { pet_id: petId });
     assert.equal(loop.structuredContent.state, "idle");

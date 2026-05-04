@@ -391,7 +391,6 @@ async function createPet(client, flags, options = {}) {
   if (options.importHatch || hatchPath) {
     const hatch = await loadHatchPetPackage(hatchPath, {
       root: flags.root,
-      preferLatest: Boolean(flags.latest),
     });
     const asset = await client.post("/api/pet-assets/uploads", {
       appearance: hatch.appearance,
@@ -412,6 +411,7 @@ async function createPet(client, flags, options = {}) {
       hatch_pet_id: hatch.manifest.id,
       spritesheet: hatch.spritesheet_path,
       format: hatch.image.format,
+      active: Boolean(pet.pet.is_active),
       level: pet.pet.level,
       battle_class: pet.pet.battle_class,
       rank: `${pet.pet.rating.label} ${pet.pet.rating.lp} LP`,
@@ -1022,7 +1022,7 @@ Usage:
   codexpet rules
   codexpet pets
   codexpet pet discover-hatch
-  codexpet pet import-hatch [--path C:\\Users\\you\\.codex\\pets\\pebble] [--latest] --primary Forge --secondary Trace
+  codexpet pet import-hatch [--path C:\\Users\\you\\.codex\\pets\\pebble] --primary Forge --secondary Trace
   codexpet pet create --name Pebble --primary Forge --secondary Trace [--atlas path.png|path.webp]
   codexpet pet activate --pet pet_id
   codexpet pet profile [--pet pet_id]

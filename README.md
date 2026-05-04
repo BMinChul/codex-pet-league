@@ -25,7 +25,7 @@ http://localhost:4317
 - League demo account session.
 - Public pet asset registration with server-side manifest validation.
 - Official `hatch-pet` package import: `pet.json` plus `spritesheet.webp` from `${CODEX_HOME:-~/.codex}/pets/<pet-id>`.
-- Multiple local `hatch-pet` packages can be discovered, but each League account has one active official pet selection.
+- Multiple local `hatch-pet` packages can be discovered, but each League account has one permanent active official pet selection. Switching is blocked after the first selection.
 - Optional Codex hatch spritesheet PNG/WebP upload, with server-side dimension, MIME, and hash validation.
 - Local filesystem atlas storage and public atlas URLs for visible active pets.
 - Official pet creation with primary and secondary elements.
@@ -66,6 +66,10 @@ Codex App and Codex CLI are the primary play surfaces. The web UI remains useful
 - Codex App: MCP tools handle natural-language pet status, `hatch-pet` package import, Training Reports, matchmaking, action recommendations, and turn submissions.
 - Codex CLI: terminal commands handle the same flow, including `pet import-hatch`, game-like `battle watch`, and `battle play` modes.
 - Web: optional companion UI for public browsing, visual battle inspection, leaderboards, and operations.
+
+## Codex Active Pet Source
+
+OpenAI's public `hatch-pet` contract documents local packages under `${CODEX_HOME:-~/.codex}/pets/<pet-id>` with `pet.json` and `spritesheet.webp`. Public Codex App documentation does not currently document a verifiable API or signed claim for reading the user's currently selected active Codex pet. Until OpenAI exposes that, Codex Pet League treats local discovery as candidate input only and makes the League server's first active pet selection authoritative and permanent per account.
 
 ## Scripts
 
@@ -143,7 +147,7 @@ Natural-language trigger mapping:
 펫 XP 상태 보여줘 -> codexpet xp status
 내 hatch-pet 펫 찾아줘 -> codexpet pet discover-hatch
 내 hatch-pet 펫 서버에 올려줘 -> codexpet pet import-hatch --path <hatch-pet-folder>
-이 펫을 공식으로 쓸래 -> codexpet pet activate --pet <pet-id>
+처음 선택한 펫을 공식으로 확정할래 -> codexpet pet activate --pet <pet-id>
 내 펫 서버에 올려줘 -> codexpet pet create --atlas <path.png|path.webp>
 지금 배틀 액션 뭐 가능해 -> codexpet battle actions --battle <id>
 터미널에서 배틀판 보여줘 -> codexpet battle watch --battle <id>
