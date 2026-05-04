@@ -146,6 +146,7 @@ Official shared server launch checklist:
   - [x] Render one-off job `job-d7sgvt1j2pic73f9vplg` created disposable verified player sessions, uploaded hatch-pet atlas assets through the live API, created pets, submitted a Training Report, matched ranked PvP, resolved a turn battle, verified XP/LP/replay/profile, exercised asset report plus admin moderation, then cleaned the test accounts/pets/battles from Postgres state.
 - [x] 9. Add backup/log/cost-alert/incident routines.
   - [x] `npm run backup` is documented for manual snapshots before risky changes; Render one-off backup output is explicitly treated as ephemeral unless retrieved.
+  - [x] `npm run audit:summary` prints redacted audit finding counts and high/critical samples for incident triage.
   - [x] `npm run cost:check` checks email-code challenge volume, asset upload/storage growth, open asset reports, and open abuse alerts against configurable warning/critical thresholds.
   - [x] `npm run incident:pack` collects `/api/health`, `/api/metrics`, redacted state summaries, and cost guard output without dumping secrets, session tokens, API keys, or full state.
 - [ ] 10. Publish official server URL and user setup docs.

@@ -139,7 +139,7 @@ The pack intentionally does not dump full state, session tokens, API keys, provi
 Triage order:
 
 1. Confirm `/api/health`, `/api/metrics`, and Render service/deploy status.
-2. Run `npm run prod:check` and `npm run cost:check` in the same runtime environment.
+2. Run `npm run prod:check`, `npm run audit:summary`, and `npm run cost:check` in the same runtime environment.
 3. Check Postgres, Redis, Resend, R2, and OpenAI provider dashboards for outages or quota limits.
 4. If auth email usage spikes, keep overages off and temporarily pause public login links if needed.
 5. If assets or moderation spike, quarantine suspicious assets manually; do not auto-punish accounts from risk scores alone.
