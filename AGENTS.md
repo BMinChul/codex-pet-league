@@ -110,7 +110,7 @@ Official shared League server provider decision track:
 - [x] Confirm hosting/deployment target: Render Web Service.
 - [x] Confirm Auth provider for low-cost alpha: native League email-code login with AWS SES delivery. Passkeys and OAuth are deferred until needed.
 - [x] Confirm managed Postgres provider: Render Postgres.
-- [x] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks: Render Key Value.
+- [x] Confirm Redis-compatible provider for realtime bus, request guard, and distributed locks: Render Key Value from the first shared server launch.
 - [x] Confirm object storage and public asset URL/CDN strategy: Cloudflare R2 with a custom domain.
 - [x] Confirm image/text moderation provider and review policy: OpenAI Moderation API with `omni-moderation-latest`, using manual review for quarantine/block decisions.
 - [x] Confirm domain, HTTPS, cookie, and admin access strategy: Cloudflare DNS, Render custom domain, secure host-only League cookies, and server-side League admin roles after verified email login.
@@ -122,7 +122,7 @@ Current provider recommendation as of 2026-05-04:
 
 - Hosting/deployment: Render Web Service.
 - Database: Render Postgres. Use the internal database URL from the Render Web Service when the app and database are in the same account and region.
-- Realtime/request guard/locks: Render Key Value, Redis-compatible. Use the internal URL from the same Render region when possible; the runtime supports both `redis://` and `rediss://`.
+- Realtime/request guard/locks: Render Key Value, Redis-compatible, from the first shared server launch. Use the internal URL from the same Render region when possible; the runtime supports both `redis://` and `rediss://`.
 - Auth: native League email-code login with AWS SES delivery for the low-cost alpha. The League server owns challenge verification and issues its own `league_session`; AWS SES only sends the code email. Passkeys and OAuth/social login remain future additions.
 - Object storage/CDN: Cloudflare R2 with S3-compatible API and a custom domain for public pet atlas assets.
 - Moderation: OpenAI Moderation API with `omni-moderation-latest` for image and text checks, plus manual review for review/private/blocked asset states.
@@ -559,7 +559,7 @@ Local development:
 Production-shaped direction:
 
 - Postgres snapshot backend after migrations.
-- Redis for realtime bus, request guard, and distributed locks.
+- Render Key Value Redis for realtime bus, request guard, and distributed locks from the first shared server launch.
 - Cloudflare R2 S3-compatible object storage with a custom public asset domain.
 - OpenAI Moderation API for image/text moderation triage.
 - HTTPS with secure cookies.

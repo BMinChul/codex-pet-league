@@ -165,7 +165,7 @@ Notes:
 
 ## Render Key Value Target
 
-The official shared League server Redis-compatible provider is Render Key Value.
+The official shared League server Redis-compatible provider is Render Key Value. Use it from the first shared server launch so matchmaking, battle turns, request guards, idempotency, and realtime fanout do not depend on one process's memory.
 
 Use one Render Key Value instance for:
 
@@ -313,7 +313,7 @@ CODEX_PET_REQUEST_GUARD_NAMESPACE=codex-pet-league
 CODEX_PET_LOCK_NAMESPACE=codex-pet-league
 ```
 
-Local development stays on `CODEX_PET_REALTIME_BUS=local`, `CODEX_PET_REQUEST_GUARD=local`, and `CODEX_PET_DISTRIBUTED_LOCK=local`. In production, Redis shares realtime events, rate-limit buckets, idempotency keys, and short-lived leases for matchmaking, ops jobs, and battle turns across server instances.
+Local development stays on `CODEX_PET_REALTIME_BUS=local`, `CODEX_PET_REQUEST_GUARD=local`, and `CODEX_PET_DISTRIBUTED_LOCK=local`. In production, Redis shares realtime events, rate-limit buckets, idempotency keys, and short-lived leases for matchmaking, ops jobs, and battle turns across server instances and restarts.
 
 ## Backup
 
