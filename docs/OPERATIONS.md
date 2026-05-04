@@ -117,6 +117,15 @@ CODEX_PET_COST_OPEN_ASSET_REPORTS_CRITICAL=100
 
 If email challenges cross warning, keep Resend overages disabled, confirm the 10-minute IP rate limit is active, and inspect `/api/metrics` plus provider logs. If asset storage crosses warning, inspect recent uploads and moderation queue before increasing R2 or CDN exposure.
 
+If `npm run audit:summary -- --json` reports only `event_log_hash_invalid` after moving state through Postgres JSONB, the likely cause is legacy order-sensitive hashes. The runtime now uses stable JSON hashing; run a dry check first, then apply the one-time chain rebase only if the finding shape is understood:
+
+```bash
+npm run ops:rehash
+npm run ops:rehash -- --apply
+```
+
+Do not use `ops:rehash` to hide unexplained tampering. Use it only for the stable JSON hash migration or another documented hash-format migration.
+
 ## Incident Loop
 
 When the site is down, slow, under abuse, or behaving oddly, collect a redacted pack first:

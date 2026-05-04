@@ -1,9 +1,10 @@
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { battleClassForTotalStats, DEFAULT_SEASON, deriveStats, progressionFromXp, XP_CAPS } from "./rules.js";
 import { resultForSide } from "./battleEngine.js";
+import { stableHash, stableStringify } from "./stableJson.js";
 
 export function hashLedgerEntry(entry) {
-  return createHash("sha256").update(JSON.stringify(entry)).digest("hex");
+  return stableHash(entry);
 }
 
 export function auditState(state) {
@@ -345,7 +346,7 @@ function verifyRecordSignature(kind, signature, payload, code, message, findings
     return;
   }
   const secret = process.env.CODEX_PET_REPLAY_SIGNING_SECRET ?? "local-dev-replay-signing-key";
-  const expected = `hmac-sha256:${createHmac("sha256", secret).update(JSON.stringify({ kind, payload })).digest("hex")}`;
+  const expected = `hmac-sha256:${createHmac("sha256", secret).update(stableStringify({ kind, payload })).digest("hex")}`;
   if (signature !== expected) findings.push(finding(code, "critical", message));
 }
 
@@ -508,16 +509,14 @@ function verifyReplayHash(room, findings) {
       findings.push(finding("battle_replay_chain_broken", "critical", `Room ${room.id} replay chain is broken at turn ${entry.turn}.`));
       return;
     }
-    const expected = createHash("sha256").update(JSON.stringify({ room_id: room.id, ...withoutHash(entry) })).digest("hex");
+    const expected = stableHash({ room_id: room.id, ...withoutHash(entry) });
     if (entry.hash !== expected) {
       findings.push(finding("battle_replay_entry_hash_invalid", "critical", `Room ${room.id} replay entry ${entry.turn} hash is invalid.`));
       return;
     }
     previousHash = entry.hash;
   }
-  const expectedReplayHash = createHash("sha256")
-    .update(JSON.stringify({ room_id: room.id, last_turn_hash: previousHash, result: room.result }))
-    .digest("hex");
+  const expectedReplayHash = stableHash({ room_id: room.id, last_turn_hash: previousHash, result: room.result });
   if (room.replay_hash !== expectedReplayHash) {
     findings.push(finding("battle_replay_hash_invalid", "critical", `Room ${room.id} final replay hash is invalid.`));
   }

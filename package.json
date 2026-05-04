@@ -25,6 +25,7 @@
     "prod:check": "node scripts/production-check.mjs",
     "backup": "node scripts/backup-state.mjs",
     "audit:summary": "node scripts/audit-summary.mjs",
+    "ops:rehash": "node scripts/rehash-state-chains.mjs",
     "cost:check": "node scripts/cost-guard.mjs",
     "incident:pack": "node scripts/incident-pack.mjs",
     "healthcheck": "node scripts/healthcheck.mjs",

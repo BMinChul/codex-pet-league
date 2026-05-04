@@ -147,6 +147,7 @@ Official shared server launch checklist:
 - [x] 9. Add backup/log/cost-alert/incident routines.
   - [x] `npm run backup` is documented for manual snapshots before risky changes; Render one-off backup output is explicitly treated as ephemeral unless retrieved.
   - [x] `npm run audit:summary` prints redacted audit finding counts and high/critical samples for incident triage.
+  - [x] `npm run ops:rehash` dry-runs and applies documented append-only hash-chain migrations, such as the stable JSON hash migration needed after Postgres JSONB key normalization.
   - [x] `npm run cost:check` checks email-code challenge volume, asset upload/storage growth, open asset reports, and open abuse alerts against configurable warning/critical thresholds.
   - [x] `npm run incident:pack` collects `/api/health`, `/api/metrics`, redacted state summaries, and cost guard output without dumping secrets, session tokens, API keys, or full state.
 - [ ] 10. Publish official server URL and user setup docs.

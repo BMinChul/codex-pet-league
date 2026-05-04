@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { elementModifier, OFFICIAL_SKILLS } from "./rules.js";
+import { stableHash } from "./stableJson.js";
 
 export const TURN_SECONDS = 30;
 export const MAX_TURNS = 20;
@@ -167,33 +167,27 @@ export function resultForSide(room, sideKey) {
 }
 
 export function hashRoomState(room) {
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        id: room.id,
-        status: room.status,
-        turn_index: room.turn_index,
-        sides: {
-          player: room.sides.player,
-          opponent: room.sides.opponent,
-        },
-        pending_actions: room.pending_actions,
-        log: room.log,
-        result: room.result,
-      }),
-    )
-    .digest("hex");
+  return stableHash({
+    id: room.id,
+    status: room.status,
+    turn_index: room.turn_index,
+    sides: {
+      player: room.sides.player,
+      opponent: room.sides.opponent,
+    },
+    pending_actions: room.pending_actions,
+    log: room.log,
+    result: room.result,
+  });
 }
 
 export function hashReplayEntry(roomId, entry) {
   const { hash, ...rest } = entry;
-  return createHash("sha256").update(JSON.stringify({ room_id: roomId, ...rest })).digest("hex");
+  return stableHash({ room_id: roomId, ...rest });
 }
 
 export function hashReplayFinal(room) {
-  return createHash("sha256")
-    .update(JSON.stringify({ room_id: room.id, last_turn_hash: room.log.at(-1)?.hash ?? null, result: room.result }))
-    .digest("hex");
+  return stableHash({ room_id: room.id, last_turn_hash: room.log.at(-1)?.hash ?? null, result: room.result });
 }
 
 export function maxHpForStats(stats) {
@@ -578,9 +572,7 @@ function summarizeVitals(side) {
 }
 
 function hashReplayTurnState(turnLog) {
-  return createHash("sha256")
-    .update(JSON.stringify({ turn: turnLog.turn, actions: turnLog.actions, effects: turnLog.effects, sides: turnLog.sides }))
-    .digest("hex");
+  return stableHash({ turn: turnLog.turn, actions: turnLog.actions, effects: turnLog.effects, sides: turnLog.sides });
 }
 
 function assertInProgress(room) {

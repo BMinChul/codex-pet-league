@@ -28,6 +28,7 @@ import {
   submitBotActionIfNeeded,
 } from "./battleEngine.js";
 import { accountIntegrityStatus, appendRiskEvent, auditState, riskTrainingReport } from "./audit.js";
+import { stableHash, stableStringify } from "./stableJson.js";
 import hatchPackage from "../hatchPackage.cjs";
 
 const MAX_APPEARANCE_BYTES = 4096;
@@ -1335,7 +1336,7 @@ function appendXpLedger(state, input) {
     applied_at: new Date().toISOString(),
   });
   const entry = state.xpLedger.at(-1);
-  entry.hash = createHash("sha256").update(JSON.stringify({ ...entry, hash: undefined })).digest("hex");
+  entry.hash = stableHash({ ...entry, hash: undefined });
   return entry;
 }
 
@@ -1359,7 +1360,7 @@ function appendLpLedger(state, input) {
     previous_hash: previous?.hash ?? null,
     applied_at: input.appliedAt,
   };
-  entry.hash = createHash("sha256").update(JSON.stringify(entry)).digest("hex");
+  entry.hash = stableHash(entry);
   state.lpLedger.push(entry);
   return entry;
 }
@@ -1385,7 +1386,7 @@ function appendLpRollbackLedger(state, input) {
     previous_hash: previous?.hash ?? null,
     applied_at: new Date().toISOString(),
   };
-  entry.hash = createHash("sha256").update(JSON.stringify(entry)).digest("hex");
+  entry.hash = stableHash(entry);
   state.lpLedger.push(entry);
   return entry;
 }
@@ -3060,12 +3061,12 @@ function randomCode(length) {
 }
 
 function hashJson(value) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return stableHash(value);
 }
 
 function signServerRecord(kind, payload) {
   const secret = process.env.CODEX_PET_REPLAY_SIGNING_SECRET ?? "local-dev-replay-signing-key";
-  const body = JSON.stringify({ kind, payload });
+  const body = stableStringify({ kind, payload });
   return `hmac-sha256:${createHmac("sha256", secret).update(body).digest("hex")}`;
 }
 
@@ -3148,7 +3149,7 @@ function logEvent(state, type, accountId, payload) {
     previous_hash: state.events[0]?.hash ?? null,
     created_at: new Date().toISOString(),
   };
-  event.hash = createHash("sha256").update(JSON.stringify(event)).digest("hex");
+  event.hash = stableHash(event);
   state.events.unshift(event);
   state.events = state.events.slice(0, 200);
 }
