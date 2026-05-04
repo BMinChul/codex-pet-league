@@ -44,14 +44,57 @@ Implemented local product surface:
 - Asset policy is implemented as: review/private assets cannot enter ranked; safety-blocked assets cannot enter any battle; local post-registration file changes have no ranked effect.
 - `codexpet doctor`, `codexpet auth providers`, `codexpet bridge status`, `codexpet pet inspect-hatch`, MCP `league_doctor`, and MCP `pet_inspect_hatch` exist for Codex App/CLI troubleshooting.
 
-Next-session priority:
+Current execution track:
 
-1. Decide external services with the user.
-2. Wire production environment variables for the chosen services.
-3. Do the real Postgres/Redis/object-storage/Auth provider integration checks.
-4. Then handle deployment and private beta readiness.
+The active plan is no longer "private beta first." The current launch model is:
 
-External decisions still needed from the user:
+1. Publish the project to GitHub first as a public local/self-host preview.
+2. Let users install or clone the CLI, MCP bridge, and Codex App plugin scaffold from the repo.
+3. Keep the official shared League server as a later operations step, not a blocker for the initial GitHub release.
+4. Never publish production secrets, live service credentials, local state, admin tokens, or personal machine paths.
+
+Current GitHub release checklist:
+
+- [x] Confirm launch model: public GitHub local/self-host preview first, official shared League server later.
+- [x] Run a public-safety scan for secrets, local state, ignored files, personal paths, and placeholder URLs.
+- [x] Decide the GitHub repo owner/name and license before replacing metadata.
+- [x] Replace plugin metadata placeholders.
+- [x] Remove local-only absolute paths from plugin/MCP config.
+- [x] Document an installable CLI/MCP/plugin flow for other users' machines.
+- [x] Split README guidance into local run, self-host run, and official shared League server later.
+- [x] Run the GitHub-release verification set before pushing.
+- [ ] Create or select the GitHub repository and push the public baseline.
+- [ ] After the public repo baseline is shipped, return to official shared League server provider decisions.
+
+Checklist discipline:
+
+- Work the checklist from top to bottom.
+- Mark an item `[x]` only after it is actually completed.
+- Do not start production provider selection until the public GitHub baseline is ready unless the user explicitly changes the launch model.
+
+Latest public-safety scan notes:
+
+- Ignored local runtime/dependency paths confirmed: `data/`, `runs/`, `node_modules/`, and identity-probe logs/output.
+- No tracked `.env` file was found; `.env.example` contains placeholder/local development values only.
+- Public-release blocker scan is clean for personal paths and placeholder plugin metadata after the README/plugin updates.
+- `localhost:4317` is acceptable for local/self-host docs, but README must clearly separate local/self-host mode from future official shared League server mode.
+
+GitHub release metadata decision:
+
+- GitHub owner: `BMinChul` unless the user chooses a different GitHub account or org before push.
+- Repository name: `codex-pet-league`.
+- License: `MIT`.
+
+Latest GitHub-release verification:
+
+- `npm test`: passed, 78 tests.
+- `npm run test:runtime`: passed.
+- `npm run test:browser`: passed, 3 browser smoke tests.
+- `npm run balance:sim`: passed with `status: ok`.
+- `npm run verify:loop -- 2`: passed.
+- `git diff --check`: passed.
+
+Later official shared League server decisions still needed from the user:
 
 - Auth provider for passkey, email magic link, and OAuth.
 - Managed Postgres provider.

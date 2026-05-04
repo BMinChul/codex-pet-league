@@ -1,8 +1,24 @@
 # Codex Pet League
 
-Local product prototype for the Codex App exclusive pet league.
+Public local/self-host preview for the Codex App and Codex CLI-first pet league.
 
-## Run
+## Release Model
+
+This repository is intended to be public before the official shared League server is operated.
+
+- Local run: clone this repo, run the League server on your own machine, and connect the CLI/MCP bridge to it.
+- Self-host run: deploy your own server and point `CODEX_PET_LEAGUE_URL` at that HTTPS endpoint.
+- Official shared League server: planned later. Do not treat this repo's local development auth, state files, or secrets as production service credentials.
+
+## Local Run
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the local League server:
 
 ```bash
 CODEX_PET_AUTH_DEV_CODE=true npm start
@@ -18,6 +34,13 @@ Then open:
 
 ```text
 http://localhost:4317
+```
+
+In another terminal, check the CLI bridge:
+
+```bash
+npm run cli -- doctor
+npm run cli -- home
 ```
 
 ## What Works
@@ -105,8 +128,8 @@ Set `CODEX_PET_STORAGE_DRIVER=postgres` with `CODEX_PET_POSTGRES_URL` to use the
 
 The CLI is the local bridge that Codex App slash commands or natural-language tool triggers can call.
 
-```bash
-npm run cli -- setup --path C:\Users\you\.codex\pets\pebble --yes --primary Forge --secondary Trace
+```powershell
+npm run cli -- setup --path <hatch-pet-folder> --yes --primary Forge --secondary Trace
 npm run cli -- doctor
 npm run cli -- home
 npm run cli -- next
@@ -119,8 +142,8 @@ npm run cli -- auth providers
 npm run cli -- bridge status
 npm run cli -- league
 npm run cli -- pet discover-hatch
-npm run cli -- pet inspect-hatch --path C:\Users\you\.codex\pets\pebble
-npm run cli -- pet import-hatch --path C:\Users\you\.codex\pets\pebble --primary Forge --secondary Trace
+npm run cli -- pet inspect-hatch --path <hatch-pet-folder>
+npm run cli -- pet import-hatch --path <hatch-pet-folder> --primary Forge --secondary Trace
 npm run cli -- pet activate --pet pet_id
 npm run cli -- pet create --name Pebble --primary Forge --secondary Trace
 npm run cli -- pet profile
@@ -171,7 +194,7 @@ Environment:
 
 ```bash
 CODEX_PET_LEAGUE_URL=http://localhost:4317
-CODEX_PET_STATE_PATH=C:\path\to\league-state.json
+CODEX_PET_STATE_PATH=./data/league-state.json
 CODEX_PET_SESSION_TOKEN=league_session_token
 CODEX_PET_ACCOUNT_ID=acct_demo
 CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
@@ -194,14 +217,14 @@ CODEX_PET_BRIDGE_SECRET=shared_bridge_hmac_secret
 CODEX_PET_BRIDGE_ATTESTATION_SECRET=shared_codex_app_attestation_secret
 CODEX_PET_OPS_JOB_INTERVAL_MS=60000
 CODEX_PET_STORAGE_DRIVER=json
-CODEX_PET_SQLITE_PATH=C:\path\to\league-state.sqlite
+CODEX_PET_SQLITE_PATH=./data/league-state.sqlite
 CODEX_PET_SQLITE_SNAPSHOT_RETENTION=500
 CODEX_PET_POSTGRES_URL=
 CODEX_PET_POSTGRES_SNAPSHOT_RETENTION=500
 CODEX_PET_POSTGRES_SSL=false
 CODEX_PET_POSTGRES_SSL_REJECT_UNAUTHORIZED=true
 CODEX_PET_ASSET_STORAGE=local_fs
-CODEX_PET_ASSET_ROOT=C:\path\to\asset-root
+CODEX_PET_ASSET_ROOT=./data/assets
 CODEX_PET_ASSET_CDN_BASE_URL=
 CODEX_PET_S3_ENDPOINT=
 CODEX_PET_S3_BUCKET=
@@ -273,10 +296,11 @@ Run directly:
 npm run mcp
 ```
 
-Example Codex CLI registration:
+Example Codex CLI registration from the repo root:
 
 ```powershell
-codex mcp add codex-pet-league -- node C:\Users\Chul\Desktop\codexpet\src\mcp\codex-pet-mcp.cjs
+$repo = (Get-Location).Path
+codex mcp add codex-pet-league -- node "$repo\src\mcp\codex-pet-mcp.cjs"
 ```
 
 The League server must be running at `CODEX_PET_LEAGUE_URL` before tool calls can create pets, submit reports, or resolve battles.
@@ -290,4 +314,21 @@ This repo includes a local Codex App plugin scaffold at `plugins/codex-pet-leagu
 - Skill guide: `plugins/codex-pet-league/skills/codex-pet-league/SKILL.md`
 - Marketplace entry: `.agents/plugins/marketplace.json`
 
-The plugin points MCP to `src/mcp/codex-pet-mcp.cjs` and expects the League server at `http://localhost:4317`.
+The plugin MCP config points to `./scripts/codex-pet-mcp.cjs`, a small launcher that starts the repo's `src/mcp/codex-pet-mcp.cjs` bridge. By default it expects the League server at `http://localhost:4317`; set `CODEX_PET_LEAGUE_URL` to a self-hosted HTTPS server when you are not using the local server.
+
+Plugin scaffold flow for a cloned repo:
+
+```powershell
+git clone https://github.com/BMinChul/codex-pet-league.git
+cd codex-pet-league
+npm install
+$env:CODEX_PET_AUTH_DEV_CODE="true"; npm start
+```
+
+Then register MCP directly with Codex CLI from another terminal, or use the repo-local plugin scaffold through `.agents/plugins/marketplace.json` in environments that load local Codex plugins.
+
+## Privacy And Terms
+
+This public preview is local/self-host first. When you run it locally, state stays in your configured local or self-hosted storage. Do not commit `.env`, `data/`, runtime logs, uploaded pet assets, database files, service credentials, or session tokens.
+
+An official shared League server will need separate production privacy, terms, moderation, account, retention, and operations policies before it is opened to users.

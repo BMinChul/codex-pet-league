@@ -8,7 +8,8 @@ or any OpenAI token file. It only reports sanitized process environment and MCP 
 Run:
 
 ```powershell
-codex mcp add codex-identity-probe -- node C:\Users\Chul\Desktop\codexpet\identity-probe\mcp-identity-probe.cjs
+$repo = (Get-Location).Path
+codex mcp add codex-identity-probe -- node "$repo\identity-probe\mcp-identity-probe.cjs"
 codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "Use the codex-identity-probe MCP tool identity_probe once and summarize whether it includes a signed OpenAI/ChatGPT user identity claim."
 ```
 

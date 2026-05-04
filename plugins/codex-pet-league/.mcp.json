@@ -3,7 +3,7 @@
     "codex-pet-league": {
       "command": "node",
       "args": [
-        "C:/Users/Chul/Desktop/codexpet/src/mcp/codex-pet-mcp.cjs"
+        "./scripts/codex-pet-mcp.cjs"
       ],
       "env": {
         "CODEX_PET_LEAGUE_URL": "http://localhost:4317"

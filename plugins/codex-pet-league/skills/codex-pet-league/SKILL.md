@@ -44,12 +44,12 @@ Use this skill when the user asks about their Codex pet, official `hatch-pet` pa
 ```powershell
 npm run cli -- doctor
 npm run cli -- home
-npm run cli -- setup --path C:\Users\you\.codex\pets\pebble --yes --primary Forge --secondary Trace
+npm run cli -- setup --path <hatch-pet-folder> --yes --primary Forge --secondary Trace
 npm run cli -- next
 npm run cli -- daily
 npm run cli -- pet discover-hatch
-npm run cli -- pet inspect-hatch --path C:\Users\you\.codex\pets\pebble
-npm run cli -- pet import-hatch --path C:\Users\you\.codex\pets\pebble --primary Forge --secondary Trace
+npm run cli -- pet inspect-hatch --path <hatch-pet-folder>
+npm run cli -- pet import-hatch --path <hatch-pet-folder> --primary Forge --secondary Trace
 npm run cli -- pet activate --pet pet_id
 npm run cli -- pet create --name Pebble --primary Forge --secondary Trace --atlas C:\path\spritesheet.webp
 npm run cli -- report draft --implementation --verification --tests-run 3

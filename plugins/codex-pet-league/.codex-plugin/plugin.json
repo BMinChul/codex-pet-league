@@ -3,13 +3,12 @@
   "version": "0.1.0",
   "description": "Codex App exclusive pet growth, real-time turn battles, and League account tools.",
   "author": {
-    "name": "Codex Pet League",
-    "email": "league-admin@example.invalid",
-    "url": "https://github.com/local/codex-pet-league"
+    "name": "BMinChul",
+    "url": "https://github.com/BMinChul/codex-pet-league"
   },
-  "homepage": "https://github.com/local/codex-pet-league",
-  "repository": "https://github.com/local/codex-pet-league",
-  "license": "UNLICENSED",
+  "homepage": "https://github.com/BMinChul/codex-pet-league",
+  "repository": "https://github.com/BMinChul/codex-pet-league",
+  "license": "MIT",
   "keywords": [
     "codex",
     "pet",
@@ -30,9 +29,9 @@
       "MCP",
       "Write"
     ],
-    "websiteURL": "https://github.com/local/codex-pet-league",
-    "privacyPolicyURL": "https://github.com/local/codex-pet-league",
-    "termsOfServiceURL": "https://github.com/local/codex-pet-league",
+    "websiteURL": "https://github.com/BMinChul/codex-pet-league",
+    "privacyPolicyURL": "https://github.com/BMinChul/codex-pet-league#privacy-and-terms",
+    "termsOfServiceURL": "https://github.com/BMinChul/codex-pet-league#privacy-and-terms",
     "defaultPrompt": [
       "처음 시작 세팅해줘",
       "내 펫 상태와 오늘 남은 XP 보여줘",
