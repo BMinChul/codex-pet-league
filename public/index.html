@@ -47,29 +47,38 @@
         <section class="view is-active" data-view="dashboard" id="dashboard">
           <section class="public-landing" aria-labelledby="publicLandingTitle">
             <article class="public-copy">
-              <p class="section-kicker">Codex App + CLI Pet League</p>
-              <h1 id="publicLandingTitle">Codex Pet League</h1>
-              <h2>Ranked battles for Codex hatch-pets.</h2>
-              <p>
-                Bring a pet made with OpenAI's official hatch-pet skill into a server-authoritative League for growth,
-                matchmaking, battles, replays, and public ranks.
+              <p class="section-kicker">Official shared alpha</p>
+              <h1 id="publicLandingTitle">Ranked battles for Codex hatch-pets.</h1>
+              <p class="public-lede">
+                Hatch a companion in Codex, import it through CLI or MCP, then enter a server-authoritative League
+                where battles, growth, LP, and replays cannot be faked locally.
               </p>
               <div class="public-actions">
-                <button class="primary-button" id="publicSignInButton" type="button">Sign In</button>
-                <a class="secondary-button" href="https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md">Setup Guide</a>
-                <button class="secondary-button" data-tab-jump="leaderboard" type="button">View Leaderboard</button>
+                <button class="primary-button" id="publicSignInButton" type="button">Enter League</button>
+                <a class="secondary-button" href="https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md">Install CLI/MCP</a>
+                <button class="secondary-button" data-tab-jump="leaderboard" type="button">See Ladder</button>
               </div>
               <div class="public-steps" aria-label="League setup overview">
-                <div><strong>1. Hatch</strong><span>Create a pet in Codex with the official hatch-pet skill.</span></div>
-                <div><strong>2. Import</strong><span>Register the local package through the CLI or MCP bridge.</span></div>
-                <div><strong>3. Battle</strong><span>Queue into the shared League and climb ranked tiers.</span></div>
+                <div><strong>Hatch in Codex</strong><span>Use the official hatch-pet skill.</span></div>
+                <div><strong>Import once</strong><span>Your first active League pet is permanent.</span></div>
+                <div><strong>Battle fairly</strong><span>The server resolves ranked state.</span></div>
               </div>
             </article>
-            <aside class="public-preview" aria-label="Official pet preview">
-              <img src="/pet-placeholder.svg" alt="Codex pet preview" />
-              <div>
-                <strong>Official League Pet</strong>
-                <span>One permanent active pet per account. Ranked state is owned by the server.</span>
+            <aside class="public-preview" aria-label="League arena preview">
+              <div class="arena-ticket">
+                <div class="ticket-row">
+                  <span>Codex App</span>
+                  <b>League Server</b>
+                </div>
+                <div class="public-pet-stage">
+                  <img src="/pet-placeholder.svg" alt="Codex pet preview" />
+                  <strong>VS</strong>
+                  <img src="/pet-placeholder.svg" alt="Opponent pet preview" />
+                </div>
+                <div class="ticket-row">
+                  <span>30s turns</span>
+                  <b>LP ranked</b>
+                </div>
               </div>
             </aside>
           </section>
@@ -90,20 +99,20 @@
           <section class="client-grid">
             <article class="season-console panel">
               <div class="console-topline">
+                <span>League Lobby</span>
                 <span>Season 01</span>
-                <span>Ranked League</span>
                 <span>Server Resolved</span>
               </div>
-              <h2 class="player-only">Ready for your next match</h2>
-              <h2 class="onboarding-only">Bring your Codex-born pet into League</h2>
+              <h2 class="player-only">Choose your next move.</h2>
+              <h2 class="onboarding-only">Lock your League pet.</h2>
               <p>
-                <span class="player-only">Queue for a battle, submit today's Training Report, or check your place on the ladder.</span>
-                <span class="onboarding-only">Import the official hatch-pet package from your local Codex setup, then enter the shared League.</span>
+                <span class="player-only">Queue for battle, turn Codex work into growth, or check the ranked ladder.</span>
+                <span class="onboarding-only">Import the official hatch-pet package from your local Codex setup before queueing.</span>
               </p>
               <div class="season-action-grid">
                 <button class="primary-button player-only" data-tab-jump="battles">Find Match</button>
-                <button class="secondary-button player-only" data-tab-jump="training">Training Report</button>
-                <button class="secondary-button player-only" data-tab-jump="leaderboard">Ranked Ladder</button>
+                <button class="secondary-button player-only" data-tab-jump="training">Train</button>
+                <button class="secondary-button player-only" data-tab-jump="leaderboard">Ladder</button>
                 <button class="primary-button onboarding-only" data-tab-jump="import">Import Official Pet</button>
                 <button class="secondary-button onboarding-only" data-tab-jump="training">See Growth Rules</button>
                 <button class="secondary-button onboarding-only" data-tab-jump="leaderboard">Preview Ladder</button>
