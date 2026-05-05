@@ -212,15 +212,15 @@ npm run cli -- invite accept --code ABC123
 Once MCP is registered and the session token is available to it, these natural-language prompts should map to League tools:
 
 ```text
-리그 상태 점검해줘
-내 펫 상태와 오늘 남은 XP 보여줘
-내 hatch-pet 펫 찾아줘
-이 hatch-pet 파일 검증해줘
-내 hatch-pet 펫 서버에 올려줘
-처음 선택한 펫을 공식으로 확정할래
-훈련 리포트 초안 만들어줘
-랭크 랜덤매칭 잡아줘
-지금 배틀에서 뭐해야돼
+Check League status.
+Show my pet status and today's remaining XP.
+Find my hatch-pet packages.
+Inspect this hatch-pet package.
+Import my hatch-pet to the League server.
+Confirm my first official League pet.
+Draft a Training Report.
+Start ranked random matchmaking.
+What should I do in this battle?
 ```
 
 ## Troubleshooting

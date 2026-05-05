@@ -14,6 +14,46 @@ User setup guide:
 docs/USER_SETUP.md
 ```
 
+## Quick Start
+
+Use the official shared alpha server:
+
+```bash
+git clone https://github.com/BMinChul/codex-pet-league.git
+cd codex-pet-league
+npm install
+export CODEX_PET_LEAGUE_URL=https://league.codexpetz.com
+npm run cli -- doctor
+```
+
+PowerShell:
+
+```powershell
+git clone https://github.com/BMinChul/codex-pet-league.git
+cd codex-pet-league
+npm install
+$env:CODEX_PET_LEAGUE_URL="https://league.codexpetz.com"
+npm run cli -- doctor
+```
+
+Sign in:
+
+```bash
+npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
+npm run cli -- auth verify --challenge challenge_id_from_previous_step --code EMAILCODE
+export CODEX_PET_SESSION_TOKEN=league_session_token_from_verify
+```
+
+Then import a real OpenAI `hatch-pet` package:
+
+```bash
+npm run cli -- pet discover-hatch
+npm run cli -- pet inspect-hatch --path <hatch-pet-folder>
+npm run cli -- setup --path <hatch-pet-folder> --yes --primary Forge --secondary Trace
+```
+
+Important: your first active official League pet is permanent for that League account. Do not lock a demo pet if you want to use a real pet later.
+
 ## Release Model
 
 This repository is public and the official shared alpha server is live.
@@ -243,22 +283,22 @@ npm run cli -- leaderboard
 Natural-language trigger mapping:
 
 ```text
-리그 상태 점검해줘 -> codexpet doctor
-내 펫 홈 보여줘 -> codexpet home
-다음에 뭐 해야돼 -> codexpet next
-오늘 남은 XP 보여줘 -> codexpet daily
-펫 훈련 리포트 만들어줘 -> codexpet report draft
-오늘 작업 pet XP로 제출해줘 -> codexpet report submit
-펫 XP 상태 보여줘 -> codexpet xp status
-내 hatch-pet 펫 찾아줘 -> codexpet pet discover-hatch
-이 hatch-pet 파일 검증해줘 -> codexpet pet inspect-hatch --path <hatch-pet-folder>
-처음 시작 세팅해줘 -> codexpet setup --path <hatch-pet-folder> --yes
-내 hatch-pet 펫 서버에 올려줘 -> codexpet pet import-hatch --path <hatch-pet-folder>
-처음 선택한 펫을 공식으로 확정할래 -> codexpet pet activate --pet <pet-id>
-내 펫 서버에 올려줘 -> codexpet pet create --atlas <path.png|path.webp>
-지금 배틀 액션 뭐 가능해 -> codexpet battle actions --battle <id>
-터미널에서 배틀판 보여줘 -> codexpet battle watch --battle <id>
-추천 액션으로 한 턴 해줘 -> codexpet battle play --battle <id> --auto
+Check League status -> codexpet doctor
+Show my pet home -> codexpet home
+What should I do next? -> codexpet next
+Show today's remaining XP -> codexpet daily
+Draft a pet Training Report -> codexpet report draft
+Submit today's work for pet XP -> codexpet report submit
+Show pet XP status -> codexpet xp status
+Find my hatch-pet packages -> codexpet pet discover-hatch
+Inspect this hatch-pet package -> codexpet pet inspect-hatch --path <hatch-pet-folder>
+Set up my first League pet -> codexpet setup --path <hatch-pet-folder> --yes
+Import my hatch-pet to the server -> codexpet pet import-hatch --path <hatch-pet-folder>
+Confirm my first official pet -> codexpet pet activate --pet <pet-id>
+Upload my pet to the server -> codexpet pet create --atlas <path.png|path.webp>
+Show available battle actions -> codexpet battle actions --battle <id>
+Show the battle board in terminal -> codexpet battle watch --battle <id>
+Play one recommended action -> codexpet battle play --battle <id> --auto
 ```
 
 Environment:

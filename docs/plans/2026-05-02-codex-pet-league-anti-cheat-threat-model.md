@@ -130,7 +130,7 @@ Server never uses client-provided asset hashes as authority. Client hashes are h
 
 Training Report triggers:
 
-- Natural language in Codex App: "펫 훈련 리포트 만들어줘", "오늘 작업 pet XP로 제출해줘", "펫 XP 상태 보여줘".
+- Natural language in Codex App: "Draft a pet Training Report", "Submit today's work for pet XP", "Show pet XP status".
 - Slash commands: `/pet train`, `/pet report`, `/pet submit`, `/pet xp`, `/pet status`.
 - CLI commands: `codexpet report draft`, `codexpet report submit`, `codexpet xp status`.
 - Optional post-task prompt after meaningful Codex work.

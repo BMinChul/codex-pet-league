@@ -70,17 +70,17 @@ npm run cli -- battle action --battle battle_room_id --kind strike
 
 ## User-Facing Trigger Phrases
 
-- "내 펫 상태 보여줘" -> `league_home`
-- "리그 상태 점검해줘" -> `league_doctor` or `codexpet doctor`
-- "처음 시작 세팅해줘" -> `league_setup`
-- "내 hatch-pet 펫 찾아줘" -> `pet_discover_hatch`
-- "이 hatch-pet 파일 검증해줘" -> `codexpet pet inspect-hatch --path <folder>` or `pet_discover_hatch` if no path is known
-- "내 hatch-pet 펫 서버에 올려줘" -> `pet_import_hatch`
-- "처음 선택한 펫을 공식으로 확정할래" -> `pet_activate`
-- "오늘 XP 얼마나 남았어" -> `pet_status` or `daily`
-- "훈련 리포트 만들어줘" -> `training_report_draft`
-- "오늘 작업 제출해줘" -> `training_report_submit`
-- "랭크 랜덤매칭 잡아줘" -> `matchmaking_join` with `ranked`
-- "친구초대 코드 만들어줘" -> `friend_invite_create`
-- "지금 배틀에서 뭐해야돼" -> `battle_action_options`, then recommend one action
-- "지금 Codex App에서 한 턴 진행해줘" -> `league_play` with `submit_recommended_action`
+- "Show my pet status" -> `league_home`
+- "Check League status" -> `league_doctor` or `codexpet doctor`
+- "Set up my first League pet" -> `league_setup`
+- "Find my hatch-pet packages" -> `pet_discover_hatch`
+- "Inspect this hatch-pet package" -> `codexpet pet inspect-hatch --path <folder>` or `pet_discover_hatch` if no path is known
+- "Import my hatch-pet to the League server" -> `pet_import_hatch`
+- "Confirm my first official League pet" -> `pet_activate`
+- "Show today's remaining XP" -> `pet_status` or `daily`
+- "Draft a Training Report" -> `training_report_draft`
+- "Submit today's work" -> `training_report_submit`
+- "Start ranked random matchmaking" -> `matchmaking_join` with `ranked`
+- "Create a Friend Duel invite code" -> `friend_invite_create`
+- "What should I do in this battle?" -> `battle_action_options`, then recommend one action
+- "Play one turn from Codex App" -> `league_play` with `submit_recommended_action`

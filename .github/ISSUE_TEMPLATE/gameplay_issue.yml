@@ -1,0 +1,74 @@
+name: Gameplay issue
+description: Report public gameplay, matchmaking, Training Report, pet import, or battle behavior.
+title: "[Gameplay]: "
+labels:
+  - gameplay
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for public gameplay issues. Account-specific, moderation, privacy, or security-sensitive details should be sent to support@codexpetz.com.
+
+        Do not include session tokens, auth codes, API keys, private source code, full Codex transcripts, or personal data.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Hatch-pet import
+        - Active pet selection
+        - Training Report
+        - XP or daily caps
+        - Matchmaking
+        - Battle actions
+        - Ranked LP
+        - Replay or profile
+        - Leaderboard
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      placeholder: What gameplay behavior looked wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: public_ids
+    attributes:
+      label: Public ids, if needed
+      description: Include pet, battle, replay, or issue-safe ids only when useful. Do not include session tokens.
+      placeholder: pet_..., battle_..., replay_...
+  - type: dropdown
+    id: server
+    attributes:
+      label: Server
+      options:
+        - Official shared alpha
+        - Local development server
+        - Self-hosted server
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

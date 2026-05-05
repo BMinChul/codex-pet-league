@@ -554,7 +554,7 @@ async function startAuthChallenge() {
 }
 
 async function verifyAuthChallenge() {
-  if (!state.authChallenge?.challenge_id) throw new Error("Create an auth challenge first.");
+  if (!state.authChallenge?.challenge_id) throw new Error("Click Send Code first, then enter the email code and click Verify Code.");
   const body = {
     challenge_id: state.authChallenge.challenge_id,
     code: els.authCodeInput?.value,

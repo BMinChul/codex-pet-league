@@ -726,6 +726,13 @@ select:disabled {
   color: var(--muted);
 }
 
+.step-hint {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
 table {
   width: 100%;
   min-width: 560px;

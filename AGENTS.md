@@ -546,7 +546,7 @@ Training Reports convert Codex work signals into server-scored growth.
 
 Triggers:
 
-- Natural language in Codex App, such as "펫 훈련 리포트 만들어줘", "오늘 작업 pet XP로 제출해줘", and "펫 XP 상태 보여줘".
+- Natural language in Codex App, such as "Draft a pet Training Report", "Submit today's work for pet XP", and "Show pet XP status".
 - CLI commands: `codexpet report draft`, `codexpet report submit`, `codexpet xp status`.
 - MCP tools: `training_report_draft`, `training_report_submit`, `pet_status`.
 

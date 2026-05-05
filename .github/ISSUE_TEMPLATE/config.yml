@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private account, moderation, privacy, or security report
+    url: mailto:support@codexpetz.com
+    about: Do not post private account details, moderation appeals, privacy requests, security-sensitive reports, session tokens, API keys, auth codes, private source code, or full Codex transcripts in public issues.
+  - name: Official shared alpha setup guide
+    url: https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md
+    about: Start here for installation, email-code login, MCP registration, hatch-pet import, and first battle steps.
+  - name: Live alpha status
+    url: https://league.codexpetz.com/status
+    about: Check whether the official shared alpha server is healthy.
