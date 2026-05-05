@@ -34,6 +34,7 @@ let silentRefreshQueued = false;
 const els = queryElements({
   appStatus: "#appStatus",
   authOpenButton: "#authOpenButton",
+  publicSignInButton: "#publicSignInButton",
   authCloseButton: "#authCloseButton",
   authModal: "#authModal",
   authIdentifierInput: "#authIdentifierInput",
@@ -117,7 +118,7 @@ async function boot() {
   if (!signedIn) {
     state.ready = false;
     setBusy(false);
-    pushNotice("Sign in to use League actions.", "error");
+    pushNotice("Sign in to enter the League.", "info");
     renderApp();
     return;
   }
@@ -215,6 +216,7 @@ function bindEvents() {
     });
   }
   els.authOpenButton?.addEventListener("click", openAuthModal);
+  els.publicSignInButton?.addEventListener("click", openAuthModal);
   els.authCloseButton?.addEventListener("click", closeAuthModal);
   els.authModal?.addEventListener("click", (event) => {
     if (event.target === els.authModal) closeAuthModal();
@@ -368,7 +370,14 @@ function renderChrome() {
   const rankedStart = policy?.ranked?.lpWindows?.[0]?.lpWindow;
   const queue = state.league?.queue_summary;
   const queueText = queue ? ` · ${queue.waiting_total ?? 0} waiting` : "";
-  setText(els.leagueLabel, season ? `${season.name} · ranked ±${rankedStart ?? "?"} LP${queueText}` : "League status unavailable");
+  setText(
+    els.leagueLabel,
+    season
+      ? `${season.name} · ranked ±${rankedStart ?? "?"} LP${queueText}`
+      : isSignedIn()
+        ? "League status unavailable"
+        : "Official shared alpha",
+  );
 
   const latest = state.notices[0];
   if (els.appStatus) {
@@ -1808,12 +1817,12 @@ function formatCap(cap) {
 
 function formatDateTime(value) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "unknown" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "unknown" : date.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function formatTime(value) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "--:--:--" : date.toLocaleTimeString();
+  return Number.isNaN(date.getTime()) ? "--:--:--" : date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
 function sleep(ms) {

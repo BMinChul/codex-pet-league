@@ -45,6 +45,35 @@
 
       <section class="workspace">
         <section class="view is-active" data-view="dashboard" id="dashboard">
+          <section class="public-landing" aria-labelledby="publicLandingTitle">
+            <article class="public-copy">
+              <p class="section-kicker">Codex App + CLI Pet League</p>
+              <h1 id="publicLandingTitle">Codex Pet League</h1>
+              <h2>Ranked battles for Codex hatch-pets.</h2>
+              <p>
+                Bring a pet made with OpenAI's official hatch-pet skill into a server-authoritative League for growth,
+                matchmaking, battles, replays, and public ranks.
+              </p>
+              <div class="public-actions">
+                <button class="primary-button" id="publicSignInButton" type="button">Sign In</button>
+                <a class="secondary-button" href="https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md">Setup Guide</a>
+                <button class="secondary-button" data-tab-jump="leaderboard" type="button">View Leaderboard</button>
+              </div>
+              <div class="public-steps" aria-label="League setup overview">
+                <div><strong>1. Hatch</strong><span>Create a pet in Codex with the official hatch-pet skill.</span></div>
+                <div><strong>2. Import</strong><span>Register the local package through the CLI or MCP bridge.</span></div>
+                <div><strong>3. Battle</strong><span>Queue into the shared League and climb ranked tiers.</span></div>
+              </div>
+            </article>
+            <aside class="public-preview" aria-label="Official pet preview">
+              <img src="/pet-placeholder.svg" alt="Codex pet preview" />
+              <div>
+                <strong>Official League Pet</strong>
+                <span>One permanent active pet per account. Ranked state is owned by the server.</span>
+              </div>
+            </aside>
+          </section>
+
           <div class="page-heading">
             <div>
               <p class="section-kicker">Official Alpha</p>
