@@ -18,14 +18,14 @@
         </a>
 
         <nav class="main-tabs" aria-label="League sections">
-          <button class="tab-button is-active" data-tab="dashboard">Dashboard</button>
-          <button class="tab-button" data-tab="import">Import Pet</button>
+          <button class="tab-button is-active" data-tab="dashboard">Home</button>
+          <button class="tab-button onboarding-tab" data-tab="import">Get Started</button>
+          <button class="tab-button" data-tab="battles">Battle</button>
           <button class="tab-button" data-tab="training">Training</button>
-          <button class="tab-button" data-tab="battles">Battles</button>
-          <button class="tab-button" data-tab="replays">Replays</button>
           <button class="tab-button" data-tab="leaderboard">Leaderboard</button>
+          <button class="tab-button" data-tab="replays">Replays</button>
           <button class="tab-button" data-tab="profile">Profile</button>
-          <button class="tab-button" data-tab="ops">Ops</button>
+          <button class="tab-button admin-tab" data-tab="ops">Admin</button>
         </nav>
 
         <div class="header-actions">
@@ -62,20 +62,24 @@
             <article class="season-console panel">
               <div class="console-topline">
                 <span>Season 01</span>
-                <span>Official Shared Alpha</span>
-                <span>Server Authority</span>
+                <span>Ranked League</span>
+                <span>Server Resolved</span>
               </div>
-              <h2>Bring your Codex-born pet into League</h2>
+              <h2 class="player-only">Ready for your next match</h2>
+              <h2 class="onboarding-only">Bring your Codex-born pet into League</h2>
               <p>
-                Import through CLI or MCP, then use the web client for battles, ranks, replays, public profiles, and
-                operations. Browser-only pet creation stays out of the official flow.
+                <span class="player-only">Queue for a battle, submit today's Training Report, or check your place on the ladder.</span>
+                <span class="onboarding-only">Import the official hatch-pet package from your local Codex setup, then enter the shared League.</span>
               </p>
               <div class="season-action-grid">
-                <button class="primary-button" data-tab-jump="import">Import Official Pet</button>
-                <button class="secondary-button" data-tab-jump="battles">Open Battle Room</button>
-                <button class="secondary-button" data-tab-jump="leaderboard">View Ranked Ladder</button>
+                <button class="primary-button player-only" data-tab-jump="battles">Find Match</button>
+                <button class="secondary-button player-only" data-tab-jump="training">Training Report</button>
+                <button class="secondary-button player-only" data-tab-jump="leaderboard">Ranked Ladder</button>
+                <button class="primary-button onboarding-only" data-tab-jump="import">Import Official Pet</button>
+                <button class="secondary-button onboarding-only" data-tab-jump="training">See Growth Rules</button>
+                <button class="secondary-button onboarding-only" data-tab-jump="leaderboard">Preview Ladder</button>
               </div>
-              <div class="command-card terminal-card">
+              <div class="command-card terminal-card onboarding-only">
                 <span>Codex CLI setup</span>
                 <code>npm run cli -- doctor</code>
                 <code>npm run cli -- pet discover-hatch</code>
@@ -100,16 +104,18 @@
               <h2>League Pulse</h2>
               <div class="metric-grid rail-metrics" id="leagueSnapshot"></div>
               <div class="quick-actions">
+                <button class="secondary-button player-only" data-tab-jump="battles">Play Now</button>
                 <button class="secondary-button" data-tab-jump="training">Training Report</button>
                 <button class="secondary-button" data-tab-jump="profile">Skill Names</button>
                 <button class="secondary-button" data-tab-jump="replays">Replays</button>
-                <button class="secondary-button" data-tab-jump="ops">Ops Log</button>
+                <button class="secondary-button onboarding-only" data-tab-jump="import">Import Pet</button>
+                <button class="secondary-button admin-only" data-tab-jump="ops">Admin Console</button>
               </div>
             </aside>
           </section>
 
           <section class="dashboard-grid">
-            <article class="panel setup-panel">
+            <article class="panel setup-panel onboarding-only">
               <div class="panel-header">
                 <h2>Setup Track</h2>
                 <span class="micro-badge">CLI/MCP first</span>
@@ -254,10 +260,10 @@
                 </label>
               </div>
               <div class="battle-primary-actions">
-                <button id="joinQueueButton" class="primary-button">Random Match</button>
-                <button id="startBattleButton" class="secondary-button">Training Bot</button>
+                <button id="joinQueueButton" class="primary-button">Find Match</button>
+                <button id="startBattleButton" class="secondary-button">Practice Bot</button>
                 <button id="queueStatusButton" class="secondary-button">Queue Status</button>
-                <button id="cancelQueueButton" class="secondary-button">Cancel Queue</button>
+                <button id="cancelQueueButton" class="secondary-button">Cancel</button>
               </div>
               <div class="invite-row">
                 <button id="createInviteButton" class="secondary-button">Create Invite</button>

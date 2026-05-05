@@ -393,6 +393,14 @@ body[data-has-pet="false"] .requires-pet {
   display: none;
 }
 
+body[data-has-pet="true"] .onboarding-only,
+body[data-has-pet="true"] .onboarding-tab,
+body[data-has-pet="false"] .player-only,
+body[data-admin="false"] .admin-only,
+body[data-admin="false"] .admin-tab {
+  display: none;
+}
+
 .dev-tools summary {
   cursor: pointer;
   color: #eef4f0;
@@ -2182,6 +2190,15 @@ body:has(.global-header) {
     #111417;
 }
 
+body[data-has-pet="true"] .season-console {
+  min-height: 438px;
+  border-color: rgba(16, 224, 160, 0.22);
+  background:
+    linear-gradient(135deg, rgba(16, 224, 160, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(98, 168, 255, 0.08), transparent 62%),
+    #111417;
+}
+
 .season-console::after {
   content: "";
   position: absolute;
@@ -2220,6 +2237,11 @@ body:has(.global-header) {
   line-height: 1.01;
 }
 
+body[data-has-pet="true"] .season-console h2 {
+  max-width: 640px;
+  font-size: 54px;
+}
+
 .season-console p {
   max-width: 760px;
   margin-top: 18px;
@@ -2232,6 +2254,10 @@ body:has(.global-header) {
   grid-template-columns: 1.15fr 1fr 1fr;
   gap: 10px;
   margin: 28px 0 10px;
+}
+
+body[data-has-pet="true"] .season-action-grid {
+  margin-top: 42px;
 }
 
 .terminal-card {
@@ -2279,11 +2305,19 @@ body:has(.global-header) {
     #0c1113;
 }
 
+body[data-has-pet="true"] .pet-dock {
+  min-height: 386px;
+}
+
 .pet-visual {
   min-height: 260px;
   background:
     linear-gradient(135deg, rgba(98, 168, 255, 0.1), transparent 48%),
     rgba(255, 255, 255, 0.045);
+}
+
+body[data-has-pet="true"] .pet-visual {
+  min-height: 220px;
 }
 
 .pet-visual img {
@@ -2351,10 +2385,19 @@ body:has(.global-header) {
   margin-top: 14px;
 }
 
+body[data-has-pet="true"] .dashboard-grid {
+  grid-template-columns: 0.85fr 1.15fr;
+}
+
 .setup-panel,
 .xp-panel,
 .live-feed-panel {
   min-height: 310px;
+}
+
+body[data-has-pet="true"] .xp-panel,
+body[data-has-pet="true"] .live-feed-panel {
+  min-height: 300px;
 }
 
 .check-list div {
@@ -2413,6 +2456,13 @@ body:has(.global-header) {
 
 .quick-actions {
   grid-template-columns: 1fr;
+}
+
+body[data-has-pet="true"] .quick-actions .player-only:first-child {
+  min-height: 56px;
+  border-color: rgba(16, 224, 160, 0.52);
+  background: linear-gradient(180deg, rgba(16, 224, 160, 0.22), rgba(16, 224, 160, 0.1));
+  color: #cffff1;
 }
 
 .dashboard-feed {
@@ -2481,6 +2531,10 @@ code {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.battle-mode-grid label:nth-child(2) {
+  display: none;
 }
 
 .battle-primary-actions {
@@ -2568,6 +2622,17 @@ code {
   border-color: rgba(255, 255, 255, 0.11);
   background: #050607;
   color: #dffcf4;
+}
+
+.queue-console > .output,
+.battle-log-panel > .output {
+  max-height: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .leaderboard-panel {

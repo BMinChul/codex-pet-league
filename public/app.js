@@ -356,6 +356,7 @@ function renderApp() {
 function renderChrome() {
   document.body.dataset.signedIn = String(isSignedIn());
   document.body.dataset.hasPet = String(Boolean(activePet()));
+  document.body.dataset.admin = String(isAdmin());
 
   const accountName = state.session?.account?.displayName ?? "Sign in required";
   const verified = state.session?.account?.verified === false ? "not verified" : "verified";
@@ -660,7 +661,9 @@ function closeAuthModal() {
 }
 
 function activateTab(tab = "dashboard") {
-  const next = tab || "dashboard";
+  let next = tab || "dashboard";
+  if (next === "ops" && !isAdmin()) next = "dashboard";
+  if (next === "import" && activePet()) next = "dashboard";
   let activeButton = null;
   for (const button of els.tabButtons ?? []) {
     const isActive = button.dataset.tab === next;
