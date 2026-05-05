@@ -51,6 +51,7 @@ const els = queryElements({
   petImage: "#petImage",
   classPill: "#classPill",
   rankPill: "#rankPill",
+  dashboardRankBadge: "#dashboardRankBadge",
   statList: "#statList",
   profileSummary: "#profileSummary",
   skillAliasList: "#skillAliasList",
@@ -84,6 +85,7 @@ const els = queryElements({
   leaderboardTierFilter: "#leaderboardTierFilter",
   leaderboardClassFilter: "#leaderboardClassFilter",
   leaderboardBody: "#leaderboardBody",
+  dashboardEventFeed: "#dashboardEventFeed",
   eventLog: "#eventLog",
   adminRefreshButton: "#adminRefreshButton",
   adminRunOpsButton: "#adminRunOpsButton",
@@ -396,6 +398,7 @@ function renderActivePet() {
     setText(els.petSubtitle, "Import a local hatch-pet package through CLI or MCP.");
     setText(els.classPill, `Class ${EMPTY_LABEL}`);
     setText(els.rankPill, `Rank ${EMPTY_LABEL}`);
+    setText(els.dashboardRankBadge, "No pet locked");
     clear(els.statList);
     renderEmpty(els.statList, "No hatch-pet package has been imported for this League account.");
     setPetImage(null);
@@ -408,6 +411,7 @@ function renderActivePet() {
   setText(els.petSubtitle, `${elementLine(pet)} · Lv ${pet.level ?? 1} · ${pet.stats?.total ?? 0} stats`);
   setText(els.classPill, String(pet.battle_class ?? EMPTY_LABEL).toUpperCase());
   setText(els.rankPill, `${pet.rating?.label ?? EMPTY_LABEL} · ${pet.rating?.lp ?? 0} LP`);
+  setText(els.dashboardRankBadge, `${pet.rating?.label ?? EMPTY_LABEL} / ${String(pet.battle_class ?? EMPTY_LABEL).toUpperCase()}`);
   renderStats(pet);
   renderBattleSkills(pet);
 }
@@ -1237,18 +1241,25 @@ function fillLeaderboardFilters(rows) {
 
 function renderEvents(events) {
   clear(els.eventLog);
+  clear(els.dashboardEventFeed);
   const list = asArray(events);
   if (!list.length) {
     renderEmpty(els.eventLog, "No server events yet.");
+    renderEmpty(els.dashboardEventFeed, "No server events yet.");
     return;
   }
-  for (const event of list) {
-    const item = document.createElement("div");
-    item.className = "event-item";
-    appendText(item, "strong", formatTime(event.created_at));
-    appendText(item, "span", `${event.type ?? "event"} · ${safeJson(event.payload)}`);
-    els.eventLog?.append(item);
+  for (const [index, event] of list.entries()) {
+    els.eventLog?.append(eventItem(event));
+    if (index < 5) els.dashboardEventFeed?.append(eventItem(event, "dashboard-feed-item"));
   }
+}
+
+function eventItem(event, className = "event-item") {
+  const item = document.createElement("div");
+  item.className = className;
+  appendText(item, "strong", formatTime(event.created_at));
+  appendText(item, "span", `${event.type ?? "event"} · ${safeJson(event.payload)}`);
+  return item;
 }
 
 function renderAdminConsole() {

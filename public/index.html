@@ -58,69 +58,82 @@
             </div>
           </div>
 
-          <section class="hero-card">
-            <div class="hero-copy">
-              <p class="section-kicker">Start Here</p>
+          <section class="client-grid">
+            <article class="season-console panel">
+              <div class="console-topline">
+                <span>Season 01</span>
+                <span>Official Shared Alpha</span>
+                <span>Server Authority</span>
+              </div>
               <h2>Bring your Codex-born pet into League</h2>
               <p>
-                Import a local OpenAI hatch-pet package with CLI or MCP. The League server owns ranked state, XP,
-                battles, and replays.
+                Import through CLI or MCP, then use the web client for battles, ranks, replays, public profiles, and
+                operations. Browser-only pet creation stays out of the official flow.
               </p>
-              <div class="button-row hero-actions">
-                <button class="primary-button" data-tab-jump="import">Start Setup</button>
-                <a class="secondary-button" href="https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md">Read User Guide</a>
+              <div class="season-action-grid">
+                <button class="primary-button" data-tab-jump="import">Import Official Pet</button>
+                <button class="secondary-button" data-tab-jump="battles">Open Battle Room</button>
+                <button class="secondary-button" data-tab-jump="leaderboard">View Ranked Ladder</button>
               </div>
-              <div class="trust-strip">
-                <span>Server-authoritative</span>
-                <span>Permanent first pet</span>
-                <span>Local package import</span>
+              <div class="command-card terminal-card">
+                <span>Codex CLI setup</span>
+                <code>npm run cli -- doctor</code>
+                <code>npm run cli -- pet discover-hatch</code>
+                <code>npm run cli -- setup --path &lt;hatch-pet-folder&gt; --yes</code>
               </div>
-            </div>
-            <div class="pet-dock">
-              <div class="pet-visual">
-                <img id="petImage" src="/pet-placeholder.svg" alt="Active pet appearance" />
+            </article>
+
+            <article class="pet-loadout-card panel">
+              <div class="loadout-header">
+                <span>Active League Pet</span>
+                <b id="dashboardRankBadge">Rank pending</b>
               </div>
-              <div class="stat-list" id="statList"></div>
-            </div>
+              <div class="pet-dock">
+                <div class="pet-visual">
+                  <img id="petImage" src="/pet-placeholder.svg" alt="Active pet appearance" />
+                </div>
+                <div class="stat-list" id="statList"></div>
+              </div>
+            </article>
+
+            <aside class="panel league-rail">
+              <h2>League Pulse</h2>
+              <div class="metric-grid rail-metrics" id="leagueSnapshot"></div>
+              <div class="quick-actions">
+                <button class="secondary-button" data-tab-jump="training">Training Report</button>
+                <button class="secondary-button" data-tab-jump="profile">Skill Names</button>
+                <button class="secondary-button" data-tab-jump="replays">Replays</button>
+                <button class="secondary-button" data-tab-jump="ops">Ops Log</button>
+              </div>
+            </aside>
           </section>
 
           <section class="dashboard-grid">
-            <article class="panel">
-              <h2>Setup Progress</h2>
+            <article class="panel setup-panel">
+              <div class="panel-header">
+                <h2>Setup Track</h2>
+                <span class="micro-badge">CLI/MCP first</span>
+              </div>
               <div class="check-list">
-                <div><span></span><strong>Email verified</strong><em>Sign in from the top-right button</em></div>
-                <div><span></span><strong>CLI doctor</strong><em>Confirm the bridge can reach League</em></div>
-                <div><span></span><strong>hatch-pet package</strong><em>Discover the local package folder</em></div>
-                <div><span></span><strong>Official pet locked</strong><em>Permanent first active selection</em></div>
+                <div><span></span><strong>Email verified</strong><em>Sign in from the top-right modal.</em></div>
+                <div><span></span><strong>CLI doctor</strong><em>Confirm your local bridge reaches League.</em></div>
+                <div><span></span><strong>hatch-pet package</strong><em>Discover the local OpenAI pet package.</em></div>
+                <div><span></span><strong>Official pet locked</strong><em>Permanent first active selection.</em></div>
               </div>
             </article>
-            <article class="panel">
-              <h2>Today</h2>
+            <article class="panel xp-panel">
+              <div class="panel-header">
+                <h2>Daily Caps</h2>
+                <span class="micro-badge">Growth budget</span>
+              </div>
               <div class="mini-meters" id="dashboardXpStatus"></div>
             </article>
-            <article class="panel">
-              <h2>Quick Actions</h2>
-              <div class="quick-actions">
-                <button class="secondary-button" data-tab-jump="import">Find hatch-pet</button>
-                <button class="secondary-button" data-tab-jump="training">Draft Training Report</button>
-                <button class="secondary-button" data-tab-jump="battles">Join Ranked</button>
-                <button class="secondary-button" data-tab-jump="replays">Open Replays</button>
+            <article class="panel live-feed-panel">
+              <div class="panel-header">
+                <h2>Live Feed</h2>
+                <span class="micro-badge">Latest server events</span>
               </div>
-            </article>
-          </section>
-
-          <section class="bottom-grid">
-            <article class="panel">
-              <h2>Command Shortcuts</h2>
-              <div class="command-card">
-                <code>npm run cli -- doctor</code>
-                <code>npm run cli -- pet discover-hatch</code>
-                <code>npm run cli -- setup --path &lt;folder&gt; --yes</code>
-              </div>
-            </article>
-            <article class="panel">
-              <h2>League Snapshot</h2>
-              <div class="metric-grid" id="leagueSnapshot"></div>
+              <div id="dashboardEventFeed" class="dashboard-feed"></div>
             </article>
           </section>
         </section>
@@ -219,26 +232,30 @@
               <p>Server-authoritative simultaneous turns with ranked, casual, and friend duel modes.</p>
             </div>
           </div>
-          <section class="battle-layout requires-pet">
-            <article class="panel battle-controls">
-              <label>
-                Mode
-                <select id="battleMode" class="field">
-                  <option value="casual" selected>Casual</option>
-                  <option value="ranked">Ranked</option>
-                  <option value="friend">Friend Duel</option>
-                  <option value="training">Training Battle</option>
-                </select>
-              </label>
-              <label>
-                Opponent LP
-                <input id="opponentLp" class="field" type="number" value="1500" />
-              </label>
-              <div class="button-row">
-                <button id="startBattleButton" class="secondary-button">Training Bot</button>
-                <button id="joinQueueButton" class="primary-button">Random Match</button>
+          <section class="battle-room requires-pet">
+            <article class="panel queue-console">
+              <div class="panel-header">
+                <h2>Matchmaking</h2>
+                <span class="micro-badge">30s simultaneous turns</span>
               </div>
-              <div class="button-row stacked-row">
+              <div class="battle-mode-grid">
+                <label>
+                  Mode
+                  <select id="battleMode" class="field">
+                    <option value="casual" selected>Casual</option>
+                    <option value="ranked">Ranked</option>
+                    <option value="friend">Friend Duel</option>
+                    <option value="training">Training Battle</option>
+                  </select>
+                </label>
+                <label>
+                  Opponent LP
+                  <input id="opponentLp" class="field" type="number" value="1500" />
+                </label>
+              </div>
+              <div class="battle-primary-actions">
+                <button id="joinQueueButton" class="primary-button">Random Match</button>
+                <button id="startBattleButton" class="secondary-button">Training Bot</button>
                 <button id="queueStatusButton" class="secondary-button">Queue Status</button>
                 <button id="cancelQueueButton" class="secondary-button">Cancel Queue</button>
               </div>
@@ -250,19 +267,33 @@
               <div id="matchmakingCards" class="matchmaking-cards"></div>
               <pre id="matchmakingOutput" class="output compact-output">No matchmaking activity.</pre>
             </article>
-            <article class="panel battle-board">
-              <div id="battleState" class="battle-state" aria-live="polite"></div>
-              <div id="battleTimeline" class="timeline-list"></div>
-              <label>
-                Skill
-                <select id="battleSkillSelect" class="field"></select>
-              </label>
-              <div class="action-grid">
-                <button data-action="strike" class="secondary-button" title="Damage and gain 1 energy">Strike</button>
-                <button data-action="guard" class="secondary-button" title="Reduce damage and gain 1 energy">Guard</button>
-                <button data-action="focus" class="secondary-button" title="Gain 2 energy and focus">Focus</button>
-                <button data-action="skill" class="primary-button" title="Use selected skill">Skill</button>
+
+            <article class="panel battle-board arena-board">
+              <div class="panel-header">
+                <h2>Battle Room</h2>
+                <span class="micro-badge">Server resolved</span>
               </div>
+              <div id="battleState" class="battle-state" aria-live="polite"></div>
+              <div class="command-strip">
+                <label>
+                  Skill
+                  <select id="battleSkillSelect" class="field"></select>
+                </label>
+                <div class="action-grid">
+                  <button data-action="strike" class="secondary-button" title="Damage and gain 1 energy">Strike</button>
+                  <button data-action="guard" class="secondary-button" title="Reduce damage and gain 1 energy">Guard</button>
+                  <button data-action="focus" class="secondary-button" title="Gain 2 energy and focus">Focus</button>
+                  <button data-action="skill" class="primary-button" title="Use selected skill">Skill</button>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel battle-log-panel">
+              <div class="panel-header">
+                <h2>Turn Log</h2>
+                <span class="micro-badge">Replay chain</span>
+              </div>
+              <div id="battleTimeline" class="timeline-list"></div>
               <pre id="battleOutput" class="output">No active battle.</pre>
             </article>
           </section>
