@@ -2,6 +2,8 @@ runs/
 test-results/
 playwright-report/
 .env
+.env.*
+!.env.example
 identity-probe/logs/
 identity-probe/codex-exec-output.txt
 data/*.json

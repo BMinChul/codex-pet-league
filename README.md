@@ -2,76 +2,19 @@
 
 Codex App and Codex CLI-first pet growth, Training Reports, and server-authoritative turn battles.
 
-Official shared alpha:
+Codex Pet League lets users bring pets made with OpenAI's official `hatch-pet` skill into a shared League server where progression, battles, XP, LP, assets, and replays are owned by the server instead of local files.
 
-```text
-https://league.codexpetz.com
-```
+## Links
 
-Latest alpha release:
-
-```text
-https://github.com/BMinChul/codex-pet-league/releases/tag/v0.1.0-alpha
-```
-
-User setup guide:
-
-```text
-docs/USER_SETUP.md
-```
+- Official shared alpha: https://league.codexpetz.com
+- Latest alpha release: https://github.com/BMinChul/codex-pet-league/releases/tag/v0.1.0-alpha
+- User setup guide: docs/USER_SETUP.md
+- Status: https://league.codexpetz.com/status
+- Support: https://league.codexpetz.com/support
 
 ## Quick Start
 
-Use the official shared alpha server:
-
-```bash
-git clone https://github.com/BMinChul/codex-pet-league.git
-cd codex-pet-league
-npm install
-export CODEX_PET_LEAGUE_URL=https://league.codexpetz.com
-npm run cli -- doctor
-```
-
-PowerShell:
-
-```powershell
-git clone https://github.com/BMinChul/codex-pet-league.git
-cd codex-pet-league
-npm install
-$env:CODEX_PET_LEAGUE_URL="https://league.codexpetz.com"
-npm run cli -- doctor
-```
-
-Sign in:
-
-```bash
-npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
-npm run cli -- auth verify --challenge challenge_id_from_previous_step --code EMAILCODE
-export CODEX_PET_SESSION_TOKEN=league_session_token_from_verify
-```
-
-Then import a real OpenAI `hatch-pet` package:
-
-```bash
-npm run cli -- pet discover-hatch
-npm run cli -- pet inspect-hatch --path <hatch-pet-folder>
-npm run cli -- setup --path <hatch-pet-folder> --yes --primary Forge --secondary Trace
-```
-
-Important: your first active official League pet is permanent for that League account. Do not lock a demo pet if you want to use a real pet later.
-
-## Release Model
-
-This repository is public and the official shared alpha server is live.
-
-- Official shared alpha: clone this repo for the CLI/MCP/plugin scaffold and point `CODEX_PET_LEAGUE_URL` at `https://league.codexpetz.com`.
-- Local run: run the League server on your own machine for development or offline testing.
-- Self-host run: deploy your own server and point `CODEX_PET_LEAGUE_URL` at that HTTPS endpoint.
-- Never commit production secrets, local state, service credentials, session tokens, uploaded assets, or personal machine paths.
-
-## Official Shared Alpha
-
-Install and connect to the official server:
+Clone the CLI, MCP bridge, and Codex App plugin scaffold:
 
 ```bash
 git clone https://github.com/BMinChul/codex-pet-league.git
@@ -95,29 +38,11 @@ Log in with an email code:
 
 ```bash
 npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
-npm run cli -- auth verify --challenge challenge_id --code EMAILCODE
+npm run cli -- auth verify --challenge challenge_id_from_previous_step --code EMAILCODE
+export CODEX_PET_SESSION_TOKEN=league_session_token_from_verify
 ```
 
-Then set the printed `session_token`:
-
-```bash
-export CODEX_PET_SESSION_TOKEN=league_session_token
-```
-
-PowerShell:
-
-```powershell
-$env:CODEX_PET_SESSION_TOKEN="league_session_token"
-```
-
-Register MCP from the repo root:
-
-```powershell
-$repo = (Get-Location).Path
-codex mcp add codex-pet-league -- node "$repo\src\mcp\codex-pet-mcp.cjs"
-```
-
-Create a pet with OpenAI's official `hatch-pet` skill first, then import it:
+Import a real OpenAI `hatch-pet` package:
 
 ```bash
 npm run cli -- pet discover-hatch
@@ -125,19 +50,50 @@ npm run cli -- pet inspect-hatch --path <hatch-pet-folder>
 npm run cli -- setup --path <hatch-pet-folder> --yes --primary Forge --secondary Trace
 ```
 
-More detail: `docs/USER_SETUP.md`.
+Important: your first active official League pet is permanent for that League account. Do not lock a demo pet if you want to use a real pet later.
 
-## Local Run
+## Codex App MCP
 
-Install dependencies:
+Register the MCP bridge from the repo root:
+
+```powershell
+$repo = (Get-Location).Path
+codex mcp add codex-pet-league -- node "$repo\src\mcp\codex-pet-mcp.cjs"
+```
+
+Common Codex prompts:
+
+```text
+Check League status.
+Find my hatch-pet packages.
+Import my hatch-pet to the League server.
+Show my pet status and today's remaining XP.
+Join ranked matchmaking.
+```
+
+## What Works
+
+- Official shared alpha server at `https://league.codexpetz.com`.
+- Email-code League login with server-owned sessions.
+- OpenAI `hatch-pet` package discovery, inspection, validation, upload, and permanent first-pet selection.
+- Training Reports for Pet XP and Style XP.
+- Server-authoritative turn battles, ranked matchmaking, LP settlement, replay logs, and public profiles.
+- Redis-backed realtime bus, request guards, and distributed locks on the official server.
+- Postgres-backed production state, R2-backed public pet assets, and OpenAI Moderation API triage.
+
+## Docs
+
+- Player setup: docs/USER_SETUP.md
+- Share/announcement copy: docs/SHARE.md
+- Deployment and self-hosting: docs/DEPLOYMENT.md
+- Operations: docs/OPERATIONS.md
+- Support inbox setup: docs/SUPPORT_INBOX.md
+- Alpha release notes: docs/releases/v0.1.0-alpha.md
+
+## Local Development
 
 ```bash
 npm install
-```
-
-Start the local League server:
-
-```bash
 CODEX_PET_AUTH_DEV_CODE=true npm start
 ```
 
@@ -147,316 +103,10 @@ PowerShell:
 $env:CODEX_PET_AUTH_DEV_CODE="true"; npm start
 ```
 
-Then open:
+Then open `http://localhost:4317`.
 
-```text
-http://localhost:4317
-```
+## Security
 
-In another terminal, check the CLI bridge:
+Do not commit `.env`, provider credentials, API keys, session tokens, local state, uploaded assets, database files, or personal machine paths.
 
-```bash
-npm run cli -- doctor
-npm run cli -- home
-```
-
-## What Works
-
-- League demo account session.
-- Public pet asset registration with server-side manifest validation.
-- Official `hatch-pet` package import: `pet.json` plus `spritesheet.webp` from `${CODEX_HOME:-~/.codex}/pets/<pet-id>`.
-- `hatch-pet` import provenance: manifest hash, spritesheet hash, package fingerprint, immutable server source fingerprint, and cross-account duplicate review signals.
-- Multiple local `hatch-pet` packages can be discovered, but each League account has one permanent active official pet selection. Switching is blocked after the first selection.
-- Optional Codex hatch spritesheet PNG/WebP upload, with server-side dimension, MIME, and hash validation.
-- Local filesystem atlas storage and public atlas URLs for visible active pets.
-- Official pet creation with primary and secondary elements.
-- Server-derived stats, level, Battle Class, skill loadout, and ranked rating.
-- Training Report draft and submit flow with risk scoring and review holds.
-- Daily XP cap display:
-  - Pet XP `700/day`
-  - Training XP `400/day`
-  - Battle XP `300/day`
-  - Friend Duel XP `75/day`
-  - Style XP `1,000/day`, `5,000/week`
-- Server-authoritative 30-second turn battle rooms with Strike, Guard, Focus, Skill, turn nonce freshness, replay hash chain, and AFK loss.
-- Random PvP matchmaking with same Battle Class and LP-window matching.
-- Active season tracking. Season 1 runs from `2026-05-03` to `2026-08-01`.
-- Ranked queue LP windows expand with wait time: `150 -> 300 -> 500 -> 800`.
-- Friend Duel invite codes that create PvP turn battle rooms.
-- Real-time browser updates over `/api/live` SSE.
-- Skill loadout updates with cosmetic skill aliases.
-- Public pet profiles and replay logs.
-- Cookie-backed auth challenge/session flow for passkey, magic link, and OAuth-shaped account binding.
-- Local audit checks for XP/LP/replay/risk/event-log integrity with tamper-evident hash chains.
-- Anti-cheat request guards for rate limits, idempotency/replay prevention, repeated Training Report evidence, and asset upload abuse.
-- Server authority ops job for matchmaking, settlement reconciliation, audit review, and abuse alert generation.
-- Deployment readiness endpoints: `/api/health` JSON and `/api/metrics` Prometheus-style text.
-- Admin operations console for held Training Reports, moderation queue, risk cases, manual enforcement, and season operations.
-- Asset report/moderation flow with report threshold privacy protection.
-- Level cosmetic rewards and season reward generation for non-ranked and ranked loops.
-- Public pet profile, skill alias controls, replay timeline, queue/invite status cards, and battle-side asset previews.
-- Sandbox battle simulation for result testing. It does not award official XP or ranked LP.
-- LP and tier/division updates only for official Ranked PvP matchmaking battles.
-- Leaderboard and server event log.
-- Node test coverage for core rules.
-
-## Play Surface Priority
-
-Codex App and Codex CLI are the primary play surfaces. The web UI remains useful for visible battle review, profile pages, leaderboards, replays, and admin/ops work, but normal Codex Pet League play should work from the tools Codex users already live in.
-
-- Codex App: MCP tools handle natural-language pet status, `hatch-pet` package import, Training Reports, matchmaking, action recommendations, and turn submissions.
-- Codex CLI: terminal commands handle the same flow, including `pet import-hatch`, game-like `battle watch`, and `battle play` modes.
-- Web: optional companion UI for public browsing, visual battle inspection, leaderboards, and operations.
-
-## Codex Active Pet Source
-
-OpenAI's public `hatch-pet` contract documents local packages under `${CODEX_HOME:-~/.codex}/pets/<pet-id>` with `pet.json` and `spritesheet.webp`. Public Codex App documentation does not currently document a verifiable API or signed claim for reading the user's currently selected active Codex pet. Until OpenAI exposes that, Codex Pet League treats local discovery as candidate input only and makes the League server's first active pet selection authoritative and permanent per account.
-
-The importer validates the local package before upload: `pet.json` must include `id`, `displayName`, `description`, and a safe relative `spritesheetPath`; the spritesheet must be PNG or WebP, match the official `1536x1872` atlas contract, and remain inside the package directory. The server recomputes hashes after upload and never trusts client-provided hashes as authority.
-
-Official Codex docs say Codex CLI/App can be used after signing in with ChatGPT, but that is Codex product access, not a League-verifiable account token. The low-cost shared League alpha uses League-owned email code login delivered through Resend; passkeys and League OAuth can be added later if the account surface needs them.
-
-## Scripts
-
-```bash
-npm test
-npm run test:runtime
-npm run test:abuse
-npm run test:storage
-npm run test:load
-npm run test:browser
-npm run db:migrate -- data/league-state.json data/league-state.sqlite
-npm run db:schema:check
-npm run db:postgres:migrate
-npm run prod:check
-npm run backup
-npm run verify:loop -- 2
-npm run ops:check
-npm start
-npm run dev
-npm run cli -- help
-```
-
-Runtime state is stored in `data/league-state.json` by default and ignored by git.
-Set `CODEX_PET_STORAGE_DRIVER=sqlite` with `CODEX_PET_SQLITE_PATH` to use the SQLite snapshot backend. It keeps transaction-protected, hashable state snapshots with WAL enabled, and `npm run db:migrate -- <json> <sqlite>` moves the current JSON state into that backend.
-Set `CODEX_PET_STORAGE_DRIVER=postgres` with `CODEX_PET_POSTGRES_URL` to use the Postgres snapshot backend. Run `npm run db:postgres:migrate` against the target database before switching production traffic.
-
-## CLI Bridge
-
-The CLI is the local bridge that Codex App slash commands or natural-language tool triggers can call.
-
-```powershell
-npm run cli -- setup --path <hatch-pet-folder> --yes --primary Forge --secondary Trace
-npm run cli -- doctor
-npm run cli -- home
-npm run cli -- next
-npm run cli -- daily
-npm run cli -- session
-npm run cli -- session list
-npm run cli -- auth challenge --method email_magic_link --identifier you@example.com
-npm run cli -- auth verify --challenge auth_challenge_id --code 123456
-npm run cli -- auth providers
-npm run cli -- bridge status
-npm run cli -- league
-npm run cli -- pet discover-hatch
-npm run cli -- pet inspect-hatch --path <hatch-pet-folder>
-npm run cli -- pet import-hatch --path <hatch-pet-folder> --primary Forge --secondary Trace
-npm run cli -- pet activate --pet pet_id
-npm run cli -- pet create --name Pebble --primary Forge --secondary Trace
-npm run cli -- pet profile
-npm run cli -- pet loadout --skills forge_offense,forge_defense,forge_status,trace_offense --aliases forge_offense=Hammer
-npm run cli -- pet replays
-npm run cli -- pets
-npm run cli -- xp status
-npm run cli -- report draft --implementation --verification --tests-run 3
-npm run cli -- report submit --milestone --files large
-npm run cli -- battle start --mode casual
-npm run cli -- battle actions --battle battle_room_id
-npm run cli -- battle watch --battle battle_room_id --once
-npm run cli -- battle play --battle battle_room_id --auto
-npm run cli -- battle action --battle battle_room_id --kind strike
-npm run cli -- battle get --battle battle_room_id
-npm run cli -- queue join --mode ranked
-npm run cli -- queue status
-npm run cli -- queue cancel --ticket ticket_id
-npm run cli -- invite create
-npm run cli -- invite accept --code ABC123
-npm run cli -- audit
-npm run cli -- battle simulate --mode ranked --result win --opponent-lp 1500
-npm run cli -- leaderboard
-```
-
-Natural-language trigger mapping:
-
-```text
-Check League status -> codexpet doctor
-Show my pet home -> codexpet home
-What should I do next? -> codexpet next
-Show today's remaining XP -> codexpet daily
-Draft a pet Training Report -> codexpet report draft
-Submit today's work for pet XP -> codexpet report submit
-Show pet XP status -> codexpet xp status
-Find my hatch-pet packages -> codexpet pet discover-hatch
-Inspect this hatch-pet package -> codexpet pet inspect-hatch --path <hatch-pet-folder>
-Set up my first League pet -> codexpet setup --path <hatch-pet-folder> --yes
-Import my hatch-pet to the server -> codexpet pet import-hatch --path <hatch-pet-folder>
-Confirm my first official pet -> codexpet pet activate --pet <pet-id>
-Upload my pet to the server -> codexpet pet create --atlas <path.png|path.webp>
-Show available battle actions -> codexpet battle actions --battle <id>
-Show the battle board in terminal -> codexpet battle watch --battle <id>
-Play one recommended action -> codexpet battle play --battle <id> --auto
-```
-
-Environment:
-
-```bash
-CODEX_PET_LEAGUE_URL=http://localhost:4317
-CODEX_PET_DEPLOYMENT_ENV=local
-CODEX_PET_STATE_PATH=./data/league-state.json
-CODEX_PET_SESSION_TOKEN=league_session_token
-CODEX_PET_ACCOUNT_ID=acct_demo
-CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=false
-CODEX_PET_AUTH_PROVIDER=local_dev
-CODEX_PET_AUTH_DEV_CODE=false
-CODEX_PET_COOKIE_SECURE=false
-CODEX_PET_PUBLIC_BASE_URL=http://localhost:4317
-CODEX_PET_EMAIL_PROVIDER=resend
-CODEX_PET_RESEND_FROM_EMAIL=no-reply@league.example.com
-CODEX_PET_RESEND_FROM_NAME=Codex Pet League
-CODEX_PET_RESEND_API_KEY=
-CODEX_PET_PASSKEY_PROVIDER=false
-CODEX_PET_PASSKEY_VERIFY_URL=
-CODEX_PET_PASSKEY_RP_ID=league.example.com
-CODEX_PET_OAUTH_ISSUER=
-CODEX_PET_OAUTH_AUTHORIZE_URL=
-CODEX_PET_OAUTH_CLIENT_ID=
-CODEX_PET_OAUTH_REDIRECT_URI=
-CODEX_PET_OAUTH_VERIFY_URL=
-CODEX_PET_BRIDGE_SECRET=shared_bridge_hmac_secret
-CODEX_PET_BRIDGE_ATTESTATION_SECRET=shared_codex_app_attestation_secret
-CODEX_PET_REPLAY_SIGNING_SECRET=shared_replay_signing_secret
-CODEX_PET_OPS_JOB_INTERVAL_MS=60000
-CODEX_PET_STORAGE_DRIVER=json
-CODEX_PET_SQLITE_PATH=./data/league-state.sqlite
-CODEX_PET_SQLITE_SNAPSHOT_RETENTION=500
-CODEX_PET_POSTGRES_URL=
-CODEX_PET_POSTGRES_SNAPSHOT_RETENTION=500
-CODEX_PET_POSTGRES_SSL=false
-CODEX_PET_POSTGRES_SSL_REJECT_UNAUTHORIZED=true
-CODEX_PET_ASSET_STORAGE=local_fs
-CODEX_PET_ASSET_ROOT=./data/assets
-CODEX_PET_ASSET_CDN_BASE_URL=
-CODEX_PET_S3_ENDPOINT=
-CODEX_PET_S3_BUCKET=
-CODEX_PET_S3_REGION=auto
-CODEX_PET_S3_ACCESS_KEY_ID=
-CODEX_PET_S3_SECRET_ACCESS_KEY=
-CODEX_PET_REALTIME_BUS=local
-CODEX_PET_REALTIME_CHANNEL=codex-pet-league:events
-CODEX_PET_REQUEST_GUARD=local
-CODEX_PET_REQUEST_GUARD_NAMESPACE=codex-pet-league
-CODEX_PET_DISTRIBUTED_LOCK=local
-CODEX_PET_LOCK_NAMESPACE=codex-pet-league
-CODEX_PET_LOCK_TTL_MS=30000
-CODEX_PET_REDIS_URL=
-```
-
-`CODEX_PET_SESSION_TOKEN` or the HttpOnly `league_session` cookie is the official request path. `CODEX_PET_ACCOUNT_ID` is a local development fallback and is disabled unless `CODEX_PET_ALLOW_DEV_ACCOUNT_HEADER=true`.
-`CODEX_PET_AUTH_DEV_CODE` exposes challenge codes for local testing only and defaults off. When `CODEX_PET_AUTH_PROVIDER` is not `local_dev`, auth fails closed unless at least one real method is fully configured: Resend email-code delivery, AWS SES email-code delivery, email magic-link webhook, passkey verify hook, or OAuth authorize plus verify hook.
-Set `CODEX_PET_COOKIE_SECURE=true` behind HTTPS so League session cookies are marked `Secure`.
-For the alpha shared server, set `CODEX_PET_EMAIL_PROVIDER=resend` plus `CODEX_PET_RESEND_FROM_EMAIL` and `CODEX_PET_RESEND_API_KEY`. Resend sends the code email only; the League server verifies the code and creates the official session. Auth challenge rate limits are IP-scoped to one email-code request per 10 minutes to reduce email cost abuse, and Resend requests include an idempotency key per challenge. Email delivery and auth verification webhooks remain available for custom/self-host providers, and receive a signed JSON payload when `CODEX_PET_AUTH_WEBHOOK_SECRET` or `CODEX_PET_EMAIL_WEBHOOK_SECRET` is set. Passkey and OAuth verification hooks must return JSON with `verified: true` before the server creates an official League session.
-Set `CODEX_PET_ASSET_STORAGE=s3_compatible` with the `CODEX_PET_S3_*` values to store hatch spritesheet PNG/WebP objects in S3-compatible object storage. If `CODEX_PET_ASSET_CDN_BASE_URL` is set, public pet profiles return CDN atlas URLs.
-Set `CODEX_PET_REALTIME_BUS=redis`, `CODEX_PET_REQUEST_GUARD=redis`, and `CODEX_PET_DISTRIBUTED_LOCK=redis` with `CODEX_PET_REDIS_URL` for the shared server from launch. The Redis request guard shares rate-limit and idempotency buckets across instances, while Redis locks serialize matchmaking, ops jobs, and battle turn mutations. `npm run db:schema:check` validates the Postgres schema migrations under `db/migrations`; `npm run db:postgres:migrate` applies them to `CODEX_PET_POSTGRES_URL`.
-`CODEX_PET_BRIDGE_SECRET` lets CLI/MCP sign Training Report payloads; `CODEX_PET_BRIDGE_ATTESTATION_SECRET` adds an app-attestation HMAC layer while official OpenAI identity remains unconfirmed. `CODEX_PET_REPLAY_SIGNING_SECRET` signs replay and audit-derived integrity records outside local development. Untrusted high-value reports are held for review.
-High-impact mutation routes require a unique `request_id` or `Idempotency-Key`; the browser, CLI, and MCP bridge add one automatically.
-Risk scores are review signals first. Automatic ranked lock only respects an explicit/manual `ranked_locked_until` or future tamper-confirmed policy, so false positives do not silently punish normal players.
-`npm run test:load` starts a strict temp server, performs concurrent auth/read traffic, and checks security headers on `/api/health`.
-
-See `docs/USER_SETUP.md` for official alpha setup, `docs/OPERATIONS.md` for runtime operations, and `docs/DEPLOYMENT.md` for container deployment, production checks, backup, and self-host setup.
-
-## Codex App MCP Bridge
-
-The MCP bridge exposes the same product actions as tools:
-
-- `league_doctor`
-- `auth_challenge`
-- `auth_verify`
-- `league_setup`
-- `league_home`
-- `next_action`
-- `league_play`
-- `pet_status`
-- `pet_create`
-- `pet_discover_hatch`
-- `pet_inspect_hatch`
-- `pet_import_hatch`
-- `pet_activate`
-- `league_status`
-- `pet_profile`
-- `pet_loadout_update`
-- `pet_replays`
-- `training_report_draft`
-- `training_report_submit`
-- `battle_simulate`
-- `battle_start`
-- `battle_action`
-- `battle_get`
-- `battle_action_options`
-- `matchmaking_join`
-- `matchmaking_status`
-- `matchmaking_cancel`
-- `admin_audit`
-- `friend_invite_create`
-- `friend_invite_accept`
-- `leaderboard`
-
-Run directly:
-
-```bash
-npm run mcp
-```
-
-Example Codex CLI registration from the repo root:
-
-```powershell
-$repo = (Get-Location).Path
-codex mcp add codex-pet-league -- node "$repo\src\mcp\codex-pet-mcp.cjs"
-```
-
-The League server must be running at `CODEX_PET_LEAGUE_URL` before tool calls can create pets, submit reports, or resolve battles.
-
-## Codex App Plugin
-
-This repo includes a local Codex App plugin scaffold at `plugins/codex-pet-league`.
-
-- Manifest: `plugins/codex-pet-league/.codex-plugin/plugin.json`
-- MCP config: `plugins/codex-pet-league/.mcp.json`
-- Skill guide: `plugins/codex-pet-league/skills/codex-pet-league/SKILL.md`
-- Marketplace entry: `.agents/plugins/marketplace.json`
-
-The plugin MCP config points to `./scripts/codex-pet-mcp.cjs`, a small launcher that starts the repo's `src/mcp/codex-pet-mcp.cjs` bridge. By default it expects the official shared server at `https://league.codexpetz.com`; set `CODEX_PET_LEAGUE_URL` to `http://localhost:4317` for local development or to your own HTTPS endpoint for self-hosting.
-
-Plugin scaffold flow for a cloned repo:
-
-```powershell
-git clone https://github.com/BMinChul/codex-pet-league.git
-cd codex-pet-league
-npm install
-$env:CODEX_PET_LEAGUE_URL="https://league.codexpetz.com"
-```
-
-Then register MCP directly with Codex CLI, or use the repo-local plugin scaffold through `.agents/plugins/marketplace.json` in environments that load local Codex plugins. Local development still uses `CODEX_PET_AUTH_DEV_CODE=true npm start` and `CODEX_PET_LEAGUE_URL=http://localhost:4317`.
-
-## Privacy And Terms
-
-Official alpha pages:
-
-- Status: https://league.codexpetz.com/status
-- Support: https://league.codexpetz.com/support
-- Privacy Notice: https://league.codexpetz.com/privacy
-- Alpha Terms: https://league.codexpetz.com/terms
-- Private support email: support@codexpetz.com
-
-The official shared alpha stores League account records, canonical pet assets, Training Report summaries, battle/replay records, XP/LP ledgers, moderation metadata, and operational audit events on the League server. Do not submit raw source code or full Codex transcripts in Training Reports.
-
-When you run locally or self-host, state stays in your configured storage. Do not commit `.env`, `data/`, runtime logs, uploaded pet assets, database files, service credentials, or session tokens.
+This repo tracks `.env.example` only. Real production secrets belong in Render, Cloudflare, Resend, OpenAI, or another provider's private environment settings.

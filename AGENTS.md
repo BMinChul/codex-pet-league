@@ -107,6 +107,8 @@ Public GitHub baseline:
 - GitHub issue templates are present for bug reports, install/MCP problems, and gameplay issues. Private account, moderation, privacy, or security-sensitive reports route to `support@codexpetz.com`.
 - Repository About metadata is configured with the official alpha homepage and topics: `codex`, `mcp`, `game`, `pet`, `turn-based`, `hatch-pet`, `openai`, `codex-cli`.
 - README links the latest alpha release near the top.
+- README was simplified for the public GitHub landing page; detailed setup/ops/deployment content stays in `docs/`.
+- Share copy for early users is in `docs/SHARE.md`.
 
 Remaining official shared League server work:
 

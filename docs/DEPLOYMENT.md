@@ -331,7 +331,7 @@ For multi-instance realtime updates, use Redis pub/sub:
 CODEX_PET_REALTIME_BUS=redis
 CODEX_PET_REQUEST_GUARD=redis
 CODEX_PET_DISTRIBUTED_LOCK=redis
-CODEX_PET_REDIS_URL=redis://default:password@redis.example.com:6379/0
+CODEX_PET_REDIS_URL=<redis-url-from-provider>
 CODEX_PET_REALTIME_CHANNEL=codex-pet-league:events
 CODEX_PET_REQUEST_GUARD_NAMESPACE=codex-pet-league
 CODEX_PET_LOCK_NAMESPACE=codex-pet-league
