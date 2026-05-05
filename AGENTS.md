@@ -37,6 +37,7 @@ Implemented local product surface:
 - Codex CLI is present in `src/cli/index.js`.
 - Web companion UI is present in `public/app.js` and `public/styles.css`.
 - Web companion UI should not present browser-side pet creation as the primary official flow. Official hatch-pet registration happens from the user's local hatch package through CLI/MCP import; browser-only demo pet creation is limited to hidden local smoke tools.
+- `DESIGN.md` is installed from `VoltAgent/awesome-design-md` using the `design-md/voltagent/DESIGN.md` reference, with Codex Pet League overrides at the top. Treat higher-priority `AGENTS.md` and system UI constraints as authoritative if any design detail conflicts.
 - Official `hatch-pet` package discovery, inspection, import, validation, provenance hashing, and duplicate source review are implemented in `src/hatchPackage.cjs` and domain asset creation.
 - First active League pet selection is permanent and server-enforced.
 - Real-time turn-based battles, random matchmaking, friend invite rooms, 30 second turn timing, AFK timeout ladder, battle logs, replay hashes, and ranked settlement are implemented locally.
