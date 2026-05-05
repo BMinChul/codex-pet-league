@@ -8,206 +8,297 @@
   </head>
   <body>
     <main class="app-shell">
-      <aside class="sidebar">
-        <div class="brand">
+      <header class="global-header">
+        <a class="brand" data-tab-jump="dashboard" href="#dashboard" aria-label="Codex Pet League dashboard">
           <img src="/pet-placeholder.svg" alt="" class="brand-mark" />
-          <div>
-            <h1>Codex Pet League</h1>
-            <p id="sessionLabel">Connecting...</p>
-            <p id="leagueLabel">Season loading...</p>
+          <span>
+            <strong>Codex Pet League</strong>
+            <em id="leagueLabel">Season loading...</em>
+          </span>
+        </a>
+
+        <nav class="main-tabs" aria-label="League sections">
+          <button class="tab-button is-active" data-tab="dashboard">Dashboard</button>
+          <button class="tab-button" data-tab="import">Import Pet</button>
+          <button class="tab-button" data-tab="training">Training</button>
+          <button class="tab-button" data-tab="battles">Battles</button>
+          <button class="tab-button" data-tab="replays">Replays</button>
+          <button class="tab-button" data-tab="leaderboard">Leaderboard</button>
+          <button class="tab-button" data-tab="profile">Profile</button>
+          <button class="tab-button" data-tab="ops">Ops</button>
+        </nav>
+
+        <div class="header-actions">
+          <a class="header-link" href="https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md">Setup Guide</a>
+          <a class="header-link" href="/status">Status</a>
+          <button id="refreshButton" class="secondary-button header-refresh">Refresh</button>
+          <button id="authOpenButton" class="primary-button sign-in-button">Sign In</button>
+          <div id="identityChip" class="identity-chip" aria-label="Signed-in League identity">
+            <span id="sessionLabel">Sign in required</span>
+            <b id="classPill">Class -</b>
+            <b id="rankPill">Rank -</b>
           </div>
         </div>
+      </header>
 
-        <section class="panel compact auth-panel">
-          <div class="section-kicker">Account</div>
-          <h2>League Email Sign In</h2>
-          <label>
-            Email
-            <input id="authIdentifierInput" class="field" value="" placeholder="you@example.com" maxlength="80" inputmode="email" autocomplete="email" />
-          </label>
-          <button id="authChallengeButton" class="secondary-button full-button">Send Email Code</button>
-          <label>
-            Email Code
-            <input id="authCodeInput" class="field code-field" maxlength="16" inputmode="numeric" autocomplete="one-time-code" />
-          </label>
-          <button id="authVerifyButton" class="primary-button full-button">Verify And Enter</button>
-          <p id="authHint" class="muted">League login is separate from Codex ChatGPT sign-in.</p>
-        </section>
-
-        <section class="panel compact">
-          <div class="section-kicker">Official Pet</div>
-          <h2>Active League Pet</h2>
-          <select id="petSelect" class="field"></select>
-          <p id="activePetLockHint" class="muted">First active League pet selection is permanent.</p>
-          <div class="command-card">
-            <span>Import from local hatch-pet package</span>
-            <code>npm run cli -- pet discover-hatch</code>
-            <code>npm run cli -- setup --path &lt;hatch-pet-folder&gt; --yes</code>
-          </div>
-        </section>
-
-        <details class="panel compact dev-tools">
-          <summary>Local smoke tools</summary>
-          <p class="muted">Only for local browser tests.</p>
-          <button id="seedPetButton" class="secondary-button full-button">Seed Local Demo Pet</button>
-        </details>
-
-        <nav class="side-links" aria-label="Operations links">
-          <a href="/status">Status</a>
-          <a href="/support">Support</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/terms">Terms</a>
-        </nav>
-      </aside>
+      <div id="appStatus" class="app-status" role="status" aria-live="polite">Connecting...</div>
 
       <section class="workspace">
-        <header class="topbar">
-          <div>
-            <h2 id="petTitle">No pet registered</h2>
-            <p id="petSubtitle">Import a local hatch-pet package through CLI or MCP.</p>
+        <section class="view is-active" data-view="dashboard" id="dashboard">
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Official Alpha</p>
+              <h1 id="petTitle">Dashboard</h1>
+              <p id="petSubtitle">Set up your official League pet and track your Codex companion at a glance.</p>
+            </div>
+            <div class="status-pills">
+              <span>Server Live</span>
+              <span>CLI/MCP First</span>
+              <span>Email Code Login</span>
+            </div>
           </div>
-          <div class="status-pills">
-            <span id="classPill">Class -</span>
-            <span id="rankPill">Rank -</span>
-          </div>
-        </header>
-        <div id="appStatus" class="app-status" role="status" aria-live="polite">Connecting...</div>
 
-        <section class="setup-strip" aria-label="League setup">
-          <article>
-            <strong>1. Sign in</strong>
-            <span>Email-code League session</span>
-          </article>
-          <article>
-            <strong>2. Import pet locally</strong>
-            <span>CLI/MCP reads your hatch-pet folder</span>
-          </article>
-          <article>
-            <strong>3. Play from Codex</strong>
-            <span>Training Reports, battles, replays</span>
+          <section class="hero-card">
+            <div class="hero-copy">
+              <p class="section-kicker">Start Here</p>
+              <h2>Bring your Codex-born pet into League</h2>
+              <p>
+                Import a local OpenAI hatch-pet package with CLI or MCP. The League server owns ranked state, XP,
+                battles, and replays.
+              </p>
+              <div class="button-row hero-actions">
+                <button class="primary-button" data-tab-jump="import">Start Setup</button>
+                <a class="secondary-button" href="https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md">Read User Guide</a>
+              </div>
+              <div class="trust-strip">
+                <span>Server-authoritative</span>
+                <span>Permanent first pet</span>
+                <span>Local package import</span>
+              </div>
+            </div>
+            <div class="pet-dock">
+              <div class="pet-visual">
+                <img id="petImage" src="/pet-placeholder.svg" alt="Active pet appearance" />
+              </div>
+              <div class="stat-list" id="statList"></div>
+            </div>
+          </section>
+
+          <section class="dashboard-grid">
+            <article class="panel">
+              <h2>Setup Progress</h2>
+              <div class="check-list">
+                <div><span></span><strong>Email verified</strong><em>Sign in from the top-right button</em></div>
+                <div><span></span><strong>CLI doctor</strong><em>Confirm the bridge can reach League</em></div>
+                <div><span></span><strong>hatch-pet package</strong><em>Discover the local package folder</em></div>
+                <div><span></span><strong>Official pet locked</strong><em>Permanent first active selection</em></div>
+              </div>
+            </article>
+            <article class="panel">
+              <h2>Today</h2>
+              <div class="mini-meters" id="dashboardXpStatus"></div>
+            </article>
+            <article class="panel">
+              <h2>Quick Actions</h2>
+              <div class="quick-actions">
+                <button class="secondary-button" data-tab-jump="import">Find hatch-pet</button>
+                <button class="secondary-button" data-tab-jump="training">Draft Training Report</button>
+                <button class="secondary-button" data-tab-jump="battles">Join Ranked</button>
+                <button class="secondary-button" data-tab-jump="replays">Open Replays</button>
+              </div>
+            </article>
+          </section>
+
+          <section class="bottom-grid">
+            <article class="panel">
+              <h2>Command Shortcuts</h2>
+              <div class="command-card">
+                <code>npm run cli -- doctor</code>
+                <code>npm run cli -- pet discover-hatch</code>
+                <code>npm run cli -- setup --path &lt;folder&gt; --yes</code>
+              </div>
+            </article>
+            <article class="panel">
+              <h2>League Snapshot</h2>
+              <div class="metric-grid" id="leagueSnapshot"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view="import" id="import" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Import Pet</p>
+              <h1>No League Pet Yet</h1>
+              <p>Your official pet is imported from your local OpenAI hatch-pet package.</p>
+            </div>
+            <select id="petSelect" class="field compact-field"></select>
+          </div>
+          <section class="import-layout">
+            <article class="panel import-main">
+              <h2>CLI/MCP import flow</h2>
+              <p class="muted" id="activePetLockHint">First active League pet selection is permanent.</p>
+              <div class="command-card large">
+                <span>1. Check League</span>
+                <code>npm run cli -- doctor</code>
+                <span>2. Find local hatch packages</span>
+                <code>npm run cli -- pet discover-hatch</code>
+                <span>3. Inspect one package</span>
+                <code>npm run cli -- pet inspect-hatch --path &lt;folder&gt;</code>
+                <span>4. Lock official pet</span>
+                <code>npm run cli -- setup --path &lt;folder&gt; --yes</code>
+              </div>
+            </article>
+            <article class="panel">
+              <h2>Trust Boundary</h2>
+              <div class="profile-summary import-summary">
+                <div><strong>Source</strong><span>Local hatch-pet package</span></div>
+                <div><strong>Authority</strong><span>League server</span></div>
+                <div><strong>Ranked State</strong><span>Server-owned</span></div>
+                <div><strong>Pet Selection</strong><span>Permanent first active pet</span></div>
+              </div>
+            </article>
+          </section>
+          <details class="panel dev-tools">
+            <summary>Local smoke tools</summary>
+            <p class="muted">Only for local browser tests.</p>
+            <button id="seedPetButton" class="secondary-button">Seed Local Demo Pet</button>
+          </details>
+        </section>
+
+        <section class="view" data-view="training" id="training" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Training</p>
+              <h1>Training Reports</h1>
+              <p>Convert Codex work summaries into server-scored Pet XP and Style XP.</p>
+            </div>
+          </div>
+          <section class="training-layout">
+            <article class="panel requires-pet">
+              <h2>Daily Progress</h2>
+              <div id="xpStatus" class="meter-stack"></div>
+              <p id="resetText" class="muted"></p>
+            </article>
+            <article class="panel requires-pet">
+              <h2>Draft Report</h2>
+              <div class="signal-grid">
+                <label><input type="checkbox" id="implementationActivity" checked /> Implementation</label>
+                <label><input type="checkbox" id="debuggingActivity" /> Debugging</label>
+                <label><input type="checkbox" id="verificationActivity" checked /> Tests</label>
+                <label><input type="checkbox" id="docsActivity" /> Docs</label>
+                <label><input type="checkbox" id="releaseActivity" /> Release</label>
+                <label><input type="checkbox" id="milestone" /> Milestone</label>
+              </div>
+              <label>
+                Files changed
+                <select id="filesChangedBucket" class="field">
+                  <option value="small">Small</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="large">Large</option>
+                </select>
+              </label>
+              <label>
+                Tests run
+                <input id="testsRun" class="field" type="number" min="0" max="20" value="3" />
+              </label>
+              <div class="button-row">
+                <button id="draftReportButton" class="secondary-button">Draft</button>
+                <button id="submitReportButton" class="primary-button">Submit</button>
+              </div>
+              <pre id="trainingPreview" class="output">No draft yet.</pre>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view="battles" id="battles" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Battles</p>
+              <h1>Turn Battle</h1>
+              <p>Server-authoritative simultaneous turns with ranked, casual, and friend duel modes.</p>
+            </div>
+          </div>
+          <section class="battle-layout requires-pet">
+            <article class="panel battle-controls">
+              <label>
+                Mode
+                <select id="battleMode" class="field">
+                  <option value="casual" selected>Casual</option>
+                  <option value="ranked">Ranked</option>
+                  <option value="friend">Friend Duel</option>
+                  <option value="training">Training Battle</option>
+                </select>
+              </label>
+              <label>
+                Opponent LP
+                <input id="opponentLp" class="field" type="number" value="1500" />
+              </label>
+              <div class="button-row">
+                <button id="startBattleButton" class="secondary-button">Training Bot</button>
+                <button id="joinQueueButton" class="primary-button">Random Match</button>
+              </div>
+              <div class="button-row stacked-row">
+                <button id="queueStatusButton" class="secondary-button">Queue Status</button>
+                <button id="cancelQueueButton" class="secondary-button">Cancel Queue</button>
+              </div>
+              <div class="invite-row">
+                <button id="createInviteButton" class="secondary-button">Create Invite</button>
+                <input id="inviteCodeInput" class="field" maxlength="8" placeholder="Invite code" />
+                <button id="acceptInviteButton" class="secondary-button">Accept</button>
+              </div>
+              <div id="matchmakingCards" class="matchmaking-cards"></div>
+              <pre id="matchmakingOutput" class="output compact-output">No matchmaking activity.</pre>
+            </article>
+            <article class="panel battle-board">
+              <div id="battleState" class="battle-state" aria-live="polite"></div>
+              <div id="battleTimeline" class="timeline-list"></div>
+              <label>
+                Skill
+                <select id="battleSkillSelect" class="field"></select>
+              </label>
+              <div class="action-grid">
+                <button data-action="strike" class="secondary-button" title="Damage and gain 1 energy">Strike</button>
+                <button data-action="guard" class="secondary-button" title="Reduce damage and gain 1 energy">Guard</button>
+                <button data-action="focus" class="secondary-button" title="Gain 2 energy and focus">Focus</button>
+                <button data-action="skill" class="primary-button" title="Use selected skill">Skill</button>
+              </div>
+              <pre id="battleOutput" class="output">No active battle.</pre>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view="replays" id="replays" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Replays</p>
+              <h1>Replay Log</h1>
+              <p>Review server-owned battle records and tamper-evident replay hashes.</p>
+            </div>
+            <button id="replayRefreshButton" class="secondary-button">Refresh</button>
+          </div>
+          <article class="panel requires-pet">
+            <div id="replayList" class="timeline-list"></div>
           </article>
         </section>
 
-        <section class="grid">
-          <article class="panel pet-panel">
-            <div class="pet-visual">
-              <img id="petImage" src="/pet-placeholder.svg" alt="Active pet appearance" />
+        <section class="view" data-view="leaderboard" id="leaderboard" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Leaderboard</p>
+              <h1>Ranked League</h1>
+              <p>Filter public ranked pets by tier and Battle Class.</p>
             </div>
-            <div class="stat-list" id="statList"></div>
-          </article>
-
-          <article class="panel requires-pet">
-            <div class="panel-header">
-              <h2>Public Profile</h2>
-              <button id="saveAliasesButton" class="secondary-button">Save Skill Names</button>
-            </div>
-            <div id="profileSummary" class="profile-summary"></div>
-            <div id="skillAliasList" class="skill-list"></div>
-          </article>
-
-          <article class="panel requires-pet">
-            <div class="panel-header">
-              <h2>Daily Progress</h2>
-              <button id="refreshButton" class="icon-button" title="Refresh">Refresh</button>
-            </div>
-            <div id="xpStatus" class="meter-stack"></div>
-            <p id="resetText" class="muted"></p>
-          </article>
-
-          <article class="panel requires-pet">
-            <h2>Training Report</h2>
-            <div class="signal-grid">
-              <label><input type="checkbox" id="implementationActivity" checked /> Implementation</label>
-              <label><input type="checkbox" id="debuggingActivity" /> Debugging</label>
-              <label><input type="checkbox" id="verificationActivity" checked /> Tests</label>
-              <label><input type="checkbox" id="docsActivity" /> Docs</label>
-              <label><input type="checkbox" id="releaseActivity" /> Release</label>
-              <label><input type="checkbox" id="milestone" /> Milestone</label>
-            </div>
-            <label>
-              Files changed
-              <select id="filesChangedBucket" class="field">
-                <option value="small">Small</option>
-                <option value="medium" selected>Medium</option>
-                <option value="large">Large</option>
-              </select>
-            </label>
-            <label>
-              Tests run
-              <input id="testsRun" class="field" type="number" min="0" max="20" value="3" />
-            </label>
             <div class="button-row">
-              <button id="draftReportButton" class="secondary-button">Draft</button>
-              <button id="submitReportButton" class="primary-button">Submit</button>
-            </div>
-            <pre id="trainingPreview" class="output">No draft yet.</pre>
-          </article>
-
-          <article class="panel requires-pet">
-            <h2>Turn Battle</h2>
-            <label>
-              Mode
-              <select id="battleMode" class="field">
-                <option value="casual" selected>Casual</option>
-                <option value="ranked">Ranked</option>
-                <option value="friend">Friend Duel</option>
-                <option value="training">Training Battle</option>
+              <select id="leaderboardTierFilter" class="field compact-field">
+                <option value="all">All Tiers</option>
               </select>
-            </label>
-            <label>
-              Opponent LP
-              <input id="opponentLp" class="field" type="number" value="1500" />
-            </label>
-            <div class="button-row">
-              <button id="startBattleButton" class="secondary-button">Training Bot</button>
-              <button id="joinQueueButton" class="primary-button">Random Match</button>
+              <select id="leaderboardClassFilter" class="field compact-field">
+                <option value="all">All Classes</option>
+              </select>
             </div>
-            <div class="button-row stacked-row">
-              <button id="queueStatusButton" class="secondary-button">Queue Status</button>
-              <button id="cancelQueueButton" class="secondary-button">Cancel Queue</button>
-            </div>
-            <div class="invite-row">
-              <button id="createInviteButton" class="secondary-button">Create Invite</button>
-              <input id="inviteCodeInput" class="field" maxlength="8" placeholder="Invite code" />
-              <button id="acceptInviteButton" class="secondary-button">Accept</button>
-            </div>
-            <div id="matchmakingCards" class="matchmaking-cards"></div>
-            <pre id="matchmakingOutput" class="output compact-output">No matchmaking activity.</pre>
-            <div id="battleState" class="battle-state" aria-live="polite"></div>
-            <div id="battleTimeline" class="timeline-list"></div>
-            <label>
-              Skill
-              <select id="battleSkillSelect" class="field"></select>
-            </label>
-            <div class="action-grid">
-              <button data-action="strike" class="secondary-button" title="Damage and gain 1 energy">Strike</button>
-              <button data-action="guard" class="secondary-button" title="Reduce damage and gain 1 energy">Guard</button>
-              <button data-action="focus" class="secondary-button" title="Gain 2 energy and focus">Focus</button>
-              <button data-action="skill" class="primary-button" title="Use selected skill">Skill</button>
-            </div>
-            <pre id="battleOutput" class="output">No active battle.</pre>
-          </article>
-
-          <article class="panel wide requires-pet">
-            <div class="panel-header">
-              <h2>Replays</h2>
-              <button id="replayRefreshButton" class="secondary-button">Refresh</button>
-            </div>
-            <div id="replayList" class="timeline-list"></div>
-          </article>
-
-          <article class="panel wide">
-            <div class="panel-header">
-              <h2>Leaderboard</h2>
-              <div class="button-row">
-                <select id="leaderboardTierFilter" class="field compact-field">
-                  <option value="all">All Tiers</option>
-                </select>
-                <select id="leaderboardClassFilter" class="field compact-field">
-                  <option value="all">All Classes</option>
-                </select>
-              </div>
-            </div>
+          </div>
+          <article class="panel leaderboard-panel">
             <table>
               <thead>
                 <tr>
@@ -223,13 +314,42 @@
               <tbody id="leaderboardBody"></tbody>
             </table>
           </article>
+        </section>
 
-          <article class="panel wide">
+        <section class="view" data-view="profile" id="profile" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Profile</p>
+              <h1>Public Profile</h1>
+              <p>Manage visible pet metadata and cosmetic skill names.</p>
+            </div>
+            <button id="saveAliasesButton" class="secondary-button">Save Skill Names</button>
+          </div>
+          <section class="profile-layout requires-pet">
+            <article class="panel">
+              <h2>Profile Summary</h2>
+              <div id="profileSummary" class="profile-summary"></div>
+            </article>
+            <article class="panel">
+              <h2>Skill Names</h2>
+              <div id="skillAliasList" class="skill-list"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view="ops" id="ops" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Ops</p>
+              <h1>Status And Operations</h1>
+              <p>Public event log and owner-only moderation tools.</p>
+            </div>
+          </div>
+          <article class="panel">
             <h2>Server Event Log</h2>
             <div id="eventLog" class="event-log"></div>
           </article>
-
-          <article class="panel wide admin-panel">
+          <article class="panel admin-panel">
             <div class="panel-header">
               <h2>Admin Operations</h2>
               <div class="button-row">
@@ -254,6 +374,29 @@
           </article>
         </section>
       </section>
+
+      <div id="authModal" class="modal-backdrop" hidden>
+        <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+          <div class="modal-header">
+            <div>
+              <p class="section-kicker">League Account</p>
+              <h2 id="authTitle">League Email Sign In</h2>
+            </div>
+            <button id="authCloseButton" class="icon-button" aria-label="Close sign in">Close</button>
+          </div>
+          <label>
+            Email
+            <input id="authIdentifierInput" class="field" value="" placeholder="you@example.com" maxlength="80" inputmode="email" autocomplete="email" />
+          </label>
+          <button id="authChallengeButton" class="secondary-button full-button">Send Code</button>
+          <label>
+            Email Code
+            <input id="authCodeInput" class="field code-field" maxlength="16" inputmode="numeric" autocomplete="one-time-code" />
+          </label>
+          <button id="authVerifyButton" class="primary-button full-button">Verify And Enter</button>
+          <p id="authHint" class="muted">League login is separate from Codex ChatGPT sign-in.</p>
+        </section>
+      </div>
     </main>
 
     <script type="module" src="/app.js"></script>

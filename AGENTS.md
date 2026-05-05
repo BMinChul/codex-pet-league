@@ -36,6 +36,7 @@ Implemented local product surface:
 - Codex App MCP bridge is present in `src/mcp/codex-pet-mcp.cjs`.
 - Codex CLI is present in `src/cli/index.js`.
 - Web companion UI is present in `public/app.js` and `public/styles.css`.
+- Current web companion shell uses a desktop-first top navigation with separate Dashboard, Import Pet, Training, Battles, Replays, Leaderboard, Profile, and Ops tabs. League login belongs in the top-right Sign In modal; after login, the same area becomes the compact identity/rank chip.
 - Web companion UI should not present browser-side pet creation as the primary official flow. Official hatch-pet registration happens from the user's local hatch package through CLI/MCP import; browser-only demo pet creation is limited to hidden local smoke tools.
 - `DESIGN.md` is installed from `VoltAgent/awesome-design-md` using the `design-md/voltagent/DESIGN.md` reference, with Codex Pet League overrides at the top. Treat higher-priority `AGENTS.md` and system UI constraints as authoritative if any design detail conflicts.
 - Official `hatch-pet` package discovery, inspection, import, validation, provenance hashing, and duplicate source review are implemented in `src/hatchPackage.cjs` and domain asset creation.

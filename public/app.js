@@ -33,6 +33,9 @@ let silentRefreshQueued = false;
 
 const els = queryElements({
   appStatus: "#appStatus",
+  authOpenButton: "#authOpenButton",
+  authCloseButton: "#authCloseButton",
+  authModal: "#authModal",
   authIdentifierInput: "#authIdentifierInput",
   authChallengeButton: "#authChallengeButton",
   authCodeInput: "#authCodeInput",
@@ -53,7 +56,9 @@ const els = queryElements({
   skillAliasList: "#skillAliasList",
   saveAliasesButton: "#saveAliasesButton",
   xpStatus: "#xpStatus",
+  dashboardXpStatus: "#dashboardXpStatus",
   resetText: "#resetText",
+  leagueSnapshot: "#leagueSnapshot",
   refreshButton: "#refreshButton",
   draftReportButton: "#draftReportButton",
   submitReportButton: "#submitReportButton",
@@ -89,6 +94,9 @@ const els = queryElements({
   adminHistory: "#adminHistory",
   adminOutput: "#adminOutput",
   adminPanel: ".admin-panel",
+  tabButtons: "[data-tab]",
+  tabJumpers: "[data-tab-jump]",
+  views: "[data-view]",
 });
 
 boot();
@@ -192,6 +200,25 @@ function bindEvents() {
     }
     await loadActivePetDetails();
     renderApp();
+  });
+  for (const button of els.tabButtons ?? []) {
+    button.addEventListener("click", () => activateTab(button.dataset.tab));
+  }
+  for (const jumper of els.tabJumpers ?? []) {
+    jumper.addEventListener("click", (event) => {
+      const tab = jumper.dataset.tabJump;
+      if (!tab) return;
+      event.preventDefault();
+      activateTab(tab);
+    });
+  }
+  els.authOpenButton?.addEventListener("click", openAuthModal);
+  els.authCloseButton?.addEventListener("click", closeAuthModal);
+  els.authModal?.addEventListener("click", (event) => {
+    if (event.target === els.authModal) closeAuthModal();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !els.authModal?.hidden) closeAuthModal();
   });
   els.authChallengeButton?.addEventListener("click", () => runAction(startAuthChallenge));
   els.authVerifyButton?.addEventListener("click", () => runAction(verifyAuthChallenge, "Signed in."));
@@ -318,6 +345,7 @@ function renderApp() {
   renderBattle(state.activeBattle);
   renderReplays();
   renderLeaderboard(state.leaderboard);
+  renderLeagueSnapshot();
   renderEvents(state.events);
   renderAdminConsole();
   updateControls();
@@ -329,7 +357,8 @@ function renderChrome() {
 
   const accountName = state.session?.account?.displayName ?? "Sign in required";
   const verified = state.session?.account?.verified === false ? "not verified" : "verified";
-  setText(els.sessionLabel, state.session?.account ? `${accountName} · ${verified}` : accountName);
+  const pet = activePet();
+  setText(els.sessionLabel, state.session?.account ? `${accountName} · ${pet?.name ?? "No Pet"} · ${verified}` : accountName);
 
   const season = state.league?.active_season;
   const policy = state.league?.matchmaking_policy ?? state.rules.matchmakingPolicy;
@@ -452,10 +481,12 @@ function renderPublicProfile() {
 
 function renderXpStatus() {
   clear(els.xpStatus);
+  clear(els.dashboardXpStatus);
   const pet = activePet();
   if (!pet) {
     setText(els.resetText, "");
     renderEmpty(els.xpStatus, "No pet selected.");
+    renderEmpty(els.dashboardXpStatus, "No pet selected.");
     return;
   }
 
@@ -463,6 +494,7 @@ function renderXpStatus() {
   if (!status) {
     setText(els.resetText, "XP status pending.");
     renderEmpty(els.xpStatus, "Refresh to load daily caps.");
+    renderEmpty(els.dashboardXpStatus, "Refresh to load daily caps.");
     return;
   }
 
@@ -486,11 +518,55 @@ function renderXpStatus() {
     appendText(row, "span", `${current}/${formatCap(cap)}`);
     els.xpStatus?.append(row);
   }
+  renderDashboardXpStatus(status);
   const remaining = status.remaining ?? {};
   setText(
     els.resetText,
     `Available today: pet ${remaining.pet ?? 0}, training ${remaining.training ?? 0}, battle ${remaining.battle ?? 0}, style ${remaining.style ?? 0}. Reset: ${formatDateTime(status.reset_at)}`,
   );
+}
+
+function renderDashboardXpStatus(status) {
+  clear(els.dashboardXpStatus);
+  const rows = [
+    ["Pet XP", status.counters?.petDaily, status.caps?.petDaily],
+    ["Training XP", status.counters?.trainingDaily, status.caps?.trainingDaily],
+    ["Battle XP", status.counters?.battleDaily, status.caps?.battleDaily],
+    ["Style XP", status.counters?.styleDaily, status.caps?.styleDaily],
+  ];
+  for (const [label, value, cap] of rows) {
+    const current = Number(value ?? 0);
+    const limit = Number.isFinite(Number(cap)) ? Number(cap) : 0;
+    const item = document.createElement("div");
+    appendText(item, "strong", label);
+    appendText(item, "span", `${current}/${formatCap(cap)}`);
+    const track = document.createElement("i");
+    const fill = document.createElement("b");
+    fill.style.width = `${percent(current, limit || current || 1)}%`;
+    track.append(fill);
+    item.append(track);
+    els.dashboardXpStatus?.append(item);
+  }
+}
+
+function renderLeagueSnapshot() {
+  clear(els.leagueSnapshot);
+  const pet = activePet();
+  const replays = pet ? asArray(state.replaysByPetId.get(pet.id)).length : 0;
+  const queue = state.league?.queue_summary;
+  const activeBattleCount = state.activeBattle?.status === "in_progress" ? 1 : 0;
+  const rows = [
+    ["My Pets", state.pets.length],
+    ["Queue", queue?.waiting_total ?? 0],
+    ["Active Battle", activeBattleCount],
+    ["Replays", replays],
+  ];
+  for (const [label, value] of rows) {
+    const item = document.createElement("div");
+    appendText(item, "strong", label);
+    appendText(item, "span", value);
+    els.leagueSnapshot?.append(item);
+  }
 }
 
 async function createDemoPet() {
@@ -563,8 +639,37 @@ async function verifyAuthChallenge() {
   state.session = { account: result.account };
   state.authChallenge = null;
   setText(els.authHint, "Signed in.");
+  closeAuthModal();
   connectLiveEvents();
   await refresh();
+}
+
+function openAuthModal() {
+  if (!els.authModal) return;
+  els.authModal.hidden = false;
+  window.setTimeout(() => els.authIdentifierInput?.focus(), 0);
+}
+
+function closeAuthModal() {
+  if (!els.authModal) return;
+  els.authModal.hidden = true;
+}
+
+function activateTab(tab = "dashboard") {
+  const next = tab || "dashboard";
+  let activeButton = null;
+  for (const button of els.tabButtons ?? []) {
+    const isActive = button.dataset.tab === next;
+    button.classList.toggle("is-active", isActive);
+    if (isActive) activeButton = button;
+  }
+  for (const view of els.views ?? []) {
+    const active = view.dataset.view === next;
+    view.hidden = !active;
+    view.classList.toggle("is-active", active);
+  }
+  document.body.dataset.activeTab = next;
+  activeButton?.scrollIntoView({ block: "nearest", inline: "center" });
 }
 
 function authChallengeHint(result) {
@@ -1369,6 +1474,7 @@ function updateControls() {
   for (const control of [els.authIdentifierInput, els.authChallengeButton, els.authCodeInput, els.authVerifyButton]) {
     if (control) control.disabled = state.busy;
   }
+  if (els.authOpenButton) els.authOpenButton.disabled = state.busy;
 }
 
 function fillElements() {
@@ -1573,7 +1679,9 @@ function queryElements(selectors) {
   return Object.fromEntries(
     Object.entries(selectors).map(([key, selector]) => [
       key,
-      selector === "[data-action]" ? document.querySelectorAll(selector) : document.querySelector(selector),
+      ["[data-action]", "[data-tab]", "[data-tab-jump]", "[data-view]"].includes(selector)
+        ? document.querySelectorAll(selector)
+        : document.querySelector(selector),
     ]),
   );
 }
@@ -1595,10 +1703,13 @@ function meter(value, cap, className = "bar") {
   const bar = document.createElement("span");
   bar.className = className;
   const fill = document.createElement("span");
-  const percent = cap > 0 ? Math.min(100, Math.max(0, Math.round((value / cap) * 100))) : 0;
-  fill.style.width = `${percent}%`;
+  fill.style.width = `${percent(value, cap)}%`;
   bar.append(fill);
   return bar;
+}
+
+function percent(value, cap) {
+  return cap > 0 ? Math.min(100, Math.max(0, Math.round((value / cap) * 100))) : 0;
 }
 
 function appendText(parent, tag, text, className = "") {

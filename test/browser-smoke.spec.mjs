@@ -26,6 +26,7 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
     await expect(page.locator("#appStatus")).toContainText("Sign in", { timeout: 10_000 });
     await expectNoLayoutOverflow(page);
 
+    await page.click("#authOpenButton");
     await page.fill("#authIdentifierInput", "demo@codexpet.local");
     await page.click("#authChallengeButton");
     await expect(page.locator("#authHint")).toContainText("Local dev code");
@@ -33,18 +34,26 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
     await page.click("#authVerifyButton");
     await expect(page.locator("#sessionLabel")).toContainText("Demo Coder");
     browserErrors.length = 0;
+    await activateTab(page, "ops");
     await expect(page.locator(".admin-panel")).toBeVisible();
     await expect(page.locator("#adminSummary")).toContainText("Review Cases");
 
     await seedLocalDemoPet(page);
+    await activateTab(page, "dashboard");
     await expect(page.locator("#petTitle")).toContainText("Pebble");
+    await activateTab(page, "profile");
     await expect(page.locator("#profileSummary")).toContainText("Record");
+    await activateTab(page, "training");
     await expect(page.locator("#xpStatus")).toContainText("Pet XP");
+    await activateTab(page, "battles");
     await expect(page.locator("#battleSkillSelect option")).toHaveCount(4);
+    await activateTab(page, "profile");
     await page.locator("[data-skill-alias]").first().fill("QA Burst");
     await page.click("#saveAliasesButton");
+    await activateTab(page, "battles");
     await expect(page.locator("#battleSkillSelect")).toContainText("QA Burst");
 
+    await activateTab(page, "training");
     await page.check("#debuggingActivity");
     await page.check("#milestone");
     await page.selectOption("#filesChangedBucket", "large");
@@ -54,6 +63,7 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
     await page.click("#submitReportButton");
     await expect(page.locator("#trainingPreview")).toContainText("status");
 
+    await activateTab(page, "battles");
     await page.selectOption("#battleMode", "casual");
     await page.click("#startBattleButton");
     await expect(page.locator("#battleOutput")).toContainText("in_progress");
@@ -63,14 +73,17 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
     await page.waitForTimeout(250);
     await finishActiveBattleFromPage(page);
     await page.click("#refreshButton");
+    await activateTab(page, "replays");
     await expect(page.locator("#replayList")).toContainText("casual");
 
+    await activateTab(page, "battles");
     await page.click("#joinQueueButton");
     await expect(page.locator("#matchmakingCards")).toContainText("Queue");
     await page.click("#cancelQueueButton");
     await expect(page.locator("#matchmakingCards")).toContainText("cancelled");
 
     const heldReportId = await createHeldTrainingReportFromPage(page);
+    await activateTab(page, "ops");
     await page.click("#adminRefreshButton");
     await expect(page.locator("#adminAuditFindings")).toContainText("Audit");
     await expect(page.locator("#adminReviewCases")).toContainText(heldReportId);
@@ -130,11 +143,14 @@ test("two browser accounts complete friend PvP and avoid linked-device ranked ma
     await expect(pageB.locator("#battleTimeline")).toContainText("Turn 1");
     await withServerDiagnostics(app, () => finishPvpBattle(pageA, pageB), () => networkFailures.join("\n"));
     await Promise.all([pageA.click("#refreshButton"), pageB.click("#refreshButton")]);
+    await Promise.all([activateTab(pageA, "replays"), activateTab(pageB, "replays")]);
     await expect(pageA.locator("#replayList")).toContainText("friend");
     await expect(pageB.locator("#replayList")).toContainText("friend");
+    await activateTab(pageA, "profile");
     await expect(pageA.locator("#profileSummary")).toContainText("Battles");
 
     const before = await petRating(pageA);
+    await Promise.all([activateTab(pageA, "battles"), activateTab(pageB, "battles")]);
     await Promise.all([pageA.selectOption("#battleMode", "ranked"), pageB.selectOption("#battleMode", "ranked")]);
     await pageA.click("#joinQueueButton");
     await expect(pageA.locator("#matchmakingCards")).toContainText("Queue");
@@ -146,6 +162,7 @@ test("two browser accounts complete friend PvP and avoid linked-device ranked ma
     const after = await petRating(pageA);
     expect(after.lp).toBe(before.lp);
 
+    await activateTab(pageA, "ops");
     await pageA.click("#adminRefreshButton");
     await expect(pageA.locator("#adminReviewCases")).toContainText("linked_accounts");
     await expect(pageA.locator("#adminReviewCases")).toContainText("shared_recent_device");
@@ -208,6 +225,7 @@ async function createHeldTrainingReportFromPage(page) {
 async function signIn(page, baseUrl, identifier) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   await expect(page.locator("#appStatus")).toContainText("Sign in", { timeout: 10_000 });
+  await page.click("#authOpenButton");
   await page.fill("#authIdentifierInput", identifier);
   await page.click("#authChallengeButton");
   await expect(page.locator("#authCodeInput")).not.toHaveValue("");
@@ -217,16 +235,23 @@ async function signIn(page, baseUrl, identifier) {
 
 async function registerDemoPet(page) {
   await seedLocalDemoPet(page);
+  await activateTab(page, "dashboard");
   await expect(page.locator("#petTitle")).toContainText("Pebble");
+  await activateTab(page, "battles");
   await expect(page.locator("#battleSkillSelect option")).toHaveCount(4);
 }
 
 async function seedLocalDemoPet(page) {
+  await activateTab(page, "import");
   const tools = page.locator(".dev-tools");
   if (!(await tools.evaluate((element) => element.open))) {
     await tools.locator("summary").click();
   }
   await page.click("#seedPetButton");
+}
+
+async function activateTab(page, tab) {
+  await page.locator(`[data-tab="${tab}"]`).click();
 }
 
 async function finishActiveBattleFromPage(page) {
