@@ -105,6 +105,8 @@ Public GitHub baseline:
 - Public release prep commit: `a51e13b` (`Prepare public GitHub release`).
 - First public alpha release: `v0.1.0-alpha`, GitHub pre-release at `https://github.com/BMinChul/codex-pet-league/releases/tag/v0.1.0-alpha`.
 - GitHub issue templates are present for bug reports, install/MCP problems, and gameplay issues. Private account, moderation, privacy, or security-sensitive reports route to `support@codexpetz.com`.
+- Repository About metadata is configured with the official alpha homepage and topics: `codex`, `mcp`, `game`, `pet`, `turn-based`, `hatch-pet`, `openai`, `codex-cli`.
+- README links the latest alpha release near the top.
 
 Remaining official shared League server work:
 

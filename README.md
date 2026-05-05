@@ -8,6 +8,12 @@ Official shared alpha:
 https://league.codexpetz.com
 ```
 
+Latest alpha release:
+
+```text
+https://github.com/BMinChul/codex-pet-league/releases/tag/v0.1.0-alpha
+```
+
 User setup guide:
 
 ```text
