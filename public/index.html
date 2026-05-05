@@ -19,58 +19,38 @@
         </div>
 
         <section class="panel compact auth-panel">
-          <h2>League Sign In</h2>
-          <p class="step-hint">Step 1: send a code. Step 2: enter the email code and verify.</p>
+          <div class="section-kicker">Account</div>
+          <h2>League Email Sign In</h2>
           <label>
-            Method
-            <select id="authMethodInput" class="field">
-              <option value="email_magic_link">Email magic link</option>
-              <option value="passkey">Passkey</option>
-              <option value="league_oauth">League OAuth</option>
-            </select>
+            Email
+            <input id="authIdentifierInput" class="field" value="" placeholder="you@example.com" maxlength="80" inputmode="email" autocomplete="email" />
           </label>
+          <button id="authChallengeButton" class="secondary-button full-button">Send Email Code</button>
           <label>
-            Identifier
-            <input id="authIdentifierInput" class="field" value="local@example.test" maxlength="80" />
+            Email Code
+            <input id="authCodeInput" class="field code-field" maxlength="16" inputmode="numeric" autocomplete="one-time-code" />
           </label>
-          <div class="button-row">
-            <button id="authChallengeButton" class="secondary-button">Send Code</button>
-            <button id="authVerifyButton" class="primary-button">Verify Code</button>
-          </div>
-          <label>
-            Code
-            <input id="authCodeInput" class="field" maxlength="16" />
-          </label>
+          <button id="authVerifyButton" class="primary-button full-button">Verify And Enter</button>
           <p id="authHint" class="muted">League login is separate from Codex ChatGPT sign-in.</p>
         </section>
 
         <section class="panel compact">
-          <h2>Active Pet</h2>
+          <div class="section-kicker">Official Pet</div>
+          <h2>Active League Pet</h2>
           <select id="petSelect" class="field"></select>
           <p id="activePetLockHint" class="muted">First active League pet selection is permanent.</p>
-          <button id="seedPetButton" class="primary-button">Register Demo Pet</button>
+          <div class="command-card">
+            <span>Import from local hatch-pet package</span>
+            <code>npm run cli -- pet discover-hatch</code>
+            <code>npm run cli -- setup --path &lt;hatch-pet-folder&gt; --yes</code>
+          </div>
         </section>
 
-        <section class="panel compact">
-          <h2>Create Pet</h2>
-          <label>
-            Name
-            <input id="petNameInput" class="field" value="Pebble" maxlength="32" />
-          </label>
-          <label>
-            Primary
-            <select id="primaryElementInput" class="field"></select>
-          </label>
-          <label>
-            Secondary
-            <select id="secondaryElementInput" class="field"></select>
-          </label>
-          <label>
-            Hatch spritesheet PNG/WebP
-            <input id="atlasFileInput" class="field" type="file" accept="image/png,image/webp" />
-          </label>
-          <button id="createPetButton" class="secondary-button">Upload Asset + Create</button>
-        </section>
+        <details class="panel compact dev-tools">
+          <summary>Local smoke tools</summary>
+          <p class="muted">Only for local browser tests.</p>
+          <button id="seedPetButton" class="secondary-button full-button">Seed Local Demo Pet</button>
+        </details>
 
         <nav class="side-links" aria-label="Operations links">
           <a href="/status">Status</a>
@@ -84,7 +64,7 @@
         <header class="topbar">
           <div>
             <h2 id="petTitle">No pet registered</h2>
-            <p id="petSubtitle">Create a pet to start testing the League loop.</p>
+            <p id="petSubtitle">Import a local hatch-pet package through CLI or MCP.</p>
           </div>
           <div class="status-pills">
             <span id="classPill">Class -</span>
@@ -92,6 +72,21 @@
           </div>
         </header>
         <div id="appStatus" class="app-status" role="status" aria-live="polite">Connecting...</div>
+
+        <section class="setup-strip" aria-label="League setup">
+          <article>
+            <strong>1. Sign in</strong>
+            <span>Email-code League session</span>
+          </article>
+          <article>
+            <strong>2. Import pet locally</strong>
+            <span>CLI/MCP reads your hatch-pet folder</span>
+          </article>
+          <article>
+            <strong>3. Play from Codex</strong>
+            <span>Training Reports, battles, replays</span>
+          </article>
+        </section>
 
         <section class="grid">
           <article class="panel pet-panel">
@@ -101,7 +96,7 @@
             <div class="stat-list" id="statList"></div>
           </article>
 
-          <article class="panel">
+          <article class="panel requires-pet">
             <div class="panel-header">
               <h2>Public Profile</h2>
               <button id="saveAliasesButton" class="secondary-button">Save Skill Names</button>
@@ -110,16 +105,16 @@
             <div id="skillAliasList" class="skill-list"></div>
           </article>
 
-          <article class="panel">
+          <article class="panel requires-pet">
             <div class="panel-header">
-              <h2>Today Progress</h2>
+              <h2>Daily Progress</h2>
               <button id="refreshButton" class="icon-button" title="Refresh">Refresh</button>
             </div>
             <div id="xpStatus" class="meter-stack"></div>
             <p id="resetText" class="muted"></p>
           </article>
 
-          <article class="panel">
+          <article class="panel requires-pet">
             <h2>Training Report</h2>
             <div class="signal-grid">
               <label><input type="checkbox" id="implementationActivity" checked /> Implementation</label>
@@ -148,7 +143,7 @@
             <pre id="trainingPreview" class="output">No draft yet.</pre>
           </article>
 
-          <article class="panel">
+          <article class="panel requires-pet">
             <h2>Turn Battle</h2>
             <label>
               Mode
@@ -164,7 +159,7 @@
               <input id="opponentLp" class="field" type="number" value="1500" />
             </label>
             <div class="button-row">
-              <button id="startBattleButton" class="secondary-button">Start Bot Battle</button>
+              <button id="startBattleButton" class="secondary-button">Training Bot</button>
               <button id="joinQueueButton" class="primary-button">Random Match</button>
             </div>
             <div class="button-row stacked-row">
@@ -193,7 +188,7 @@
             <pre id="battleOutput" class="output">No active battle.</pre>
           </article>
 
-          <article class="panel wide">
+          <article class="panel wide requires-pet">
             <div class="panel-header">
               <h2>Replays</h2>
               <button id="replayRefreshButton" class="secondary-button">Refresh</button>

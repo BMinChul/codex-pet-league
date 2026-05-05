@@ -33,7 +33,6 @@ let silentRefreshQueued = false;
 
 const els = queryElements({
   appStatus: "#appStatus",
-  authMethodInput: "#authMethodInput",
   authIdentifierInput: "#authIdentifierInput",
   authChallengeButton: "#authChallengeButton",
   authCodeInput: "#authCodeInput",
@@ -44,11 +43,6 @@ const els = queryElements({
   petSelect: "#petSelect",
   activePetLockHint: "#activePetLockHint",
   seedPetButton: "#seedPetButton",
-  petNameInput: "#petNameInput",
-  primaryElementInput: "#primaryElementInput",
-  secondaryElementInput: "#secondaryElementInput",
-  atlasFileInput: "#atlasFileInput",
-  createPetButton: "#createPetButton",
   petTitle: "#petTitle",
   petSubtitle: "#petSubtitle",
   petImage: "#petImage",
@@ -201,8 +195,7 @@ function bindEvents() {
   });
   els.authChallengeButton?.addEventListener("click", () => runAction(startAuthChallenge));
   els.authVerifyButton?.addEventListener("click", () => runAction(verifyAuthChallenge, "Signed in."));
-  els.seedPetButton?.addEventListener("click", () => runAction(() => createPet({ demo: true }), "Demo pet registered."));
-  els.createPetButton?.addEventListener("click", () => runAction(() => createPet({ demo: false }), "Pet created."));
+  els.seedPetButton?.addEventListener("click", () => runAction(() => createDemoPet(), "Local demo pet seeded."));
   els.refreshButton?.addEventListener("click", () => runAction(refresh, "Refreshed."));
   els.saveAliasesButton?.addEventListener("click", () => runAction(saveSkillAliases, "Skill names saved."));
   els.draftReportButton?.addEventListener("click", () => runAction(draftTrainingReport));
@@ -331,6 +324,9 @@ function renderApp() {
 }
 
 function renderChrome() {
+  document.body.dataset.signedIn = String(isSignedIn());
+  document.body.dataset.hasPet = String(Boolean(activePet()));
+
   const accountName = state.session?.account?.displayName ?? "Sign in required";
   const verified = state.session?.account?.verified === false ? "not verified" : "verified";
   setText(els.sessionLabel, state.session?.account ? `${accountName} · ${verified}` : accountName);
@@ -368,10 +364,11 @@ function renderActivePet() {
   const pet = activePet();
   if (!pet) {
     setText(els.petTitle, "No pet registered");
-    setText(els.petSubtitle, "Create a pet to start testing the League loop.");
+    setText(els.petSubtitle, "Import a local hatch-pet package through CLI or MCP.");
     setText(els.classPill, `Class ${EMPTY_LABEL}`);
     setText(els.rankPill, `Rank ${EMPTY_LABEL}`);
     clear(els.statList);
+    renderEmpty(els.statList, "No hatch-pet package has been imported for this League account.");
     setPetImage(null);
     renderBattleSkills(null);
     return;
@@ -496,25 +493,21 @@ function renderXpStatus() {
   );
 }
 
-async function createPet({ demo }) {
-  const name = demo ? "Pebble" : els.petNameInput?.value;
-  const primary = demo ? "Forge" : els.primaryElementInput?.value;
-  const secondary = demo ? "Trace" : els.secondaryElementInput?.value;
-  const atlasDataUrl = demo ? null : await readAtlasDataUrl();
+async function createDemoPet() {
   const asset = await api("/api/pet-assets/uploads", {
     method: "POST",
     body: {
-      appearance: { palette: demo ? "teal-blue" : "custom", source: demo ? "codex_app_demo" : "hatch_pet_upload" },
-      atlas_data_url: atlasDataUrl,
+      appearance: { palette: "teal-blue", source: "local_browser_smoke" },
+      atlas_data_url: null,
     },
   });
   const pet = await api("/api/pets", {
     method: "POST",
     body: {
-      name,
+      name: "Pebble",
       pet_asset_id: asset.asset?.id,
-      primary_element: primary,
-      secondary_element: secondary,
+      primary_element: "Forge",
+      secondary_element: "Trace",
     },
   });
   state.activePetId = pet.active_pet_id ?? pet.pet?.id ?? state.activePetId;
@@ -543,8 +536,8 @@ async function startAuthChallenge() {
   const result = await api("/api/auth/challenge", {
     method: "POST",
     body: {
-      method: els.authMethodInput?.value ?? "email_magic_link",
-      identifier: els.authIdentifierInput?.value ?? "local@example.test",
+      method: "email_magic_link",
+      identifier: els.authIdentifierInput?.value?.trim() || "local@example.test",
     },
   });
   state.authChallenge = result;
@@ -578,7 +571,7 @@ function authChallengeHint(result) {
   if (result.dev_code) return `Local dev code: ${result.dev_code}`;
   if (result.oauth_authorize_url) return "OAuth provider opened. Paste the returned code to finish sign-in.";
   if (result.passkey_options) return "Passkey challenge ready. Use Verify to continue with this browser.";
-  return result.delivery?.message ?? "Challenge created. Use the code from your provider.";
+  return result.delivery?.message ?? "Email code sent. Check your inbox.";
 }
 
 async function collectPasskeyAssertion(options) {
@@ -1363,7 +1356,7 @@ function updateControls() {
   for (const button of els.actionButtons ?? []) {
     button.disabled = state.busy || !signedIn || !state.activeBattleId || !battleReady || ownPending || (button.dataset.action === "skill" && !hasSkill);
   }
-  for (const control of [els.seedPetButton, els.createPetButton, els.refreshButton]) {
+  for (const control of [els.seedPetButton, els.refreshButton]) {
     if (control) control.disabled = state.busy || !signedIn;
   }
   if (els.petSelect) {
@@ -1373,20 +1366,13 @@ function updateControls() {
   for (const control of [els.adminRefreshButton, els.adminRunOpsButton, els.adminCaseFilter]) {
     if (control) control.disabled = state.busy || !isAdmin();
   }
-  for (const control of [els.authMethodInput, els.authIdentifierInput, els.authChallengeButton, els.authCodeInput, els.authVerifyButton]) {
+  for (const control of [els.authIdentifierInput, els.authChallengeButton, els.authCodeInput, els.authVerifyButton]) {
     if (control) control.disabled = state.busy;
   }
 }
 
 function fillElements() {
-  const elements = state.rules.elements.length ? state.rules.elements : ["Forge", "Trace", "Logic", "Patch", "Pulse", "Deploy"];
-  for (const select of [els.primaryElementInput, els.secondaryElementInput]) {
-    replaceOptions(
-      select,
-      elements.map((element) => ({ value: element, label: element })),
-      select === els.primaryElementInput ? "Forge" : "Trace",
-    );
-  }
+  // Element pickers live in the CLI/MCP hatch import flow for the public alpha.
 }
 
 function collectSignals() {
@@ -1432,17 +1418,6 @@ function turnLogItem(turn, battle = null) {
     .join(" · ");
   appendText(item, "div", effects || "No effects.", "timeline-meta");
   return item;
-}
-
-function readAtlasDataUrl() {
-  const file = els.atlasFileInput?.files?.[0];
-  if (!file) return null;
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener("load", () => resolve(reader.result));
-    reader.addEventListener("error", () => reject(reader.error ?? new Error("Could not read hatch spritesheet.")));
-    reader.readAsDataURL(file);
-  });
 }
 
 async function runAction(action, successMessage = null) {

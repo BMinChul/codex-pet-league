@@ -26,7 +26,6 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
     await expect(page.locator("#appStatus")).toContainText("Sign in", { timeout: 10_000 });
     await expectNoLayoutOverflow(page);
 
-    await page.selectOption("#authMethodInput", "email_magic_link");
     await page.fill("#authIdentifierInput", "demo@codexpet.local");
     await page.click("#authChallengeButton");
     await expect(page.locator("#authHint")).toContainText("Local dev code");
@@ -37,7 +36,7 @@ test("browser league flow covers auth, pet, training, battle, admin review, and 
     await expect(page.locator(".admin-panel")).toBeVisible();
     await expect(page.locator("#adminSummary")).toContainText("Review Cases");
 
-    await page.click("#seedPetButton");
+    await seedLocalDemoPet(page);
     await expect(page.locator("#petTitle")).toContainText("Pebble");
     await expect(page.locator("#profileSummary")).toContainText("Record");
     await expect(page.locator("#xpStatus")).toContainText("Pet XP");
@@ -209,7 +208,6 @@ async function createHeldTrainingReportFromPage(page) {
 async function signIn(page, baseUrl, identifier) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   await expect(page.locator("#appStatus")).toContainText("Sign in", { timeout: 10_000 });
-  await page.selectOption("#authMethodInput", "email_magic_link");
   await page.fill("#authIdentifierInput", identifier);
   await page.click("#authChallengeButton");
   await expect(page.locator("#authCodeInput")).not.toHaveValue("");
@@ -218,9 +216,17 @@ async function signIn(page, baseUrl, identifier) {
 }
 
 async function registerDemoPet(page) {
-  await page.click("#seedPetButton");
+  await seedLocalDemoPet(page);
   await expect(page.locator("#petTitle")).toContainText("Pebble");
   await expect(page.locator("#battleSkillSelect option")).toHaveCount(4);
+}
+
+async function seedLocalDemoPet(page) {
+  const tools = page.locator(".dev-tools");
+  if (!(await tools.evaluate((element) => element.open))) {
+    await tools.locator("summary").click();
+  }
+  await page.click("#seedPetButton");
 }
 
 async function finishActiveBattleFromPage(page) {
