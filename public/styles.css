@@ -4377,3 +4377,685 @@ body[data-has-pet="true"] .quick-actions .player-only:first-child {
     height: 58px;
   }
 }
+
+/* Flying Papers layout correction: keep the tone, fix the website format. */
+:root {
+  --fp-border-ui: 2px solid var(--fp-ink);
+  --fp-shadow-ui: 4px 4px 0 var(--fp-ink);
+  --fp-shadow-panel: 6px 6px 0 var(--fp-ink);
+}
+
+body:has(.global-header) {
+  background:
+    linear-gradient(90deg, rgba(43, 23, 52, 0.12) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(43, 23, 52, 0.09) 1px, transparent 1px),
+    #8c8bc1;
+  background-size: 40px 40px, 40px 40px, auto;
+}
+
+body:has(.global-header)::before {
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 250, 240, 0.12) 0 1px, transparent 1px 18px),
+    linear-gradient(180deg, rgba(255, 244, 227, 0.24), rgba(255, 244, 227, 0));
+}
+
+.global-header {
+  min-height: 88px;
+  padding: 14px 24px;
+  border-bottom: var(--fp-border-ui);
+  box-shadow: 0 4px 0 var(--fp-ink);
+}
+
+body[data-signed-in="false"] .global-header {
+  min-height: 82px;
+  grid-template-columns: minmax(260px, 1fr) auto;
+}
+
+.brand-mark,
+.tab-button,
+.header-link,
+.identity-chip,
+.primary-button,
+.secondary-button,
+.icon-button,
+.field,
+.section-kicker,
+.micro-badge,
+.status-pills span,
+.identity-chip b,
+.console-topline span,
+.loadout-header b {
+  border: var(--fp-border-ui);
+  box-shadow: var(--fp-shadow-ui);
+}
+
+.global-header .brand strong {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.global-header .brand em {
+  margin-top: 5px;
+  color: #596273;
+  font-size: 12px;
+}
+
+.main-tabs {
+  gap: 7px;
+  align-items: center;
+}
+
+.tab-button {
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+.header-actions {
+  gap: 9px;
+}
+
+.header-link,
+.header-refresh,
+.sign-in-button {
+  min-height: 42px;
+}
+
+.identity-chip {
+  min-height: 42px;
+  padding: 6px 12px;
+}
+
+.workspace,
+.app-status {
+  width: min(100% - 48px, 1360px);
+}
+
+.workspace {
+  padding: 24px 0 60px;
+}
+
+body[data-signed-in="false"] .workspace {
+  width: min(100% - 48px, 1280px);
+  padding: 36px 0 56px;
+}
+
+.app-status {
+  margin-top: 16px;
+}
+
+.public-landing {
+  width: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  padding: 42px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.76fr);
+  gap: 34px;
+  align-items: center;
+  border: var(--fp-border-ui);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(244, 237, 54, 0.24), transparent 34%),
+    repeating-linear-gradient(135deg, rgba(43, 23, 52, 0.06) 0 2px, transparent 2px 20px),
+    var(--fp-paper);
+  box-shadow: var(--fp-shadow-panel);
+}
+
+.public-copy h1 {
+  max-width: 720px;
+  margin: 14px 0 0;
+  color: var(--fp-ink);
+  font-size: clamp(44px, 5.8vw, 76px);
+  line-height: 0.95;
+  text-wrap: balance;
+}
+
+.public-copy h1::after {
+  width: min(280px, 58%);
+  height: 12px;
+  margin-top: 14px;
+  border: var(--fp-border-ui);
+  box-shadow: 3px 3px 0 var(--fp-ink);
+}
+
+.public-lede,
+.public-copy > p:not(.section-kicker) {
+  max-width: 640px;
+  margin-top: 20px;
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.public-actions {
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+
+.public-actions .primary-button,
+.public-actions .secondary-button {
+  min-height: 50px;
+  min-width: 150px;
+}
+
+.public-steps {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.public-steps div {
+  min-height: 106px;
+  padding: 16px;
+  border: var(--fp-border-ui);
+  box-shadow: var(--fp-shadow-ui);
+}
+
+.public-preview {
+  display: grid;
+  align-self: center;
+}
+
+.arena-ticket {
+  width: min(100%, 430px);
+  justify-self: end;
+  border: var(--fp-border-ui);
+  box-shadow: var(--fp-shadow-panel);
+}
+
+.public-pet-stage {
+  min-height: 250px;
+  gap: 16px;
+  padding: 22px;
+}
+
+.public-pet-stage img {
+  width: min(112px, 100%);
+  border: var(--fp-border-ui);
+}
+
+.public-pet-stage strong {
+  width: 58px;
+  height: 58px;
+}
+
+.page-heading {
+  min-height: 0;
+  padding: 22px;
+  align-items: flex-end;
+  border: var(--fp-border-ui);
+  box-shadow: var(--fp-shadow-panel);
+}
+
+.page-heading h1 {
+  margin: 8px 0 4px;
+  font-size: clamp(40px, 4.4vw, 66px);
+  line-height: 0.92;
+}
+
+.page-heading p {
+  max-width: 760px;
+}
+
+.status-pills {
+  gap: 9px;
+  justify-content: flex-end;
+}
+
+.status-pills span {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.client-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(390px, 1fr) minmax(280px, 0.58fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.panel,
+.hero-card,
+.setup-panel,
+.xp-panel,
+.live-feed-panel,
+body[data-has-pet="true"] .xp-panel,
+body[data-has-pet="true"] .live-feed-panel {
+  border: var(--fp-border-ui);
+  box-shadow: var(--fp-shadow-panel);
+}
+
+.season-console,
+body[data-has-pet="true"] .season-console {
+  min-height: 410px;
+  padding: 22px;
+  border: var(--fp-border-ui);
+  box-shadow: var(--fp-shadow-panel);
+}
+
+.season-console h2,
+body[data-has-pet="true"] .season-console h2 {
+  margin: 48px 0 16px;
+  font-size: clamp(40px, 4vw, 58px);
+  line-height: 0.98;
+}
+
+.season-console p,
+body[data-has-pet="true"] .season-console p {
+  max-width: 450px;
+  margin-top: auto;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.season-action-grid {
+  gap: 12px;
+  margin-top: 34px;
+}
+
+.pet-loadout-card {
+  padding: 22px;
+}
+
+.pet-dock,
+body[data-has-pet="true"] .pet-dock {
+  min-height: 0;
+  padding: 20px;
+  border: var(--fp-border-ui);
+}
+
+.pet-visual,
+body[data-has-pet="true"] .pet-visual {
+  min-height: 220px;
+  border: var(--fp-border-ui);
+  box-shadow: var(--fp-shadow-ui);
+}
+
+.pet-visual img {
+  width: min(170px, 62%);
+}
+
+.stat-list {
+  margin-top: 14px;
+}
+
+.stat-row,
+.mini-meters div,
+.metric-grid div,
+.check-list div,
+.profile-summary > div,
+.status-card,
+.admin-block,
+.timeline-item,
+.event-item,
+.review-item,
+.ops-summary > div,
+.empty-state {
+  border: var(--fp-border-ui);
+  box-shadow: 3px 3px 0 var(--fp-ink);
+}
+
+.league-rail {
+  padding: 22px;
+}
+
+.metric-grid {
+  gap: 10px;
+}
+
+.metric-grid div {
+  min-height: 88px;
+}
+
+.quick-actions {
+  gap: 10px;
+}
+
+.quick-actions .secondary-button {
+  min-height: 48px;
+}
+
+.dashboard-grid {
+  margin-top: 18px;
+}
+
+body:has(.global-header) .dashboard-grid {
+  grid-template-columns: minmax(0, 600px);
+}
+
+.setup-panel,
+.xp-panel,
+.live-feed-panel,
+body[data-has-pet="true"] .xp-panel,
+body[data-has-pet="true"] .live-feed-panel {
+  min-height: 0;
+  padding: 20px;
+}
+
+.auth-modal {
+  border: var(--fp-border-ui);
+  box-shadow: 8px 8px 0 var(--fp-ink);
+}
+
+@media (max-width: 1180px) {
+  .client-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  }
+
+  .league-rail {
+    grid-column: 1 / -1;
+  }
+
+  .quick-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .global-header {
+    grid-template-areas:
+      "brand actions"
+      "tabs tabs";
+    grid-template-columns: minmax(220px, 1fr) auto;
+  }
+
+  .workspace,
+  .app-status,
+  body[data-signed-in="false"] .workspace {
+    width: min(100% - 28px, 1360px);
+  }
+
+  .public-landing {
+    padding: 32px;
+    grid-template-columns: 1fr;
+  }
+
+  .arena-ticket {
+    justify-self: stretch;
+    width: 100%;
+    max-width: none;
+  }
+
+  .client-grid,
+  .league-rail,
+  .dashboard-grid,
+  body:has(.global-header) .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .season-console,
+  body[data-has-pet="true"] .season-console {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .global-header,
+  body[data-signed-in="false"] .global-header {
+    grid-template-areas:
+      "brand"
+      "actions"
+      "tabs";
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 12px 14px;
+  }
+
+  body[data-signed-in="false"] .global-header {
+    grid-template-areas:
+      "brand"
+      "actions";
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .header-actions .identity-chip {
+    grid-column: 1 / -1;
+  }
+
+  .header-link,
+  .header-refresh,
+  .sign-in-button,
+  .header-actions .secondary-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .main-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    overflow: visible;
+  }
+
+  .tab-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .workspace,
+  .app-status,
+  body[data-signed-in="false"] .workspace {
+    width: min(100% - 18px, 1360px);
+  }
+
+  .workspace,
+  body[data-signed-in="false"] .workspace {
+    padding-top: 18px;
+  }
+
+  .public-landing {
+    padding: 22px 18px;
+    box-shadow: var(--fp-shadow-ui);
+  }
+
+  .public-copy h1 {
+    font-size: 38px;
+    line-height: 0.98;
+  }
+
+  .public-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .public-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .public-pet-stage {
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .public-pet-stage strong {
+    justify-self: center;
+  }
+
+  .page-heading {
+    display: grid;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .page-heading h1 {
+    font-size: 38px;
+  }
+
+  .status-pills {
+    justify-content: flex-start;
+  }
+
+  .season-console h2,
+  body[data-has-pet="true"] .season-console h2 {
+    margin-top: 30px;
+    font-size: 36px;
+  }
+
+  .quick-actions,
+  .season-action-grid,
+  .metric-grid,
+  .rail-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .pet-visual,
+  body[data-has-pet="true"] .pet-visual {
+    min-height: 180px;
+  }
+}
+
+/* Signed-in dashboard structure correction. */
+body[data-signed-in="true"] .page-heading {
+  padding: 18px 22px;
+}
+
+body[data-signed-in="true"] .page-heading h1 {
+  font-size: clamp(36px, 4vw, 56px);
+}
+
+body[data-signed-in="true"] .client-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.36fr);
+  gap: 18px;
+  align-items: start;
+}
+
+body[data-signed-in="true"] .season-console,
+body[data-signed-in="true"][data-has-pet="true"] .season-console {
+  grid-column: 1 / -1;
+  min-height: 0;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.38fr);
+  gap: 18px 22px;
+  align-items: end;
+}
+
+body[data-signed-in="true"] .season-console .console-topline {
+  grid-column: 1 / -1;
+}
+
+body[data-signed-in="true"] .season-console h2,
+body[data-signed-in="true"][data-has-pet="true"] .season-console h2 {
+  margin: 10px 0 8px;
+  max-width: 720px;
+  font-size: clamp(32px, 3.4vw, 48px);
+}
+
+body[data-signed-in="true"] .season-console p,
+body[data-signed-in="true"][data-has-pet="true"] .season-console p {
+  max-width: 680px;
+  margin: 0;
+}
+
+body[data-signed-in="true"] .season-action-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+body[data-signed-in="true"] .season-action-grid .primary-button,
+body[data-signed-in="true"] .season-action-grid .secondary-button {
+  min-height: 46px;
+}
+
+body[data-signed-in="true"] .pet-loadout-card {
+  min-height: 0;
+}
+
+body[data-signed-in="true"] .pet-dock,
+body[data-signed-in="true"][data-has-pet="true"] .pet-dock {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.48fr) minmax(260px, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+body[data-signed-in="true"] .pet-visual,
+body[data-signed-in="true"][data-has-pet="true"] .pet-visual {
+  min-height: 260px;
+}
+
+body[data-signed-in="true"] .stat-list {
+  margin-top: 0;
+}
+
+body[data-signed-in="true"] .league-rail {
+  min-height: 0;
+}
+
+body[data-signed-in="true"] .league-rail h2 {
+  font-size: 26px;
+}
+
+body[data-signed-in="true"] .metric-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body[data-signed-in="true"] .metric-grid div {
+  min-height: 76px;
+}
+
+body[data-signed-in="true"] .quick-actions .secondary-button {
+  min-height: 44px;
+}
+
+body[data-signed-in="true"] .quick-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body[data-signed-in="true"] .dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+body[data-signed-in="true"] .xp-panel {
+  max-width: none;
+}
+
+@media (max-width: 1180px) {
+  body[data-signed-in="true"] .client-grid,
+  body[data-signed-in="true"] .season-console,
+  body[data-signed-in="true"][data-has-pet="true"] .season-console,
+  body[data-signed-in="true"] .pet-dock,
+  body[data-signed-in="true"][data-has-pet="true"] .pet-dock,
+  body[data-signed-in="true"] .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-signed-in="true"] .league-rail {
+    grid-column: auto;
+  }
+
+  body[data-signed-in="true"] .metric-grid,
+  body[data-signed-in="true"] .quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  body[data-signed-in="true"] .page-heading h1 {
+    font-size: 34px;
+  }
+
+  body[data-signed-in="true"] .season-console h2,
+  body[data-signed-in="true"][data-has-pet="true"] .season-console h2 {
+    font-size: 30px;
+  }
+
+  body[data-signed-in="true"] .metric-grid,
+  body[data-signed-in="true"] .quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-signed-in="true"] .pet-visual,
+  body[data-signed-in="true"][data-has-pet="true"] .pet-visual {
+    min-height: 190px;
+  }
+}
