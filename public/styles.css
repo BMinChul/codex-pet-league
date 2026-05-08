@@ -704,7 +704,7 @@ body[data-signed-in="false"] #dashboard > .dashboard-grid {
 .command-lines,
 .command-card {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .command-lines {
@@ -716,7 +716,7 @@ body[data-signed-in="false"] #dashboard > .dashboard-grid {
 code {
   min-width: 0;
   display: block;
-  padding: 12px 13px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: rgba(0, 0, 0, 0.36);
@@ -758,9 +758,9 @@ code {
   min-width: 0;
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 32px;
   align-items: end;
-  margin-bottom: 22px;
+  margin-bottom: 32px;
 }
 
 .page-heading > div {
@@ -805,7 +805,7 @@ code {
 .client-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.34fr);
-  gap: 18px;
+  gap: 28px;
   align-items: start;
 }
 
@@ -814,13 +814,13 @@ code {
 .pet-loadout-card,
 .league-rail {
   min-width: 0;
-  padding: 22px;
+  padding: 28px;
 }
 
 .season-console {
   grid-column: 1 / -1;
   display: grid;
-  gap: 18px;
+  gap: 22px;
   border-color: rgba(45, 212, 191, 0.2);
   background: linear-gradient(180deg, rgba(15, 24, 22, 0.96), rgba(9, 14, 13, 0.96));
 }
@@ -852,15 +852,15 @@ code {
 }
 
 .command-card {
-  margin-top: 10px;
-  padding: 14px;
+  margin-top: 14px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(0, 0, 0, 0.22);
 }
 
 .command-card.large {
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .command-card span {
@@ -873,9 +873,9 @@ code {
   min-width: 0;
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .loadout-header span {
@@ -941,7 +941,7 @@ code {
 .status-service-list {
   min-width: 0;
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
 .stat-row,
@@ -949,7 +949,7 @@ code {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(82px, 0.32fr) minmax(120px, 1fr) auto;
-  gap: 10px;
+  gap: 14px;
   align-items: center;
 }
 
@@ -968,7 +968,7 @@ code {
 .mini-meters > div,
 .status-service-list div {
   min-width: 0;
-  padding: 13px 14px;
+  padding: 17px 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.025);
@@ -1033,8 +1033,8 @@ code {
 .quick-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-  margin-top: 16px;
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .quick-actions .secondary-button {
@@ -1044,8 +1044,8 @@ code {
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 18px;
+  gap: 28px;
+  margin-top: 28px;
   align-items: start;
 }
 
@@ -1054,7 +1054,7 @@ body[data-has-pet="true"] .dashboard-grid {
 }
 
 .panel-header {
-  padding-bottom: 12px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1065,10 +1065,20 @@ body[data-has-pet="true"] .dashboard-grid {
   line-height: 1.12;
 }
 
+.panel > h2 + *,
+.panel > p + *,
+.panel > .muted + * {
+  margin-top: 18px;
+}
+
+.panel > .panel-header + * {
+  margin-top: 0;
+}
+
 .check-list div {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);
-  gap: 4px 10px;
+  gap: 6px 12px;
 }
 
 .check-list div span {
@@ -1109,27 +1119,36 @@ body[data-has-pet="true"] .dashboard-grid {
 .replay-layout,
 .ladder-layout {
   display: grid;
-  gap: 18px;
+  gap: 28px;
   align-items: start;
 }
 
 .import-layout {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1.28fr);
 }
 
-.import-main,
+.setup-session-panel,
+.setup-checklist-panel {
+  grid-column: 1;
+}
+
+.import-main {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
 .trust-boundary-panel,
 .setup-resources {
-  grid-column: span 3;
+  grid-column: 1 / -1;
 }
 
 .training-layout {
-  grid-template-columns: minmax(300px, 0.88fr) minmax(300px, 1fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
 }
 
 .training-layout .requires-pet:nth-of-type(3),
 .review-policy-panel {
-  grid-column: span 3;
+  grid-column: 1 / -1;
 }
 
 .profile-layout {
@@ -1152,13 +1171,13 @@ body[data-has-pet="true"] .dashboard-grid {
 .trust-flow {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 18px;
+  gap: 16px;
+  margin-top: 22px;
 }
 
 .trust-flow div {
   min-width: 0;
-  padding: 16px;
+  padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.025);
@@ -1170,7 +1189,7 @@ body[data-has-pet="true"] .dashboard-grid {
 }
 
 .trust-flow span {
-  margin-top: 8px;
+  margin-top: 10px;
   color: var(--muted);
   font-size: 13px;
 }
@@ -1184,8 +1203,8 @@ body[data-has-pet="true"] .dashboard-grid {
 }
 
 .warning-strip {
-  margin-top: 18px;
-  padding: 14px 16px;
+  margin-top: 22px;
+  padding: 17px 18px;
   border: 1px solid rgba(240, 184, 62, 0.42);
   border-radius: var(--radius);
   background: var(--warning-soft);
@@ -1197,7 +1216,7 @@ body[data-has-pet="true"] .dashboard-grid {
   width: 100%;
   min-width: 0;
   min-height: 42px;
-  padding: 9px 11px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.035);
@@ -1213,7 +1232,7 @@ body[data-has-pet="true"] .dashboard-grid {
 label {
   min-width: 0;
   display: grid;
-  gap: 7px;
+  gap: 9px;
   color: var(--text-soft);
   font-weight: 760;
 }
@@ -1222,16 +1241,16 @@ label {
 .battle-mode-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .signal-grid label {
   min-height: 42px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 10px;
+  gap: 12px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.025);
@@ -1243,9 +1262,9 @@ label {
   max-width: 100%;
   min-height: 120px;
   max-height: 380px;
-  margin-top: 12px;
+  margin-top: 16px;
   overflow: auto;
-  padding: 12px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(0, 0, 0, 0.38);
@@ -1262,8 +1281,8 @@ label {
 
 .battle-room {
   display: grid;
-  grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
-  gap: 18px;
+  grid-template-columns: minmax(340px, 0.78fr) minmax(0, 1.22fr);
+  gap: 28px;
   align-items: start;
 }
 
@@ -1275,7 +1294,7 @@ label {
 .battle-primary-actions,
 .invite-row,
 .action-grid {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .invite-row {
@@ -1299,14 +1318,14 @@ label {
 .battle-arena {
   min-width: 0;
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 .battle-combatants {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(110px, 0.28fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: 16px;
   align-items: stretch;
 }
 
@@ -1320,8 +1339,8 @@ label {
 
 .battle-side {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 16px;
+  padding: 18px;
 }
 
 .battle-side.is-you {
@@ -1331,7 +1350,7 @@ label {
 .battle-side-header {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
 }
 
@@ -1403,8 +1422,8 @@ label {
 .battle-center {
   display: grid;
   place-items: center;
-  gap: 8px;
-  padding: 14px 10px;
+  gap: 12px;
+  padding: 18px 12px;
   text-align: center;
 }
 
@@ -1431,8 +1450,8 @@ label {
 
 .battle-command-bar {
   display: grid;
-  gap: 4px;
-  padding: 12px;
+  gap: 8px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.025);
@@ -1440,8 +1459,8 @@ label {
 
 .command-strip {
   display: grid;
-  gap: 12px;
-  margin-top: 14px;
+  gap: 16px;
+  margin-top: 18px;
 }
 
 .timeline-item,
@@ -1449,7 +1468,7 @@ label {
 .dashboard-feed-item,
 .review-item {
   display: grid;
-  gap: 5px;
+  gap: 8px;
 }
 
 .timeline-meta {
@@ -1488,7 +1507,7 @@ table {
 
 th,
 td {
-  padding: 13px 11px;
+  padding: 15px 14px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
@@ -1521,7 +1540,7 @@ td {
 .status-card {
   display: grid;
   grid-template-columns: minmax(120px, 0.36fr) minmax(0, 1fr);
-  gap: 10px;
+  gap: 14px;
 }
 
 .pet-identity-panel .profile-summary > div {
@@ -1532,9 +1551,9 @@ td {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(170px, 0.42fr) minmax(0, 1fr);
-  gap: 10px;
+  gap: 14px;
   align-items: center;
-  padding: 12px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.025);
@@ -1548,7 +1567,7 @@ td {
 .ops-summary,
 .admin-subgrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 14px;
+  margin-top: 18px;
 }
 
 .status-service-list div {
@@ -1706,6 +1725,7 @@ body[data-has-pet="false"] .requires-pet {
   .training-layout .requires-pet:nth-of-type(3),
   .review-policy-panel {
     grid-column: auto;
+    grid-row: auto;
   }
 
   .trust-flow,

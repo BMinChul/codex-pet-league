@@ -675,6 +675,7 @@ function closeAuthModal() {
 function activateTab(tab = "dashboard") {
   let next = tab || "dashboard";
   if (next === "ops" && !isAdmin()) next = "dashboard";
+  const previous = document.body.dataset.activeTab;
   let activeButton = null;
   for (const button of els.tabButtons ?? []) {
     const isActive = button.dataset.tab === next;
@@ -688,6 +689,9 @@ function activateTab(tab = "dashboard") {
   }
   document.body.dataset.activeTab = next;
   activeButton?.scrollIntoView({ block: "nearest", inline: "center" });
+  if (previous && previous !== next) {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }
 }
 
 function authChallengeHint(result) {
