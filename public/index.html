@@ -19,18 +19,19 @@
 
         <nav class="main-tabs" aria-label="League sections">
           <button class="tab-button is-active" data-tab="dashboard">Console</button>
-          <button class="tab-button onboarding-tab" data-tab="import">Setup</button>
-          <button class="tab-button" data-tab="battles">Battles</button>
+          <button class="tab-button" data-tab="import">Setup</button>
+          <button class="tab-button" data-tab="profile">Pet</button>
           <button class="tab-button" data-tab="training">Reports</button>
+          <button class="tab-button" data-tab="battles">Battles</button>
           <button class="tab-button" data-tab="leaderboard">Ladder</button>
           <button class="tab-button" data-tab="replays">Replays</button>
-          <button class="tab-button" data-tab="profile">Pet</button>
-          <button class="tab-button admin-tab" data-tab="ops">Admin</button>
+          <button class="tab-button" data-tab="status">Status</button>
+          <button class="tab-button" data-tab="support">Support</button>
         </nav>
 
         <div class="header-actions">
           <a class="header-link" href="https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md">Docs</a>
-          <a class="header-link" href="/status">Status</a>
+          <button class="header-link" data-tab-jump="support" type="button">Support</button>
           <button id="refreshButton" class="secondary-button header-refresh">Refresh</button>
           <button id="authOpenButton" class="primary-button sign-in-button">Sign In</button>
           <div id="identityChip" class="identity-chip" aria-label="Signed-in League identity">
@@ -38,6 +39,10 @@
             <b id="classPill">Class -</b>
             <b id="rankPill">Rank -</b>
           </div>
+          <button class="owner-admin-card admin-tab admin-only" data-tab="ops" type="button">
+            <span>Owner Admin</span>
+            <small>Owner access only</small>
+          </button>
         </div>
       </header>
 
@@ -51,8 +56,8 @@
               <h1 id="publicLandingTitle">Codex Pet League</h1>
               <h2>Server authority for Codex hatch-pets.</h2>
               <p class="public-lede">
-                Hatch in Codex, import through CLI or MCP, then use the web only where visuals help:
-                profiles, ladder, replays, battle rooms, and account operations.
+                Hatch in Codex. Import through CLI/MCP. Use the web for profiles, ladder, replays,
+                battle rooms, status, and support.
               </p>
               <div class="public-actions">
                 <button class="primary-button" id="publicSignInButton" type="button">Sign In</button>
@@ -63,6 +68,10 @@
                 <div><strong>1. Hatch in Codex</strong><span>Create the local pet with OpenAI's official hatch-pet skill.</span></div>
                 <div><strong>2. Import once</strong><span>Lock the official League identity through CLI or MCP.</span></div>
                 <div><strong>3. Inspect state</strong><span>Use the web for public records, replays, and visual battle rooms.</span></div>
+              </div>
+              <div class="surface-split" aria-label="Web and CLI responsibilities">
+                <div><strong>Web</strong><span>profiles, ladder, replays, battle room, status, support</span></div>
+                <div><strong>CLI/MCP</strong><span>discovery, import, report drafts, bridge checks</span></div>
               </div>
             </article>
             <aside class="public-preview" aria-label="League setup preview">
@@ -89,12 +98,12 @@
             <div>
               <p class="section-kicker">Official Alpha</p>
               <h1 id="petTitle">League Console</h1>
-              <p id="petSubtitle">Connect your Codex pet, inspect server state, and jump back to CLI/MCP workflows.</p>
+              <p id="petSubtitle">Your Codex pet is server-owned after import.</p>
             </div>
             <div class="status-pills">
               <span>Server Live</span>
-              <span>CLI/MCP First</span>
-              <span>Email Code Login</span>
+              <span>CLI/MCP Connected</span>
+              <span>Server-Owned</span>
             </div>
           </div>
 
@@ -105,15 +114,15 @@
                 <span>Season 01</span>
                 <span>Server Resolved</span>
               </div>
-              <h2 class="player-only">League actions.</h2>
+              <h2 class="player-only">League Actions</h2>
               <h2 class="onboarding-only">Connect your Codex pet.</h2>
               <p>
                 <span class="player-only">Use this console to inspect server-owned state, open visual battle rooms, and return to CLI/MCP workflows.</span>
                 <span class="onboarding-only">The first official pet must come from your local Codex hatch-pet package and is permanent for this League account.</span>
               </p>
               <div class="season-action-grid">
-                <button class="primary-button player-only" data-tab-jump="battles">Open Battle</button>
-                <button class="secondary-button player-only" data-tab-jump="training">Training Report</button>
+                <button class="primary-button player-only" data-tab-jump="training">Submit Report</button>
+                <button class="secondary-button player-only" data-tab-jump="battles">Open Battle Room</button>
                 <button class="secondary-button player-only" data-tab-jump="leaderboard">View Ladder</button>
                 <button class="primary-button onboarding-only" data-tab-jump="import">Import Official Pet</button>
                 <button class="secondary-button onboarding-only" data-tab-jump="training">See Growth Rules</button>
@@ -144,12 +153,11 @@
               <h2>League Pulse</h2>
               <div class="metric-grid rail-metrics" id="leagueSnapshot"></div>
               <div class="quick-actions">
-                <button class="secondary-button player-only" data-tab-jump="battles">Play Now</button>
-                <button class="secondary-button" data-tab-jump="training">Training Report</button>
+                <button class="secondary-button player-only" data-tab-jump="battles">Open Room</button>
+                <button class="secondary-button" data-tab-jump="training">Submit Report</button>
                 <button class="secondary-button" data-tab-jump="profile">Skill Names</button>
                 <button class="secondary-button" data-tab-jump="replays">Replays</button>
                 <button class="secondary-button onboarding-only" data-tab-jump="import">Import Pet</button>
-                <button class="secondary-button admin-only" data-tab-jump="ops">Admin Console</button>
               </div>
             </aside>
           </section>
@@ -176,10 +184,12 @@
             </article>
             <article class="panel live-feed-panel">
               <div class="panel-header">
-                <h2>Live Feed</h2>
-                <span class="micro-badge">Latest server events</span>
+                <h2>CLI/MCP Reminder</h2>
+                <span class="micro-badge">Source of truth</span>
               </div>
-              <div id="dashboardEventFeed" class="dashboard-feed"></div>
+              <div id="dashboardEventFeed" class="dashboard-feed">
+                <div class="empty-state">Import and bridge checks run through CLI/MCP.</div>
+              </div>
             </article>
           </section>
         </section>
@@ -187,34 +197,69 @@
         <section class="view" data-view="import" id="import" hidden>
           <div class="page-heading">
             <div>
-              <p class="section-kicker">Import Pet</p>
-              <h1>No League Pet Yet</h1>
-              <p>Your official pet is imported from your local OpenAI hatch-pet package.</p>
+              <p class="section-kicker">Setup</p>
+              <h1>Connect League</h1>
+              <p>Connect Codex, CLI/MCP, and the official League server.</p>
             </div>
             <select id="petSelect" class="field compact-field"></select>
           </div>
           <section class="import-layout">
+            <article class="panel">
+              <div class="panel-header">
+                <h2>Email Sign-In Status</h2>
+                <span class="micro-badge">League session</span>
+              </div>
+              <div class="profile-summary import-summary">
+                <div><strong>Verified email</strong><span>Signed in through League email-code login.</span></div>
+                <div><strong>League session</strong><span>Active, separate from Codex ChatGPT sign-in.</span></div>
+                <div><strong>Account authority</strong><span>League server session and records.</span></div>
+              </div>
+            </article>
             <article class="panel import-main">
-              <h2>CLI/MCP import flow</h2>
+              <h2>CLI/MCP Install</h2>
               <p class="muted" id="activePetLockHint">First active League pet selection is permanent.</p>
               <div class="command-card large">
                 <span>1. Check League</span>
                 <code>npm run cli -- doctor</code>
-                <span>2. Find local hatch packages</span>
+                <span>2. Check bridge</span>
+                <code>npm run cli -- bridge status</code>
+                <span>3. Find local hatch packages</span>
                 <code>npm run cli -- pet discover-hatch</code>
-                <span>3. Inspect one package</span>
+                <span>4. Inspect one package</span>
                 <code>npm run cli -- pet inspect-hatch --path &lt;folder&gt;</code>
-                <span>4. Lock official pet</span>
+                <span>5. Lock official pet</span>
                 <code>npm run cli -- setup --path &lt;folder&gt; --yes</code>
               </div>
             </article>
             <article class="panel">
-              <h2>Trust Boundary</h2>
+              <div class="panel-header">
+                <h2>Import Checklist</h2>
+                <span class="micro-badge">In order</span>
+              </div>
+              <div class="check-list">
+                <div><span></span><strong>Hatch-pet package found in Codex</strong><em>Created locally with the official skill.</em></div>
+                <div><span></span><strong>Package inspected</strong><em>Manifest and atlas verified.</em></div>
+                <div><span></span><strong>Official pet imported</strong><em>Validated by the League server.</em></div>
+                <div><span></span><strong>Permanent identity locked</strong><em>First active pet becomes official.</em></div>
+              </div>
+            </article>
+            <article class="panel trust-boundary-panel">
+              <h2>Trust Boundary Flow</h2>
+              <div class="trust-flow">
+                <div><strong>Local hatch-pet package</strong><span>Created and owned on your machine.</span></div>
+                <div><strong>CLI/MCP bridge</strong><span>Imports the package.</span></div>
+                <div><strong>League validation</strong><span>Validates integrity and rules.</span></div>
+                <div><strong>Canonical asset hash</strong><span>Records the official asset.</span></div>
+                <div><strong>Permanent active pet</strong><span>Server-owned identity begins.</span></div>
+              </div>
+              <p class="warning-strip">First active League pet is permanent. Local file changes cannot alter ranked state.</p>
+            </article>
+            <article class="panel setup-resources">
+              <h2>Setup Resources</h2>
               <div class="profile-summary import-summary">
-                <div><strong>Source</strong><span>Local hatch-pet package</span></div>
-                <div><strong>Authority</strong><span>League server</span></div>
-                <div><strong>Ranked State</strong><span>Server-owned</span></div>
-                <div><strong>Pet Selection</strong><span>Permanent first active pet</span></div>
+                <div><strong>User setup guide</strong><span>Step-by-step walkthrough.</span></div>
+                <div><strong>MCP registration</strong><span>Register your MCP client.</span></div>
+                <div><strong>Troubleshooting</strong><span>Common setup checks and fixes.</span></div>
               </div>
             </article>
           </section>
@@ -228,19 +273,35 @@
         <section class="view" data-view="training" id="training" hidden>
           <div class="page-heading">
             <div>
-              <p class="section-kicker">Training</p>
+              <p class="section-kicker">Reports</p>
               <h1>Training Reports</h1>
               <p>Convert Codex work summaries into server-scored Pet XP and Style XP.</p>
             </div>
+            <a class="secondary-button" href="https://github.com/BMinChul/codex-pet-league/blob/master/docs/USER_SETUP.md">Reports Guide</a>
           </div>
           <section class="training-layout">
+            <article class="panel report-command-panel">
+              <div class="panel-header">
+                <h2>Recommended CLI/MCP</h2>
+                <span class="micro-badge">Primary path</span>
+              </div>
+              <p class="muted">Recommended because Codex work context lives in CLI/MCP.</p>
+              <div class="command-card large">
+                <code>codexpet report draft</code>
+                <code>codexpet report submit</code>
+                <code>codexpet xp status</code>
+              </div>
+            </article>
             <article class="panel requires-pet">
               <h2>Daily Progress</h2>
               <div id="xpStatus" class="meter-stack"></div>
               <p id="resetText" class="muted"></p>
             </article>
             <article class="panel requires-pet">
-              <h2>Draft Report</h2>
+              <div class="panel-header">
+                <h2>Web Secondary Submit</h2>
+                <span class="micro-badge">Companion path</span>
+              </div>
               <div class="signal-grid">
                 <label><input type="checkbox" id="implementationActivity" checked /> Implementation</label>
                 <label><input type="checkbox" id="debuggingActivity" /> Debugging</label>
@@ -267,6 +328,17 @@
               </div>
               <pre id="trainingPreview" class="output">No draft yet.</pre>
             </article>
+            <article class="panel review-policy-panel">
+              <h2>Review Policy & Outcomes</h2>
+              <div class="profile-summary import-summary">
+                <div><strong>Accepted</strong><span>Full XP awarded as submitted.</span></div>
+                <div><strong>Downgraded</strong><span>Partial XP awarded based on evidence.</span></div>
+                <div><strong>Held for Review</strong><span>Manually reviewed for anomalies.</span></div>
+                <div><strong>Style XP Only</strong><span>No stat growth when quality is low.</span></div>
+                <div><strong>Rejected</strong><span>No XP awarded.</span></div>
+              </div>
+              <p class="warning-strip">Raw source code and full Codex transcripts are not stored.</p>
+            </article>
           </section>
         </section>
 
@@ -274,9 +346,10 @@
           <div class="page-heading">
             <div>
               <p class="section-kicker">Battles</p>
-              <h1>Turn Battle</h1>
-              <p>Server-authoritative simultaneous turns with ranked, casual, and friend duel modes.</p>
+              <h1>Battle Room</h1>
+              <p>Server-resolved simultaneous turns.</p>
             </div>
+            <p class="muted battle-note">30s turns. Third consecutive timeout becomes AFK loss.</p>
           </div>
           <section class="battle-room requires-pet">
             <article class="panel queue-console">
@@ -342,6 +415,16 @@
               <div id="battleTimeline" class="timeline-list"></div>
               <pre id="battleOutput" class="output">No active battle.</pre>
             </article>
+            <article class="panel battle-integrity-panel">
+              <h2>Integrity & Replay</h2>
+              <div class="profile-summary import-summary">
+                <div><strong>Replay hash</strong><span>Generated by server-owned battle log.</span></div>
+                <div><strong>Turn nonce</strong><span>Prevents stale or replayed actions.</span></div>
+                <div><strong>Room snapshot</strong><span>Locks stats, loadout, and asset hash.</span></div>
+                <div><strong>Ranked settlement</strong><span>Applied only after server resolution.</span></div>
+              </div>
+              <p class="warning-strip">Server owns HP, energy, cooldowns, RNG, deadlines, and ranked results.</p>
+            </article>
           </section>
         </section>
 
@@ -349,22 +432,38 @@
           <div class="page-heading">
             <div>
               <p class="section-kicker">Replays</p>
-              <h1>Replay Log</h1>
-              <p>Review server-owned battle records and tamper-evident replay hashes.</p>
+              <h1>Replays</h1>
+              <p>Tamper-evident battle records.</p>
             </div>
             <button id="replayRefreshButton" class="secondary-button">Refresh</button>
           </div>
-          <article class="panel requires-pet">
-            <div id="replayList" class="timeline-list"></div>
-          </article>
+          <section class="replay-layout">
+            <article class="panel requires-pet replay-list-panel">
+              <div class="panel-header">
+                <h2>Replay List</h2>
+                <span class="micro-badge">Verified records</span>
+              </div>
+              <div id="replayList" class="timeline-list"></div>
+            </article>
+            <article class="panel replay-detail-panel">
+              <h2>Integrity Chain</h2>
+              <div class="trust-flow compact-flow">
+                <div><strong>Room snapshot</strong><span>Captured at start</span></div>
+                <div><strong>Turn nonce chain</strong><span>Per-turn commitment</span></div>
+                <div><strong>Replay hash</strong><span>Tamper-evident</span></div>
+                <div><strong>Settlement hash</strong><span>Final server result</span></div>
+                <div><strong>Verification</strong><span>Verified</span></div>
+              </div>
+            </article>
+          </section>
         </section>
 
         <section class="view" data-view="leaderboard" id="leaderboard" hidden>
           <div class="page-heading">
             <div>
-              <p class="section-kicker">Leaderboard</p>
-              <h1>Ranked League</h1>
-              <p>Filter public ranked pets by tier and Battle Class.</p>
+              <p class="section-kicker">Ladder</p>
+              <h1>Ranked Ladder</h1>
+              <p>Server-owned LP and Battle Class rankings.</p>
             </div>
             <div class="button-row">
               <select id="leaderboardTierFilter" class="field compact-field">
@@ -375,41 +474,144 @@
               </select>
             </div>
           </div>
-          <article class="panel leaderboard-panel">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Pet</th>
-                  <th>Class</th>
-                  <th>Rank</th>
-                  <th>LP</th>
-                  <th>Publish</th>
-                  <th>Record</th>
-                </tr>
-              </thead>
-              <tbody id="leaderboardBody"></tbody>
-            </table>
-          </article>
+          <section class="ladder-layout">
+            <article class="panel leaderboard-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Pet</th>
+                    <th>Class</th>
+                    <th>Rank</th>
+                    <th>LP</th>
+                    <th>Publish</th>
+                    <th>Record</th>
+                  </tr>
+                </thead>
+                <tbody id="leaderboardBody"></tbody>
+              </table>
+            </article>
+            <aside class="panel ladder-side-panel">
+              <h2>Rules Snapshot</h2>
+              <div class="profile-summary import-summary">
+                <div><strong>Battle Class</strong><span>Ranked matches do not cross Battle Class.</span></div>
+                <div><strong>LP</strong><span>Changes are server-settled after each match.</span></div>
+                <div><strong>AFK</strong><span>AFK ranked loss applies a -40 LP penalty.</span></div>
+                <div><strong>Placements</strong><span>Placement matches amplify LP movement.</span></div>
+              </div>
+            </aside>
+          </section>
         </section>
 
         <section class="view" data-view="profile" id="profile" hidden>
           <div class="page-heading">
             <div>
-              <p class="section-kicker">Profile</p>
-              <h1>Public Profile</h1>
-              <p>Manage visible pet metadata and cosmetic skill names.</p>
+              <p class="section-kicker">Pet</p>
+              <h1>Pet Identity</h1>
+              <p>Permanent League record for your Codex hatch-pet.</p>
             </div>
             <button id="saveAliasesButton" class="secondary-button">Save Skill Names</button>
           </div>
           <section class="profile-layout requires-pet">
-            <article class="panel">
-              <h2>Profile Summary</h2>
+            <article class="panel pet-identity-panel">
+              <h2>Identity Summary</h2>
+              <div class="pet-visual compact-pet-visual">
+                <img id="profilePetImage" src="/pet-placeholder.svg" alt="Pet identity appearance" />
+              </div>
               <div id="profileSummary" class="profile-summary"></div>
             </article>
             <article class="panel">
-              <h2>Skill Names</h2>
+              <h2>Skill Nicknames <span class="muted">(cosmetic only)</span></h2>
               <div id="skillAliasList" class="skill-list"></div>
+            </article>
+            <article class="panel pet-policy-panel">
+              <h2>Asset Visibility</h2>
+              <div class="profile-summary import-summary">
+                <div><strong>Public profile</strong><span>Visible</span></div>
+                <div><strong>Ranked eligible</strong><span>Yes</span></div>
+                <div><strong>Moderation status</strong><span>Clear</span></div>
+                <div><strong>Canonical CDN URL</strong><span>Server-owned asset copy.</span></div>
+              </div>
+              <p class="warning-strip">Local file changes after import do not affect ranked state.</p>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view="status" id="status" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Status</p>
+              <h1>Status & Support</h1>
+              <p>Public operations and support routes.</p>
+            </div>
+          </div>
+          <section class="status-layout">
+            <article class="panel">
+              <div class="panel-header">
+                <h2>Public Status</h2>
+                <span class="micro-badge">All systems operational</span>
+              </div>
+              <div class="status-service-list">
+                <div><strong>League API</strong><span>Operational</span><em>1m ago</em></div>
+                <div><strong>Battle Resolver</strong><span>Operational</span><em>1m ago</em></div>
+                <div><strong>Postgres</strong><span>Operational</span><em>1m ago</em></div>
+                <div><strong>Redis</strong><span>Operational</span><em>1m ago</em></div>
+                <div><strong>R2 Assets</strong><span>Operational</span><em>1m ago</em></div>
+                <div><strong>Resend Email</strong><span>Operational</span><em>1m ago</em></div>
+                <div><strong>OpenAI Moderation</strong><span>Operational</span><em>1m ago</em></div>
+                <div><strong>GitHub Monitor</strong><span>Operational</span><em>15m cadence</em></div>
+              </div>
+            </article>
+            <article class="panel">
+              <h2>Incident Snapshot</h2>
+              <div class="metric-grid rail-metrics">
+                <div><strong>Open Abuse Alerts</strong><span>0</span></div>
+                <div><strong>Held Reports</strong><span>0</span></div>
+                <div><strong>Moderation Queue</strong><span>0</span></div>
+                <div><strong>Active Battles</strong><span>0</span></div>
+              </div>
+            </article>
+            <aside class="panel owner-drawer">
+              <h2>Owner Admin</h2>
+              <p class="muted">Owner controls and moderation tools are locked unless owner access is verified.</p>
+              <button class="secondary-button admin-tab admin-only" data-tab-jump="ops" type="button">Open Owner Admin</button>
+              <div class="profile-summary import-summary">
+                <div><strong>Held Reports</strong><span>Locked</span></div>
+                <div><strong>Moderation Queue</strong><span>Locked</span></div>
+                <div><strong>Audit Summary</strong><span>Locked</span></div>
+                <div><strong>Incident Pack</strong><span>Locked</span></div>
+              </div>
+            </aside>
+          </section>
+        </section>
+
+        <section class="view" data-view="support" id="support" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="section-kicker">Support</p>
+              <h1>Support Routes</h1>
+              <p>Documentation, public issues, and private support paths.</p>
+            </div>
+          </div>
+          <section class="support-layout">
+            <article class="panel">
+              <h2>Support Routes</h2>
+              <div class="profile-summary import-summary">
+                <div><strong>Documentation</strong><span>Product docs, concepts, and references.</span></div>
+                <div><strong>User Setup Guide</strong><span>Step-by-step setup for CLI/MCP.</span></div>
+                <div><strong>GitHub Issues</strong><span>Report public bugs and install problems.</span></div>
+                <div><strong>Support Email</strong><span>support@codexpetz.com</span></div>
+              </div>
+              <p class="warning-strip">Do not share API keys or session tokens in public issues.</p>
+            </article>
+            <article class="panel">
+              <h2>Public Pages</h2>
+              <div class="quick-actions support-actions">
+                <a class="secondary-button" href="/privacy">Privacy</a>
+                <a class="secondary-button" href="/terms">Terms</a>
+                <a class="secondary-button" href="/support">Support Page</a>
+                <a class="secondary-button" href="/status">Status Page</a>
+              </div>
             </article>
           </section>
         </section>
@@ -417,9 +619,9 @@
         <section class="view" data-view="ops" id="ops" hidden>
           <div class="page-heading">
             <div>
-              <p class="section-kicker">Ops</p>
-              <h1>Status And Operations</h1>
-              <p>Public event log and owner-only moderation tools.</p>
+              <p class="section-kicker">Owner Admin</p>
+              <h1>Admin Operations</h1>
+              <p>Owner-only moderation, audit, and incident tools.</p>
             </div>
           </div>
           <article class="panel">

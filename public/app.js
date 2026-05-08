@@ -50,6 +50,7 @@ const els = queryElements({
   petTitle: "#petTitle",
   petSubtitle: "#petSubtitle",
   petImage: "#petImage",
+  profilePetImage: "#profilePetImage",
   classPill: "#classPill",
   rankPill: "#rankPill",
   dashboardRankBadge: "#dashboardRankBadge",
@@ -370,14 +371,14 @@ function renderChrome() {
   const rankedStart = policy?.ranked?.lpWindows?.[0]?.lpWindow;
   const queue = state.league?.queue_summary;
   const queueText = queue ? ` · ${queue.waiting_total ?? 0} waiting` : "";
-  setText(
-    els.leagueLabel,
-    season
-      ? `${season.name} · ranked ±${rankedStart ?? "?"} LP${queueText}`
-      : isSignedIn()
-        ? "League status unavailable"
-        : "Official shared alpha",
-  );
+  const compactSeasonName = season?.name?.split(":")[0] ?? season?.name;
+  const fullLeagueLabel = season
+    ? `${season.name} · ranked ±${rankedStart ?? "?"} LP${queueText}`
+    : isSignedIn()
+      ? "League status unavailable"
+      : "Official shared alpha";
+  setText(els.leagueLabel, season ? `${compactSeasonName}${queueText}` : fullLeagueLabel);
+  if (els.leagueLabel) els.leagueLabel.title = fullLeagueLabel;
 
   const latest = state.notices[0];
   if (els.appStatus) {
@@ -427,10 +428,12 @@ function renderActivePet() {
 }
 
 function setPetImage(pet) {
-  if (!els.petImage) return;
   const atlasUrl = pet?.asset?.atlas_url;
-  els.petImage.src = atlasUrl || "/pet-placeholder.svg";
-  els.petImage.classList.toggle("sprite-atlas", Boolean(atlasUrl));
+  for (const image of [els.petImage, els.profilePetImage]) {
+    if (!image) continue;
+    image.src = atlasUrl || "/pet-placeholder.svg";
+    image.classList.toggle("sprite-atlas", Boolean(atlasUrl));
+  }
 }
 
 function renderStats(pet) {
@@ -672,7 +675,6 @@ function closeAuthModal() {
 function activateTab(tab = "dashboard") {
   let next = tab || "dashboard";
   if (next === "ops" && !isAdmin()) next = "dashboard";
-  if (next === "import" && activePet()) next = "dashboard";
   let activeButton = null;
   for (const button of els.tabButtons ?? []) {
     const isActive = button.dataset.tab === next;
@@ -1257,12 +1259,12 @@ function renderEvents(events) {
   const list = asArray(events);
   if (!list.length) {
     renderEmpty(els.eventLog, "No server events yet.");
-    renderEmpty(els.dashboardEventFeed, "No server events yet.");
+    renderEmpty(els.dashboardEventFeed, "Import and bridge checks run through CLI/MCP.");
     return;
   }
   for (const [index, event] of list.entries()) {
     els.eventLog?.append(eventItem(event));
-    if (index < 5) els.dashboardEventFeed?.append(eventItem(event, "dashboard-feed-item"));
+    if (index === 0) renderEmpty(els.dashboardEventFeed, "Import and bridge checks run through CLI/MCP.");
   }
 }
 
