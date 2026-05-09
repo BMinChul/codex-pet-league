@@ -544,9 +544,10 @@ body[data-signed-in="false"] #dashboard > .dashboard-grid {
 .public-landing {
   min-height: calc(100vh - 174px);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 460px);
-  gap: clamp(28px, 5vw, 76px);
+  grid-template-columns: minmax(0, 900px);
+  gap: 0;
   align-items: center;
+  justify-content: start;
   padding: clamp(32px, 6vw, 82px) 0;
 }
 
@@ -804,7 +805,7 @@ code {
 
 .client-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.34fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 28px;
   align-items: start;
 }
@@ -1124,17 +1125,12 @@ body[data-has-pet="true"] .dashboard-grid {
 }
 
 .import-layout {
-  grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1.28fr);
-}
-
-.setup-session-panel,
-.setup-checklist-panel {
-  grid-column: 1;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .import-main {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-column: auto;
+  grid-row: auto;
 }
 
 .trust-boundary-panel,
@@ -1152,11 +1148,11 @@ body[data-has-pet="true"] .dashboard-grid {
 }
 
 .profile-layout {
-  grid-template-columns: minmax(300px, 0.8fr) minmax(340px, 1fr) minmax(300px, 0.8fr);
+  grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
 }
 
 .status-layout {
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr) minmax(320px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.36fr);
 }
 
 .support-layout {
@@ -1165,7 +1161,7 @@ body[data-has-pet="true"] .dashboard-grid {
 
 .replay-layout,
 .ladder-layout {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.36fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .trust-flow {
@@ -1286,7 +1282,10 @@ label {
   align-items: start;
 }
 
-.battle-log-panel,
+.battle-log-panel {
+  grid-column: 1 / -1;
+}
+
 .battle-integrity-panel {
   grid-column: span 1;
 }
